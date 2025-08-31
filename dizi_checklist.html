@@ -1,0 +1,1429 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>İzleme Takip Uygulaması</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --secondary: #8b5cf6;
+            --bg-light: #f8fafc;
+            --text-light: #1e293b;
+            --card-light: #ffffff;
+            --border-light: #e2e8f0;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+        
+        .dark-theme {
+            --primary: #818cf8;
+            --primary-dark: #6366f1;
+            --secondary: #a78bfa;
+            --bg-light: #0f172a;
+            --text-light: #e2e8f0;
+            --card-light: #1e293b;
+            --border-light: #334155;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
+            min-height: 100vh;
+            transition: background 0.3s ease;
+            color: var(--text-light);
+        }
+        
+        .app-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(31, 38, 135, 0.15);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        .dark-theme .card {
+            background: rgba(30, 41, 59, 0.95);
+            border-color: rgba(51, 65, 85, 0.3);
+            backdrop-filter: blur(10px);
+        }
+        
+        .dark-theme body {
+            background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+        }
+        
+        .tab-button {
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        
+        .tab-button.active {
+            color: white;
+            font-weight: 600;
+        }
+        
+        .tab-button.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: white;
+            border-radius: 3px;
+        }
+        
+        .series-card, .movie-card {
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid var(--border-light);
+        }
+        
+        .series-card:hover, .movie-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 24px rgba(0,0,0,0.1);
+            border-color: var(--primary);
+        }
+        
+        .progress-bar {
+            height: 6px;
+            border-radius: 3px;
+            overflow: hidden;
+            background: #e5e7eb;
+        }
+        
+        .dark-theme .progress-bar {
+            background: #334155;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            transition: width 0.4s ease;
+        }
+        
+        .status-badge {
+            font-size: 0.75rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-weight: 600;
+        }
+        
+        .status-badge.completed {
+            background: linear-gradient(45deg, var(--success), #06d6a0);
+            color: white;
+        }
+        
+        .status-badge.watching {
+            background: linear-gradient(45deg, var(--primary), #60a5fa);
+            color: white;
+        }
+        
+        .status-badge.planning {
+            background: linear-gradient(45deg, var(--secondary), #a78bfa);
+            color: white;
+        }
+        
+        .status-badge.paused {
+            background: linear-gradient(45deg, var(--warning), #fbbf24);
+            color: white;
+        }
+        
+        .filter-button {
+            transition: all 0.2s ease;
+        }
+        
+        .filter-button.active {
+            background: var(--primary);
+            color: white;
+            font-weight: 600;
+        }
+        
+        .edit-icon, .delete-icon {
+            opacity: 0;
+            transition: all 0.2s ease;
+        }
+        
+        .series-card:hover .edit-icon,
+        .series-card:hover .delete-icon,
+        .movie-card:hover .edit-icon,
+        .movie-card:hover .delete-icon {
+            opacity: 1;
+        }
+        
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        
+        .modal.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        
+        .modal-content {
+            background: var(--card-light);
+            border-radius: 16px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+        }
+        
+        .modal.active .modal-content {
+            transform: translateY(0);
+        }
+        
+        .form-group {
+            margin-bottom: 16px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-light);
+        }
+        
+        .form-control {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid var(--border-light);
+            border-radius: 12px;
+            font-size: 16px;
+            transition: border-color 0.3s ease;
+            background: var(--bg-light);
+            color: var(--text-light);
+        }
+        
+        .dark-theme .form-control {
+            background: #334155;
+            border-color: #475569;
+            color: #e2e8f0;
+        }
+        
+        .form-control:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+        
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            border: none;
+            font-size: 16px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #e5e7eb;
+            color: #374151;
+        }
+        
+        .dark-theme .btn-secondary {
+            background: #475569;
+            color: #e2e8f0;
+        }
+        
+        .btn-secondary:hover {
+            background: #d1d5db;
+        }
+        
+        .dark-theme .btn-secondary:hover {
+            background: #64748b;
+        }
+        
+        .btn-danger {
+            background: linear-gradient(45deg, var(--danger), #f87171);
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            transform: translateY(-2px);
+        }
+        
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 14px;
+        }
+        
+        .watched-indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+        
+        .watched-indicator.watched {
+            background-color: var(--success);
+        }
+        
+        .watched-indicator.unwatched {
+            background-color: #d1d5db;
+        }
+        
+        .dark-theme .watched-indicator.unwatched {
+            background-color: #475569;
+        }
+        
+        .action-buttons {
+            display: flex;
+            gap: 8px;
+            margin-top: 12px;
+        }
+        
+        .section-header {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            margin-bottom: 24px;
+            align-items: center;
+        }
+        
+        .search-container {
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .filters-container {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .view-options {
+            display: flex;
+            gap: 8px;
+            margin-left: auto;
+        }
+        
+        .view-button {
+            width: 40px;
+            height: 40px;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: #e5e7eb;
+            color: #64748b;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .dark-theme .view-button {
+            background: #475569;
+            color: #e2e8f0;
+        }
+        
+        .view-button.active {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .season-list {
+            margin-top: 16px;
+            border-top: 1px solid var(--border-light);
+            padding-top: 16px;
+        }
+        
+        .dark-theme .season-list {
+            border-top-color: #334155;
+        }
+        
+        .season-item {
+            padding: 12px;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: #f9fafb;
+        }
+        
+        .dark-theme .season-item {
+            background: #334155;
+            border-color: #475569;
+        }
+        
+        .season-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .season-content {
+            margin-top: 12px;
+            padding: 12px;
+            background: var(--bg-light);
+            border-radius: 8px;
+            border: 1px solid var(--border-light);
+            display: none;
+        }
+        
+        .dark-theme .season-content {
+            background: #475569;
+            border-color: #64748b;
+        }
+        
+        .season-content.show {
+            display: block;
+        }
+        
+        .season-toggle {
+            transition: transform 0.3s ease;
+        }
+        
+        .season-toggle.rotate {
+            transform: rotate(180deg);
+        }
+        
+        .grid-1-col {
+            grid-template-columns: repeat(1, minmax(0, 1fr));
+        }
+        
+        .grid-2-col {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        
+        .grid-3-col {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        
+        .theme-toggle {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            width: 50px;
+            height: 50px;
+            border-radius: 25px;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(10px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 100;
+            transition: all 0.3s ease;
+        }
+        
+        .theme-toggle:hover {
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.3);
+        }
+        
+        .dark-theme .theme-toggle {
+            background: rgba(30, 41, 59, 0.3);
+        }
+        
+        .dark-theme .theme-toggle:hover {
+            background: rgba(30, 41, 59, 0.4);
+        }
+        
+        @media (max-width: 768px) {
+            .section-header {
+                flex-direction: column;
+                align-items: stretch;
+            }
+            .search-container {
+                order: 2;
+            }
+            .filters-container {
+                order: 1;
+                justify-content: center;
+            }
+            .view-options {
+                order: 3;
+                margin: 16px 0 0 0;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
+    <div class="theme-toggle" id="themeToggle">
+        <i class="fas fa-moon text-white text-xl"></i>
+    </div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <div class="text-center mb-8">
+            <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">🎬 İzleme Takip</h1>
+            <p class="text-xl text-purple-100 opacity-90">Dizilerinizi ve filmlerinizi akıllıca takip edin</p>
+        </div>
+
+        <!-- Backup & Restore Section -->
+        <div class="card p-6 mb-8 bg-white/10 backdrop-blur-sm">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="text-center">
+                    <h3 class="text-white font-semibold mb-2">Yedek Al</h3>
+                    <p class="text-purple-100 text-sm mb-3">Verilerinizi güvenli bir dosyaya kaydedin</p>
+                    <button id="exportData" class="btn btn-primary w-full">
+                        <i class="fas fa-download mr-2"></i> Yedek Al
+                    </button>
+                </div>
+                <div class="text-center border-l border-r border-white/20 px-4">
+                    <h3 class="text-white font-semibold mb-2">Geri Yükle</h3>
+                    <p class="text-purple-100 text-sm mb-3">Kayıp verilerinizi kurtarın</p>
+                    <div class="relative">
+                        <input type="file" id="importData" class="hidden" accept=".json">
+                        <label for="importData" class="btn btn-primary w-full cursor-pointer">
+                            <i class="fas fa-upload mr-2"></i> Dosya Yükle
+                        </label>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <h3 class="text-white font-semibold mb-2">Toplam</h3>
+                    <div class="text-2xl font-bold text-white mb-1" id="totalStats">0</div>
+                    <p class="text-purple-100 text-sm">Kayıtlı İçerik</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex bg-white/10 backdrop-blur-sm rounded-xl p-2 mb-8 justify-center">
+            <button id="seriesTab" class="tab-button px-6 py-3 font-medium text-white border-none active">
+                <i class="fas fa-tv mr-2"></i> Diziler
+            </button>
+            <button id="moviesTab" class="tab-button px-6 py-3 font-medium text-white border-none">
+                <i class="fas fa-film mr-2"></i> Filmler
+            </button>
+        </div>
+
+        <!-- Series Tab Content -->
+        <div id="seriesContent" class="tab-content">
+            <div class="card p-6 mb-6">
+                <div class="section-header">
+                    <div class="search-container">
+                        <div class="relative">
+                            <input type="text" id="searchSeries" class="form-control pl-10" placeholder="Dizi ara...">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </div>
+                    <div class="filters-container">
+                        <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">Tümü</button>
+                        <button class="filter-button btn btn-secondary btn-sm" data-filter="completed">Tamamlanan</button>
+                        <button class="filter-button btn btn-secondary btn-sm" data-filter="watching">İzleniyor</button>
+                        <button class="filter-button btn btn-secondary btn-sm" data-filter="planning">Planlanan</button>
+                    </div>
+                    <div class="view-options">
+                        <button class="view-button active" id="view1Col" data-view="1">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <button class="view-button" id="view2Col" data-view="2">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button class="view-button" id="view3Col" data-view="3">
+                            <i class="fas fa-th"></i>
+                        </button>
+                    </div>
+                    <button id="addSeriesBtn" class="btn btn-primary">
+                        <i class="fas fa-plus mr-2"></i> Yeni Dizi
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-1-col gap-6" id="seriesList">
+                <!-- Series cards will be added here dynamically -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="seriesEmpty" class="text-center py-16">
+                <div class="text-white/70 text-6xl mb-4"><i class="fas fa-tv"></i></div>
+                <h3 class="text-2xl font-semibold text-white mb-2">Henüz dizi eklemediniz</h3>
+                <p class="text-purple-100 mb-4">Yeni dizi eklemek için "Yeni Dizi" butonuna tıklayın</p>
+                <button id="addSeriesBtnEmpty" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i> İlk Dizini Ekle
+                </button>
+            </div>
+        </div>
+
+        <!-- Movies Tab Content -->
+        <div id="moviesContent" class="tab-content hidden">
+            <div class="card p-6 mb-6">
+                <div class="section-header">
+                    <div class="search-container">
+                        <div class="relative">
+                            <input type="text" id="searchMovies" class="form-control pl-10" placeholder="Film ara...">
+                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                        </div>
+                    </div>
+                    <div class="filters-container">
+                        <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">Tümü</button>
+                        <button class="filter-button btn btn-secondary btn-sm" data-filter="watched">İzlendi</button>
+                        <button class="filter-button btn btn-secondary btn-sm" data-filter="not-watched">İzlenmedi</button>
+                    </div>
+                    <div class="view-options">
+                        <button class="view-button active" id="view1ColMovies" data-view="1">
+                            <i class="fas fa-list"></i>
+                        </button>
+                        <button class="view-button" id="view2ColMovies" data-view="2">
+                            <i class="fas fa-th-large"></i>
+                        </button>
+                        <button class="view-button" id="view3ColMovies" data-view="3">
+                            <i class="fas fa-th"></i>
+                        </button>
+                    </div>
+                    <button id="addMovieBtn" class="btn btn-primary">
+                        <i class="fas fa-plus mr-2"></i> Yeni Film
+                    </button>
+                </div>
+            </div>
+
+            <div class="grid grid-1-col gap-6" id="moviesList">
+                <!-- Movie cards will be added here dynamically -->
+            </div>
+
+            <!-- Empty State -->
+            <div id="moviesEmpty" class="text-center py-16">
+                <div class="text-white/70 text-6xl mb-4"><i class="fas fa-film"></i></div>
+                <h3 class="text-2xl font-semibold text-white mb-2">Henüz film eklemediniz</h3>
+                <p class="text-purple-100 mb-4">Yeni film eklemek için "Yeni Film" butonuna tıklayın</p>
+                <button id="addMovieBtnEmpty" class="btn btn-primary">
+                    <i class="fas fa-plus mr-2"></i> İlk Filmi Ekle
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Series Edit Modal -->
+    <div id="seriesModal" class="modal">
+        <div class="modal-content">
+            <h2 id="seriesModalTitle" class="text-2xl font-bold mb-6">Dizi Ekle</h2>
+            <form id="seriesForm">
+                <input type="hidden" id="seriesId">
+                <div class="form-group">
+                    <label for="seriesName">Dizi Adı *</label>
+                    <input type="text" id="seriesName" class="form-control" required>
+                </div>
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="form-group">
+                        <label for="seriesSeason">Sezon *</label>
+                        <input type="number" id="seriesSeason" class="form-control" min="1" value="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="seriesTotalEpisodes">Toplam Bölüm *</label>
+                        <input type="number" id="seriesTotalEpisodes" class="form-control" min="1" required>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="seriesPlatform">Platform</label>
+                    <select id="seriesPlatform" class="form-control">
+                        <option value="Netflix">Netflix</option>
+                        <option value="Disney+">Disney+</option>
+                        <option value="Amazon Prime">Amazon Prime</option>
+                        <option value="HBO Max">HBO Max</option>
+                        <option value="Gain">Gain</option>
+                        <option value="Exxen">Exxen</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="seriesWatchedEpisodes">İzlenen Bölüm</label>
+                    <input type="number" id="seriesWatchedEpisodes" class="form-control" min="0">
+                </div>
+                <div class="action-buttons">
+                    <button type="button" id="cancelSeries" class="btn btn-secondary flex-1">İptal</button>
+                    <button type="submit" class="btn btn-primary flex-1">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Movie Edit Modal -->
+    <div id="movieModal" class="modal">
+        <div class="modal-content">
+            <h2 id="movieModalTitle" class="text-2xl font-bold mb-6">Film Ekle</h2>
+            <form id="movieForm">
+                <input type="hidden" id="movieId">
+                <div class="form-group">
+                    <label for="movieName">Film Adı *</label>
+                    <input type="text" id="movieName" class="form-control" required>
+                </div>
+                <div class="form-group">
+                    <label for="movieGenre">Tür *</label>
+                    <select id="movieGenre" class="form-control" required>
+                        <option value="Aksiyon">Aksiyon</option>
+                        <option value="Savaş">Savaş</option>
+                        <option value="Dram">Dram</option>
+                        <option value="Komedi">Komedi</option>
+                        <option value="Bilim Kurgu">Bilim Kurgu</option>
+                        <option value="Korku">Korku</option>
+                        <option value="Romantik">Romantik</option>
+                        <option value="Animasyon">Animasyon</option>
+                        <option value="Belgesel">Belgesel</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="movieWatched" class="mr-2">
+                        <span>İzlendi</span>
+                    </label>
+                </div>
+                <div class="action-buttons">
+                    <button type="button" id="cancelMovie" class="btn btn-secondary flex-1">İptal</button>
+                    <button type="submit" class="btn btn-primary flex-1">Kaydet</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        // Data storage
+        let seriesData = JSON.parse(localStorage.getItem('seriesData')) || [];
+        let moviesData = JSON.parse(localStorage.getItem('moviesData')) || [];
+        let filteredSeriesData = [...seriesData];
+        let filteredMoviesData = [...moviesData];
+        let currentSeriesFilter = 'all';
+        let currentMoviesFilter = 'all';
+        let seriesView = '1';
+        let moviesView = '1';
+        
+        // Check for saved theme
+        const savedTheme = localStorage.getItem('theme') || 'light';
+        if (savedTheme === 'dark') {
+            document.body.classList.add('dark-theme');
+            document.querySelector('#themeToggle i').className = 'fas fa-sun text-white text-xl';
+        }
+
+        // Theme toggle
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            document.body.classList.toggle('dark-theme');
+            const isDark = document.body.classList.contains('dark-theme');
+            localStorage.setItem('theme', isDark ? 'dark' : 'light');
+            
+            const icon = this.querySelector('i');
+            icon.className = isDark ? 'fas fa-sun text-white text-xl' : 'fas fa-moon text-white text-xl';
+        });
+
+        // Tab switching
+        document.getElementById('seriesTab').addEventListener('click', function() {
+            document.getElementById('seriesTab').classList.add('active');
+            document.getElementById('moviesTab').classList.remove('active');
+            document.getElementById('seriesContent').classList.remove('hidden');
+            document.getElementById('moviesContent').classList.add('hidden');
+            updateStats();
+            applySeriesFilters();
+        });
+        
+        document.getElementById('moviesTab').addEventListener('click', function() {
+            document.getElementById('moviesTab').classList.add('active');
+            document.getElementById('seriesTab').classList.remove('active');
+            document.getElementById('moviesContent').classList.remove('hidden');
+            document.getElementById('seriesContent').classList.add('hidden');
+            updateStats();
+            applyMovieFilters();
+        });
+
+        // View options for series
+        document.getElementById('view1Col').addEventListener('click', function() {
+            setSeriesView('1');
+        });
+        
+        document.getElementById('view2Col').addEventListener('click', function() {
+            setSeriesView('2');
+        });
+        
+        document.getElementById('view3Col').addEventListener('click', function() {
+            setSeriesView('3');
+        });
+
+        function setSeriesView(view) {
+            seriesView = view;
+            const seriesList = document.getElementById('seriesList');
+            seriesList.className = `grid grid-${view}-col gap-6`;
+            
+            // Update active state
+            document.querySelectorAll('#seriesContent .view-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`view${view}Col`).classList.add('active');
+            
+            renderSeriesList();
+        }
+
+        // View options for movies
+        document.getElementById('view1ColMovies').addEventListener('click', function() {
+            setMoviesView('1');
+        });
+        
+        document.getElementById('view2ColMovies').addEventListener('click', function() {
+            setMoviesView('2');
+        });
+        
+        document.getElementById('view3ColMovies').addEventListener('click', function() {
+            setMoviesView('3');
+        });
+
+        function setMoviesView(view) {
+            moviesView = view;
+            const moviesList = document.getElementById('moviesList');
+            moviesList.className = `grid grid-${view}-col gap-6`;
+            
+            // Update active state
+            document.querySelectorAll('#moviesContent .view-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            document.getElementById(`view${view}ColMovies`).classList.add('active');
+            
+            renderMoviesList();
+        }
+
+        // Add new series
+        document.getElementById('addSeriesBtn').addEventListener('click', openSeriesModal);
+        document.getElementById('addSeriesBtnEmpty').addEventListener('click', openSeriesModal);
+
+        function openSeriesModal() {
+            document.getElementById('seriesModalTitle').textContent = 'Yeni Dizi Ekle';
+            document.getElementById('seriesForm').reset();
+            document.getElementById('seriesId').value = '';
+            document.getElementById('seriesModal').classList.add('active');
+        }
+
+        document.getElementById('seriesForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('seriesId').value;
+            const name = document.getElementById('seriesName').value.trim();
+            const season = parseInt(document.getElementById('seriesSeason').value);
+            const totalEpisodes = parseInt(document.getElementById('seriesTotalEpisodes').value);
+            const platform = document.getElementById('seriesPlatform').value;
+            const watchedEpisodes = parseInt(document.getElementById('seriesWatchedEpisodes').value) || 0;
+            
+            if (!name || !season || !totalEpisodes) {
+                alert('Lütfen zorunlu alanları doldurun');
+                return;
+            }
+            
+            if (watchedEpisodes > totalEpisodes) {
+                alert('İzlenen bölüm sayısı toplam bölümden fazla olamaz');
+                return;
+            }
+            
+            const now = new Date().toISOString();
+            
+            if (id) {
+                // Update existing series
+                const series = seriesData.find(s => s.id == id);
+                if (series) {
+                    series.name = name;
+                    series.season = season;
+                    series.totalEpisodes = totalEpisodes;
+                    series.platform = platform;
+                    series.watchedEpisodes = watchedEpisodes;
+                    series.lastUpdated = now;
+                }
+            } else {
+                // Add new series
+                const newSeries = {
+                    id: Date.now(),
+                    name: name,
+                    season: season,
+                    totalEpisodes: totalEpisodes,
+                    platform: platform,
+                    watchedEpisodes: watchedEpisodes,
+                    lastUpdated: now
+                };
+                seriesData.push(newSeries);
+            }
+            
+            saveData();
+            closeSeriesModal();
+            applySeriesFilters();
+        });
+
+        function closeSeriesModal() {
+            document.getElementById('seriesModal').classList.remove('active');
+        }
+
+        document.getElementById('cancelSeries').addEventListener('click', closeSeriesModal);
+
+        // Add new movie
+        document.getElementById('addMovieBtn').addEventListener('click', openMovieModal);
+        document.getElementById('addMovieBtnEmpty').addEventListener('click', openMovieModal);
+
+        function openMovieModal() {
+            document.getElementById('movieModalTitle').textContent = 'Yeni Film Ekle';
+            document.getElementById('movieForm').reset();
+            document.getElementById('movieId').value = '';
+            document.getElementById('movieModal').classList.add('active');
+        }
+
+        document.getElementById('movieForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('movieId').value;
+            const name = document.getElementById('movieName').value.trim();
+            const genre = document.getElementById('movieGenre').value;
+            const watched = document.getElementById('movieWatched').checked;
+            
+            if (!name || !genre) {
+                alert('Lütfen tüm zorunlu alanları doldurun');
+                return;
+            }
+            
+            const now = new Date().toISOString();
+            
+            if (id) {
+                // Update existing movie
+                const movie = moviesData.find(m => m.id == id);
+                if (movie) {
+                    movie.name = name;
+                    movie.genre = genre;
+                    movie.watched = watched;
+                    if (watched && !movie.watchedDate) {
+                        movie.watchedDate = now;
+                    } else if (!watched) {
+                        movie.watchedDate = null;
+                    }
+                    movie.lastUpdated = now;
+                }
+            } else {
+                // Add new movie
+                const newMovie = {
+                    id: Date.now(),
+                    name: name,
+                    genre: genre,
+                    watched: watched,
+                    addedDate: now,
+                    watchedDate: watched ? now : null,
+                    lastUpdated: now
+                };
+                moviesData.push(newMovie);
+            }
+            
+            saveData();
+            closeMovieModal();
+            applyMovieFilters();
+        });
+
+        function closeMovieModal() {
+            document.getElementById('movieModal').classList.remove('active');
+        }
+
+        document.getElementById('cancelMovie').addEventListener('click', closeMovieModal);
+
+        // Edit series
+        window.editSeries = function(seriesId) {
+            const series = seriesData.find(s => s.id == seriesId);
+            if (series) {
+                document.getElementById('seriesModalTitle').textContent = 'Dizi Düzenle';
+                document.getElementById('seriesId').value = series.id;
+                document.getElementById('seriesName').value = series.name;
+                document.getElementById('seriesSeason').value = series.season;
+                document.getElementById('seriesTotalEpisodes').value = series.totalEpisodes;
+                document.getElementById('seriesPlatform').value = series.platform || 'Diğer';
+                document.getElementById('seriesWatchedEpisodes').value = series.watchedEpisodes;
+                document.getElementById('seriesModal').classList.add('active');
+            }
+        };
+
+        // Edit movie
+        window.editMovie = function(movieId) {
+            const movie = moviesData.find(m => m.id == movieId);
+            if (movie) {
+                document.getElementById('movieModalTitle').textContent = 'Film Düzenle';
+                document.getElementById('movieId').value = movie.id;
+                document.getElementById('movieName').value = movie.name;
+                document.getElementById('movieGenre').value = movie.genre;
+                document.getElementById('movieWatched').checked = movie.watched;
+                document.getElementById('movieModal').classList.add('active');
+            }
+        };
+
+        // Remove series
+        window.removeSeries = function(seriesId) {
+            if (confirm('Bu diziyi kaldırmak istediğinizden emin misiniz?')) {
+                seriesData = seriesData.filter(s => s.id != seriesId);
+                saveData();
+                applySeriesFilters();
+            }
+        };
+
+        // Remove movie
+        window.removeMovie = function(movieId) {
+            if (confirm('Bu filmi listeden kaldırmak istediğinizden emin misiniz?')) {
+                moviesData = moviesData.filter(m => m.id != movieId);
+                saveData();
+                applyMovieFilters();
+            }
+        };
+
+        // Update watched episodes
+        window.updateEpisodes = function(seriesId, change) {
+            const series = seriesData.find(s => s.id == seriesId);
+            if (series) {
+                series.watchedEpisodes = Math.max(0, Math.min(series.totalEpisodes, series.watchedEpisodes + change));
+                series.lastUpdated = new Date().toISOString();
+                saveData();
+                applySeriesFilters();
+            }
+        };
+
+        // Toggle movie watched status
+        window.toggleWatched = function(movieId) {
+            const movie = moviesData.find(m => m.id == movieId);
+            if (movie) {
+                movie.watched = !movie.watched;
+                movie.lastUpdated = new Date().toISOString();
+                if (movie.watched) {
+                    movie.watchedDate = new Date().toISOString();
+                } else {
+                    movie.watchedDate = null;
+                }
+                saveData();
+                applyMovieFilters();
+            }
+        };
+
+        // Save data to localStorage
+        function saveData() {
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+            updateStats();
+        }
+
+        // Update stats
+        function updateStats() {
+            const total = seriesData.length + moviesData.length;
+            document.getElementById('totalStats').textContent = total;
+        }
+
+        // Export data
+        document.getElementById('exportData').addEventListener('click', function() {
+            const data = {
+                seriesData: seriesData,
+                moviesData: moviesData,
+                exportDate: new Date().toISOString(),
+                version: '3.0'
+            };
+            
+            const dataStr = JSON.stringify(data, null, 2);
+            const dataBlob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(dataBlob);
+            
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `izleme-takip-yedek-${new Date().toISOString().split('T')[0]}.json`;
+            link.click();
+            
+            URL.revokeObjectURL(url);
+            alert('Verileriniz başarıyla yedeklendi! Dosya indirildi.');
+        });
+        
+        // Import data
+        document.getElementById('importData').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const importedData = JSON.parse(e.target.result);
+                    
+                    if (!importedData.seriesData || !importedData.moviesData) {
+                        throw new Error('Geçersiz veri formatı');
+                    }
+                    
+                    const seriesCount = importedData.seriesData.length;
+                    const moviesCount = importedData.moviesData.length;
+                    
+                    if (confirm(`Yedek dosyasından ${seriesCount} dizi ve ${moviesCount} film bulundu. Mevcut verilerin üzerine yazmak istiyor musunuz?`)) {
+                        seriesData = importedData.seriesData;
+                        moviesData = importedData.moviesData;
+                        saveData();
+                        applySeriesFilters();
+                        applyMovieFilters();
+                        alert('Veriler başarıyla yüklendi!');
+                    }
+                } catch (error) {
+                    alert('Dosya okunamadı veya geçersiz bir veri formatı: ' + error.message);
+                }
+                
+                e.target.value = '';
+            };
+            
+            reader.readAsText(file);
+        });
+
+        // Series filters
+        document.querySelectorAll('#seriesContent .filter-button').forEach(button => {
+            button.addEventListener('click', function() {
+                document.querySelectorAll('#seriesContent .filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                this.classList.add('active');
+                currentSeriesFilter = this.dataset.filter;
+                applySeriesFilters();
+            });
+        });
+
+        function applySeriesFilters() {
+            const searchInput = document.getElementById('searchSeries').value.toLowerCase().trim();
+            
+            // Group series by name
+            const groupedSeries = {};
+            seriesData.forEach(series => {
+                if (!groupedSeries[series.name]) {
+                    groupedSeries[series.name] = [];
+                }
+                groupedSeries[series.name].push(series);
+            });
+            
+            // Sort each group by season number
+            Object.keys(groupedSeries).forEach(name => {
+                groupedSeries[name].sort((a, b) => a.season - b.season);
+            });
+            
+            let filtered = groupedSeries;
+            
+            // Apply filter to the main display (based on the most recent season)
+            if (currentSeriesFilter !== 'all') {
+                const tempFiltered = {};
+                
+                Object.keys(filtered).forEach(name => {
+                    const seasons = filtered[name];
+                    const latestSeason = seasons[seasons.length - 1]; // Most recent season
+                    
+                    let include = false;
+                    
+                    if (currentSeriesFilter === 'completed') {
+                        include = latestSeason.watchedEpisodes >= latestSeason.totalEpisodes;
+                    } else if (currentSeriesFilter === 'watching') {
+                        include = latestSeason.watchedEpisodes > 0 && latestSeason.watchedEpisodes < latestSeason.totalEpisodes;
+                    } else if (currentSeriesFilter === 'planning') {
+                        include = latestSeason.watchedEpisodes === 0;
+                    }
+                    
+                    if (include) {
+                        tempFiltered[name] = seasons;
+                    }
+                });
+                
+                filtered = tempFiltered;
+            }
+            
+            // Apply search
+            if (searchInput) {
+                const tempFiltered = {};
+                
+                Object.keys(filtered).forEach(name => {
+                    if (name.toLowerCase().includes(searchInput)) {
+                        tempFiltered[name] = filtered[name];
+                    }
+                });
+                
+                filtered = tempFiltered;
+            }
+            
+            // Convert back to array for rendering
+            filteredSeriesData = Object.keys(filtered).map(name => ({
+                name: name,
+                seasons: filtered[name]
+            }));
+            
+            renderSeriesList();
+        }
+
+        // Movie filters
+        document.querySelectorAll('#moviesContent .filter-button').forEach(button => {
+            button.addEventListener('click', function() {
+                document.querySelectorAll('#moviesContent .filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                });
+                this.classList.add('active');
+                currentMoviesFilter = this.dataset.filter;
+                applyMovieFilters();
+            });
+        });
+
+        function applyMovieFilters() {
+            const searchInput = document.getElementById('searchMovies').value.toLowerCase().trim();
+            
+            let filtered = moviesData;
+            
+            // Apply filter
+            if (currentMoviesFilter === 'watched') {
+                filtered = filtered.filter(m => m.watched);
+            } else if (currentMoviesFilter === 'not-watched') {
+                filtered = filtered.filter(m => !m.watched);
+            }
+            
+            // Apply search
+            if (searchInput) {
+                filtered = filtered.filter(movie => 
+                    movie.name.toLowerCase().includes(searchInput)
+                );
+            }
+            
+            filteredMoviesData = filtered;
+            renderMoviesList();
+        }
+
+        // Search functionality
+        document.getElementById('searchSeries').addEventListener('input', applySeriesFilters);
+        document.getElementById('searchMovies').addEventListener('input', applyMovieFilters);
+
+        // Toggle season details
+        window.toggleSeason = function(seriesName, seasonNum) {
+            const seasonId = `season-${seriesName.replace(/\s+/g, '-')}-${seasonNum}`;
+            const seasonElement = document.getElementById(seasonId);
+            const toggleIcon = document.querySelector(`[data-season="${seasonId}"]`);
+            
+            if (seasonElement) {
+                seasonElement.classList.toggle('show');
+                if (toggleIcon) {
+                    toggleIcon.classList.toggle('rotate');
+                }
+            }
+        };
+
+        // Render series list
+        function renderSeriesList() {
+            const seriesList = document.getElementById('seriesList');
+            const emptyState = document.getElementById('seriesEmpty');
+            
+            if (seriesData.length === 0) {
+                seriesList.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            seriesList.classList.remove('hidden');
+            
+            let html = '';
+            
+            filteredSeriesData.forEach(seriesGroup => {
+                const name = seriesGroup.name;
+                const seasons = seriesGroup.seasons;
+                
+                // Sort seasons by season number
+                seasons.sort((a, b) => a.season - b.season);
+                
+                // Get the most recent season for status display
+                const latestSeason = seasons[seasons.length - 1];
+                const progress = (latestSeason.watchedEpisodes / latestSeason.totalEpisodes) * 100;
+                const isCompleted = latestSeason.watchedEpisodes >= latestSeason.totalEpisodes;
+                const status = isCompleted ? 'completed' : 
+                             (latestSeason.watchedEpisodes > 0 ? 'watching' : 'planning');
+                
+                html += `
+                <div class="series-card card p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-1">${name}</h3>
+                            <div class="flex items-center gap-3 mb-2">
+                                <span class="font-medium text-indigo-600 dark:text-indigo-400">Son Sezon: S${latestSeason.season}</span>
+                                ${latestSeason.platform ? `<span class="text-gray-500 dark:text-gray-400">${latestSeason.platform}</span>` : ''}
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="editSeries(${latestSeason.id})" class="edit-icon text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="removeSeries(${latestSeason.id})" class="delete-icon text-red-600 hover:text-red-800">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-3 mb-3">
+                        <span class="status-badge ${status}">
+                            ${isCompleted ? 'Tamamlandı' : 
+                              latestSeason.watchedEpisodes > 0 ? 'İzleniyor' : 'Planlanıyor'}
+                        </span>
+                        <span class="text-sm text-gray-600 dark:text-gray-400">
+                            ${latestSeason.watchedEpisodes}/${latestSeason.totalEpisodes} bölüm
+                        </span>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
+                            <span>İlerleme</span>
+                            <span>${Math.round(progress)}%</span>
+                        </div>
+                        <div class="progress-bar">
+                            <div class="progress-fill ${isCompleted ? 'bg-green-500' : 'bg-indigo-500'}" style="width: ${progress}%"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg p-1">
+                            <button onclick="updateEpisodes(${latestSeason.id}, -1)" class="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-500 hover:bg-red-50 rounded">
+                                <i class="fas fa-minus"></i>
+                            </button>
+                            <span class="mx-3 font-medium">${latestSeason.watchedEpisodes}</span>
+                            <button onclick="updateEpisodes(${latestSeason.id}, 1)" class="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-green-500 hover:bg-green-50 rounded">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                        <span class="text-xs text-gray-500 dark:text-gray-400">
+                            Son: ${new Date(latestSeason.lastUpdated).toLocaleDateString('tr-TR')}
+                        </span>
+                    </div>
+                    
+                    <!-- All Seasons -->
+                    <div class="season-list">
+                        <div class="font-semibold text-gray-700 dark:text-gray-300 mb-2">Tüm Sezonlar (${seasons.length})</div>
+                `;
+                
+                seasons.forEach(season => {
+                    const seasonProgress = (season.watchedEpisodes / season.totalEpisodes) * 100;
+                    const seasonId = `season-${name.replace(/\s+/g, '-')}-${season.season}`;
+                    
+                    html += `
+                    <div class="season-item">
+                        <div class="season-header" onclick="toggleSeason('${name}', ${season.season})">
+                            <div>
+                                <span class="font-medium">Sezon ${season.season}</span>
+                                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">${season.watchedEpisodes}/${season.totalEpisodes} bölüm</span>
+                            </div>
+                            <i class="fas fa-chevron-down season-toggle" data-season="${seasonId}"></i>
+                        </div>
+                        <div class="season-content" id="${seasonId}">
+                            <div class="flex items-center gap-2 mb-2">
+                                ${season.platform ? `<span class="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-800 dark:text-gray-200">${season.platform}</span>` : ''}
+                                <span class="text-xs text-gray-500 dark:text-gray-400">${Math.round(seasonProgress)}% tamamlandı</span>
+                            </div>
+                            <div class="progress-bar mb-3">
+                                <div class="progress-fill ${season.watchedEpisodes >= season.totalEpisodes ? 'bg-green-500' : 'bg-indigo-500'}" style="width: ${seasonProgress}%"></div>
+                            </div>
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg p-1">
+                                    <button onclick="updateEpisodes(${season.id}, -1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-red-500 hover:bg-red-50 rounded text-sm">
+                                        <i class="fas fa-minus"></i>
+                                    </button>
+                                    <span class="mx-2 font-medium text-sm">${season.watchedEpisodes}</span>
+                                    <button onclick="updateEpisodes(${season.id}, 1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-green-500 hover:bg-green-50 rounded text-sm">
+                                        <i class="fas fa-plus"></i>
+                                    </button>
+                                </div>
+                                <span class="text-xs text-gray-500 dark:text-gray-400">
+                                    Son: ${new Date(season.lastUpdated).toLocaleDateString('tr-TR')}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                    `;
+                });
+                
+                html += `
+                    </div>
+                </div>
+                `;
+            });
+            
+            seriesList.innerHTML = html;
+        }
+        
+        // Render movies list
+        function renderMoviesList() {
+            const moviesList = document.getElementById('moviesList');
+            const emptyState = document.getElementById('moviesEmpty');
+            
+            if (moviesData.length === 0) {
+                moviesList.classList.add('hidden');
+                emptyState.classList.remove('hidden');
+                return;
+            }
+            
+            emptyState.classList.add('hidden');
+            moviesList.classList.remove('hidden');
+            
+            // Sort by watched status and last updated
+            filteredMoviesData.sort((a, b) => {
+                if (a.watched !== b.watched) {
+                    return a.watched - b.watched;
+                }
+                return new Date(b.lastUpdated) - new Date(a.lastUpdated);
+            });
+            
+            let html = '';
+            
+            filteredMoviesData.forEach(movie => {
+                html += `
+                <div class="movie-card card p-6">
+                    <div class="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${movie.name}</h3>
+                            <div class="flex items-center gap-3">
+                                <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">
+                                    ${movie.watched ? 'İzlendi' : 'İzlenmedi'}
+                                </span>
+                                <span class="text-sm text-gray-500 dark:text-gray-400">${movie.genre}</span>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <button onclick="editMovie(${movie.id})" class="edit-icon text-blue-600 hover:text-blue-800">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="removeMovie(${movie.id})" class="delete-icon text-red-600 hover:text-red-800">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center mb-4">
+                        <div class="checkbox-container mr-3" onclick="toggleWatched(${movie.id})">
+                            <div class="custom-checkbox ${movie.watched ? 'checked' : ''}">
+                               <label class="cursor-pointer"> ${movie.watched ? '✓' : ''}İzlendi olarak işaretle</label>
+                            </div>
+                        </div>
+                        
+                    </div>
+                    
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                        Eklenme: ${new Date(movie.addedDate).toLocaleDateString('tr-TR')}
+                        ${movie.watchedDate ? `<br>İzlenme: ${new Date(movie.watchedDate).toLocaleDateString('tr-TR')}` : ''}
+                    </div>
+                </div>
+                `;
+            });
+            
+            moviesList.innerHTML = html;
+        }
+        
+        // Initial render
+        updateStats();
+        applySeriesFilters();
+        applyMovieFilters();
+    </script>
+</body>
+</html>

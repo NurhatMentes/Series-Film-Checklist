@@ -1,0 +1,23 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  html-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install htmlhint
+        run: |
+          npm init -y
+          npm install --no-audit --no-fund --save-dev htmlhint
+      - name: Run htmlhint
+        run: npx htmlhint "**/*.html"
