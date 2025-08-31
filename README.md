@@ -1,31 +1,102 @@
-# Series Film Checklist
+# 🎬 İzleme Takip Uygulaması
 
-Bu depo, yerel projeniz `dizi_checklist.html` için hazırlanmış bir GitHub deposu şablonudur.
+Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı dostu bir web uygulaması. Yerel depolama ile çalışır, verileriniz güvende kalır ve istediğiniz zaman yedek alıp geri yükleyebilirsiniz.
 
-İçerik:
-- `dizi_checklist.html` — mevcut tek sayfa uygulama.
+<img width="1109" height="826" alt="image" src="https://github.com/user-attachments/assets/d87858f1-b8a6-4293-b099-9571f45e75ce" />
 
-Hazırlanan workflowlar:
-- CI: HTML linter (htmlhint) çalıştırır (push ve PR'lerde).
-- GitHub Pages deploy: `main` dalına push edildiğinde siteyi GitHub Pages ile yayınlar.
 
-Nasıl kullanılır (PowerShell):
-1) Yeni bir GitHub repo oluşturun, isim: "Series Film Checklist".
-2) Lokal repository'yi başlatın (eğer henüz git yoksa) ve commit/push yapın:
+## Özellikler
 
-```powershell
-cd 'c:\Users\nurha\Desktop\Uygulamalar\Dizi-Film-Checklist'
-git init
-git add .
-git commit -m "Initial commit: add workflows and metadata"
-git branch -M main
-# uzaktaki repo'yu ekleyin (GitHub'da oluşturduğunuz repo URL'sini kullanın)
-git remote add origin https://github.com/<kullanici>/<Series-Film-Checklist>.git
-git push -u origin main
-```
+### 📺 Dizi Takibi
+- Birden fazla sezon ekleyin
+- Her sezon için bölüm ilerlemesi takibi
+- Platform bilgisi (Netflix, Disney+, Amazon Prime vb.)
+- Tüm sezonları tek bir kartta görüntüleyin
+- Sezon detaylarını aç/kapa ile görüntüleyin
 
-Sonrasında GitHub'da repository ayarlarından Pages bölümünü kontrol ederek yayın URL'sini görebilirsiniz.
+### 🎬 Film Listesi
+- İzlenecek filmleri ekleyin
+- Film türüne göre sınıflandırın
+- "İzlendi" işaretleyici ile durum takibi
+- İzleme tarihini otomatik kaydetme
 
-Notlar:
-- CI için `htmlhint` kullanılıyor; ihtiyaç halinde ek testler/linters ekleyebilirim.
-- İsterseniz Actions üzerinde özel dal veya build adımları ekleyebilirim.
+### 🛠️ Gelişmiş Özellikler
+- **Karanlık/Aydınlık tema** - Göz yorgunluğunu azaltmak için
+- **Çoklu görünüm modu** - 1, 2 veya 3 sütunlu karo görünümü
+- **Gelişmiş filtreleme** - Duruma göre içerik filtreleme
+- **Arama ve sıralama** - Hızlı içerik bulma
+- **Tamamen offline çalışma** - İnternet bağlantısı gerekmez
+
+### 💾 Veri Yönetimi
+- **Yedekleme ve geri yükleme** - JSON dosya formatı
+- **Yerel depolama** - Veriler tarayıcıda saklanır
+- **Veri kaybı riski yok** - Manuel yedekleme ile güvence
+- **Veri aktarımı** - Farklı cihazlara kolayca taşıma
+
+## Kullanım
+
+### 🚀 Başlangıç
+1. Uygulamayı tarayıcınızda açın
+2. "Yeni Dizi" veya "Yeni Film" butonuna tıklayın
+3. Gerekli bilgileri doldurun ve kaydedin
+4. İçerikleriniz otomatik olarak listelenir
+
+### 🔧 Dizi Ekleme
+- Dizi adı
+- Sezon numarası
+- Toplam bölüm sayısı
+- Platform (isteğe bağlı)
+- Şu ana kadar izlenen bölüm sayısı
+
+### 🎞️ Film Ekleme
+- Film adı
+- Tür (Aksiyon, Dram, Komedi vb.)
+- "İzlendi" onay kutusu
+
+### 🔍 Filtreleme
+**Diziler için:**
+- Tümü
+- Tamamlanan
+- İzleniyor
+- Planlanan
+
+**Filmler için:**
+- Tümü
+- İzlendi
+- İzlenmedi
+
+### 🌙 Tema Değiştirme
+Sağ üst köşedeki ay/güneş simgesine tıklayarak karanlık veya aydınlık temayı seçebilirsiniz.
+
+## Veri Güvenliği
+
+### Nerede Saklanır?
+- Tüm veriler **tarayıcınızın yerel depolamasında (localStorage)** saklanır
+- Veriler sunucuya gönderilmez
+- İnternet bağlantısı olmadan çalışır
+
+### Yedekleme
+- "Yedek Al" butonu ile tüm verilerinizi bir JSON dosyasına kaydedebilirsiniz
+- Dosya bilgisayarınıza indirilir
+- Aynı dosyayı "Dosya Yükle" ile geri yükleyebilirsiniz
+
+### Veri Kaybı Riski
+| Risk | Açıklama | Çözüm |
+|------|---------|-------|
+| ✅ | Tarayıcı verileri temizlenirse | Düzenli yedek alın |
+| ⚠️ | Farklı cihazda açılırsa | Yedek dosyası ile aktarın |
+| ❌ | İnternet kesilirse | Etkilenmez, offline çalışır |
+| ❌ | Sunucu sorunu | Etkilenmez, yerel depolama kullanır |
+
+## Kurulum
+
+Bu uygulama özel bir kurulum gerektirmez. Yapmanız gerekenler:
+
+1. `dizi_checklist.html` dosyasını indirin
+2. Dosyayı tarayıcınızda açın
+3. Hemen kullanmaya başlayın
+
+### Alternatif Kullanım
+```html
+<!-- Doğrudan tarayıcıda açın -->
+Dosyayı indirin → Sağ tıklayın → "Farklı Aç" → Tarayıcı seçin
