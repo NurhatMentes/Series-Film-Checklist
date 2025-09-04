@@ -140,13 +140,26 @@
         }
         
         .filter-button {
-            transition: all 0.2s ease;
+            transition: all 0.3s ease;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            border: 1px solid var(--border-light);
+        }
+        
+        .filter-button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
         }
         
         .filter-button.active {
-            background: var(--primary);
+            background: linear-gradient(45deg, var(--primary), var(--secondary));
             color: white;
             font-weight: 600;
+            border-color: transparent;
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
         }
         
         .edit-icon, .delete-icon {
@@ -407,10 +420,23 @@
         
         .season-toggle {
             transition: transform 0.3s ease;
+            display: inline-block;
         }
         
         .season-toggle.rotate {
             transform: rotate(180deg);
+        }
+
+        .season-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease-out;
+            padding: 0;
+        }
+        
+        .season-content.show {
+            max-height: 500px;
+            padding: 1rem 0 0 0;
         }
         
         .grid-1-col {
@@ -453,6 +479,178 @@
         
         .dark-theme .theme-toggle:hover {
             background: rgba(30, 41, 59, 0.4);
+        }
+        
+        /* Yeni eklenen stiller */
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+            color: white;
+        }
+        
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            background-color: #e5e7eb;
+            color: #4b5563;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+        
+        .dark-theme .tag {
+            background-color: #475569;
+            color: #e2e8f0;
+        }
+        
+        .tag-input-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 0.5rem;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            min-height: 42px;
+        }
+        
+        .tag-input {
+            flex: 1;
+            min-width: 60px;
+            border: none;
+            outline: none;
+            background: transparent;
+        }
+        
+        .category-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-bottom: 1rem;
+        }
+        
+        .category-option {
+            padding: 0.5rem 1rem;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            cursor: pointer;
+            border: 1px solid var(--border-light);
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            margin-bottom: 0.5rem;
+            margin-right: 0.5rem;
+            font-weight: 500;
+            letter-spacing: 0.01em;
+        }
+        
+        .category-option:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        .category-option.selected {
+            border-color: transparent;
+            color: white;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transform: translateY(-2px);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .category-option.selected::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: inherit;
+            z-index: 0;
+        }
+        
+        .category-option.selected::after {
+            content: '✓';
+            position: absolute;
+            top: 0;
+            right: 0;
+            background: rgba(0, 0, 0, 0.15);
+            border-radius: 0 20px 0 8px;
+            padding: 0 6px;
+            font-size: 0.7rem;
+            z-index: 1;
+        }
+        
+        .category-option span {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(255, 255, 255, 0.25);
+            border-radius: 12px;
+            padding: 0.1rem 0.5rem;
+            margin-left: 0.5rem;
+            font-weight: 600;
+            font-size: 0.75rem;
+            min-width: 24px;
+            height: 20px;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+            position: relative;
+            z-index: 2;
+        }
+        
+        .category-option > * {
+            position: relative;
+            z-index: 2;
+        }
+        
+        .category-manager {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--border-light);
+        }
+        
+        .dark-theme .category-manager {
+            border-top-color: #334155;
+        }
+        
+        .custom-checkbox {
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .custom-checkbox input {
+            margin-right: 0.5rem;
+        }
+        
+        .color-picker {
+            width: 30px;
+            height: 30px;
+            padding: 0;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        .tag-cloud {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            margin-top: 1rem;
+            padding: 1rem;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+        }
+        
+        .dark-theme .tag-cloud {
+            background: rgba(30, 41, 59, 0.3);
         }
         
         @media (max-width: 768px) {
@@ -523,38 +721,71 @@
             <button id="moviesTab" class="tab-button px-6 py-3 font-medium text-white border-none">
                 <i class="fas fa-film mr-2"></i> Filmler
             </button>
+            <button id="categoriesTab" class="tab-button px-6 py-3 font-medium text-white border-none">
+                <i class="fas fa-tags mr-2"></i> Kategoriler
+            </button>
+            <button id="tagsTab" class="tab-button px-6 py-3 font-medium text-white border-none">
+                <i class="fas fa-tag mr-2"></i> Etiketler
+            </button>
         </div>
 
         <!-- Series Tab Content -->
         <div id="seriesContent" class="tab-content">
             <div class="card p-6 mb-6">
-                <div class="section-header">
-                    <div class="search-container">
-                        <div class="relative">
-                            <input type="text" id="searchSeries" class="form-control pl-10" placeholder="Dizi ara...">
-                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="flex justify-between items-center">
+                        <div class="search-container flex-grow mr-4">
+                            <div class="relative">
+                                <input type="text" id="searchSeries" class="form-control pl-10" placeholder="Dizi ara...">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="view-options flex mr-2">
+                                <button class="view-button active" id="view1Col" data-view="1">
+                                    <i class="fas fa-list"></i>
+                                </button>
+                                <button class="view-button" id="view2Col" data-view="2">
+                                    <i class="fas fa-th-large"></i>
+                                </button>
+                                <button class="view-button" id="view3Col" data-view="3">
+                                    <i class="fas fa-th"></i>
+                                </button>
+                            </div>
+                            <button id="addSeriesBtn" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i> Yeni Dizi
+                            </button>
                         </div>
                     </div>
-                    <div class="filters-container">
-                        <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">Tümü</button>
-                        <button class="filter-button btn btn-secondary btn-sm" data-filter="completed">Tamamlanan</button>
-                        <button class="filter-button btn btn-secondary btn-sm" data-filter="watching">İzleniyor</button>
-                        <button class="filter-button btn btn-secondary btn-sm" data-filter="planning">Planlanan</button>
+                    
+                    <div class="filters-container bg-white/5 p-3 rounded-lg">
+                        <div class="flex flex-wrap gap-2 mb-3">
+                            <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
+                                <i class="fas fa-layer-group mr-1"></i> Tümü
+                            </button>
+                            <button class="filter-button btn btn-secondary btn-sm" data-filter="completed">
+                                <i class="fas fa-check-circle mr-1"></i> Tamamlanan
+                            </button>
+                            <button class="filter-button btn btn-secondary btn-sm" data-filter="watching">
+                                <i class="fas fa-play-circle mr-1"></i> İzleniyor
+                            </button>
+                            <button class="filter-button btn btn-secondary btn-sm" data-filter="planning">
+                                <i class="fas fa-clock mr-1"></i> Planlanan
+                            </button>
+                        </div>
+                        
+                        <div class="flex flex-col">
+                            <div class="flex items-center mb-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300 mr-2">Kategoriler:</span>
+                                <div id="seriesCategoryFilters" class="flex flex-wrap items-center gap-2"></div>
+                            </div>
+                            
+                            <!-- Etiket bulutu -->
+                            <div id="seriesTagCloud" class="tag-cloud mt-2">
+                                <!-- Etiketler buraya dinamik olarak eklenecek -->
+                            </div>
+                        </div>
                     </div>
-                    <div class="view-options">
-                        <button class="view-button active" id="view1Col" data-view="1">
-                            <i class="fas fa-list"></i>
-                        </button>
-                        <button class="view-button" id="view2Col" data-view="2">
-                            <i class="fas fa-th-large"></i>
-                        </button>
-                        <button class="view-button" id="view3Col" data-view="3">
-                            <i class="fas fa-th"></i>
-                        </button>
-                    </div>
-                    <button id="addSeriesBtn" class="btn btn-primary">
-                        <i class="fas fa-plus mr-2"></i> Yeni Dizi
-                    </button>
                 </div>
             </div>
 
@@ -576,32 +807,57 @@
         <!-- Movies Tab Content -->
         <div id="moviesContent" class="tab-content hidden">
             <div class="card p-6 mb-6">
-                <div class="section-header">
-                    <div class="search-container">
-                        <div class="relative">
-                            <input type="text" id="searchMovies" class="form-control pl-10" placeholder="Film ara...">
-                            <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                <div class="grid grid-cols-1 gap-4">
+                    <div class="flex justify-between items-center">
+                        <div class="search-container flex-grow mr-4">
+                            <div class="relative">
+                                <input type="text" id="searchMovies" class="form-control pl-10" placeholder="Film ara...">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <div class="view-options flex mr-2">
+                                <button class="view-button active" id="view1ColMovies" data-view="1">
+                                    <i class="fas fa-list"></i>
+                                </button>
+                                <button class="view-button" id="view2ColMovies" data-view="2">
+                                    <i class="fas fa-th-large"></i>
+                                </button>
+                                <button class="view-button" id="view3ColMovies" data-view="3">
+                                    <i class="fas fa-th"></i>
+                                </button>
+                            </div>
+                            <button id="addMovieBtn" class="btn btn-primary">
+                                <i class="fas fa-plus mr-2"></i> Yeni Film
+                            </button>
                         </div>
                     </div>
-                    <div class="filters-container">
-                        <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">Tümü</button>
-                        <button class="filter-button btn btn-secondary btn-sm" data-filter="watched">İzlendi</button>
-                        <button class="filter-button btn btn-secondary btn-sm" data-filter="not-watched">İzlenmedi</button>
+                    
+                    <div class="filters-container bg-white/5 p-3 rounded-lg">
+                        <div class="flex flex-wrap gap-2 mb-3">
+                            <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
+                                <i class="fas fa-layer-group mr-1"></i> Tümü
+                            </button>
+                            <button class="filter-button btn btn-secondary btn-sm" data-filter="watched">
+                                <i class="fas fa-eye mr-1"></i> İzlendi
+                            </button>
+                            <button class="filter-button btn btn-secondary btn-sm" data-filter="not-watched">
+                                <i class="fas fa-eye-slash mr-1"></i> İzlenmedi
+                            </button>
+                        </div>
+                        
+                        <div class="flex flex-col">
+                            <div class="flex items-center mb-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300 mr-2">Kategoriler:</span>
+                                <div id="moviesCategoryFilters" class="flex flex-wrap items-center gap-2"></div>
+                            </div>
+                            
+                            <!-- Etiket bulutu -->
+                            <div id="moviesTagCloud" class="tag-cloud mt-2">
+                                <!-- Etiketler buraya dinamik olarak eklenecek -->
+                            </div>
+                        </div>
                     </div>
-                    <div class="view-options">
-                        <button class="view-button active" id="view1ColMovies" data-view="1">
-                            <i class="fas fa-list"></i>
-                        </button>
-                        <button class="view-button" id="view2ColMovies" data-view="2">
-                            <i class="fas fa-th-large"></i>
-                        </button>
-                        <button class="view-button" id="view3ColMovies" data-view="3">
-                            <i class="fas fa-th"></i>
-                        </button>
-                    </div>
-                    <button id="addMovieBtn" class="btn btn-primary">
-                        <i class="fas fa-plus mr-2"></i> Yeni Film
-                    </button>
                 </div>
             </div>
 
@@ -617,6 +873,68 @@
                 <button id="addMovieBtnEmpty" class="btn btn-primary">
                     <i class="fas fa-plus mr-2"></i> İlk Filmi Ekle
                 </button>
+            </div>
+        </div>
+
+        <!-- Categories Tab Content -->
+        <div id="categoriesContent" class="tab-content hidden">
+            <div class="card p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-6">Kategori Yönetimi</h2>
+                
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-4">Yeni Kategori Ekle</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label for="newCategoryName">Kategori Adı</label>
+                            <input type="text" id="newCategoryName" class="form-control" placeholder="Kategori adı">
+                        </div>
+                        <div class="form-group">
+                            <label for="newCategoryColor">Renk</label>
+                            <input type="color" id="newCategoryColor" class="form-control color-picker" value="#6366f1">
+                        </div>
+                        <div class="form-group flex items-end">
+                            <button id="addCategoryBtn" class="btn btn-primary w-full">
+                                <i class="fas fa-plus mr-2"></i> Kategori Ekle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xl font-semibold mb-4">Mevcut Kategoriler</h3>
+                    <div id="categoriesList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Kategoriler buraya dinamik olarak eklenecek -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tags Management Tab Content -->
+        <div id="tagsContent" class="tab-content hidden">
+            <div class="card p-6 mb-6">
+                <h2 class="text-2xl font-bold mb-6">Etiket Yönetimi</h2>
+
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-4">Yeni Etiket Ekle</h3>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div class="form-group">
+                            <label for="newTagName">Etiket Adı</label>
+                            <input type="text" id="newTagName" class="form-control" placeholder="Etiket adı">
+                        </div>
+                        <div class="form-group flex items-end">
+                            <button id="addTagBtn" class="btn btn-primary w-full">
+                                <i class="fas fa-plus mr-2"></i> Etiket Ekle
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-xl font-semibold mb-4">Mevcut Etiketler</h3>
+                    <div id="tagsList" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        <!-- Etiketler buraya dinamik olarak eklenecek -->
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -657,6 +975,24 @@
                     <label for="seriesWatchedEpisodes">İzlenen Bölüm</label>
                     <input type="number" id="seriesWatchedEpisodes" class="form-control" min="0">
                 </div>
+                
+                <!-- Kategori seçimi -->
+                <div class="form-group">
+                    <label>Kategoriler</label>
+                    <div id="seriesCategorySelector" class="category-selector">
+                        <!-- Kategoriler buraya dinamik olarak eklenecek -->
+                    </div>
+                </div>
+                
+                <!-- Etiketler -->
+                <div class="form-group">
+                    <label for="seriesTags">Etiketler</label>
+                    <div class="tag-input-container" id="seriesTagsContainer">
+                        <input type="text" id="seriesTagsInput" class="tag-input" placeholder="Etiket ekle ve Enter'a bas">
+                    </div>
+                    <div id="seriesTagOptions" class="tag-cloud mt-2"></div>
+                </div>
+                
                 <div class="action-buttons">
                     <button type="button" id="cancelSeries" class="btn btn-secondary flex-1">İptal</button>
                     <button type="submit" class="btn btn-primary flex-1">Kaydet</button>
@@ -675,21 +1011,24 @@
                     <label for="movieName">Film Adı *</label>
                     <input type="text" id="movieName" class="form-control" required>
                 </div>
+                
+                <!-- Kategori seçimi -->
                 <div class="form-group">
-                    <label for="movieGenre">Tür *</label>
-                    <select id="movieGenre" class="form-control" required>
-                        <option value="Aksiyon">Aksiyon</option>
-                        <option value="Savaş">Savaş</option>
-                        <option value="Dram">Dram</option>
-                        <option value="Komedi">Komedi</option>
-                        <option value="Bilim Kurgu">Bilim Kurgu</option>
-                        <option value="Korku">Korku</option>
-                        <option value="Romantik">Romantik</option>
-                        <option value="Animasyon">Animasyon</option>
-                        <option value="Belgesel">Belgesel</option>
-                        <option value="Diğer">Diğer</option>
-                    </select>
+                    <label>Kategoriler</label>
+                    <div id="movieCategorySelector" class="category-selector">
+                        <!-- Kategoriler buraya dinamik olarak eklenecek -->
+                    </div>
                 </div>
+                
+                <!-- Etiketler -->
+                <div class="form-group">
+                    <label for="movieTags">Etiketler</label>
+                    <div class="tag-input-container" id="movieTagsContainer">
+                        <input type="text" id="movieTagsInput" class="tag-input" placeholder="Etiket ekle ve Enter'a bas">
+                    </div>
+                    <div id="movieTagOptions" class="tag-cloud mt-2"></div>
+                </div>
+                
                 <div class="form-group">
                     <label class="flex items-center">
                         <input type="checkbox" id="movieWatched" class="mr-2">
@@ -708,10 +1047,20 @@
         // Data storage
         let seriesData = JSON.parse(localStorage.getItem('seriesData')) || [];
         let moviesData = JSON.parse(localStorage.getItem('moviesData')) || [];
+        let categoriesData = JSON.parse(localStorage.getItem('categoriesData')) || [
+            { id: 1, name: 'Aksiyon', color: '#ef4444' },
+            { id: 2, name: 'Komedi', color: '#f59e0b' },
+            { id: 3, name: 'Dram', color: '#10b981' },
+            { id: 4, name: 'Bilim Kurgu', color: '#6366f1' },
+            { id: 5, name: 'Fantastik', color: '#8b5cf6' }
+        ];
+        let tagsData = JSON.parse(localStorage.getItem('tagsData')) || [];
         let filteredSeriesData = [...seriesData];
         let filteredMoviesData = [...moviesData];
         let currentSeriesFilter = 'all';
         let currentMoviesFilter = 'all';
+    let currentSeriesCategory = null;
+    let currentMoviesCategory = null;
         let seriesView = '1';
         let moviesView = '1';
         
@@ -732,321 +1081,1156 @@
             icon.className = isDark ? 'fas fa-sun text-white text-xl' : 'fas fa-moon text-white text-xl';
         });
 
-        // Tab switching
-        document.getElementById('seriesTab').addEventListener('click', function() {
-            document.getElementById('seriesTab').classList.add('active');
-            document.getElementById('moviesTab').classList.remove('active');
-            document.getElementById('seriesContent').classList.remove('hidden');
-            document.getElementById('moviesContent').classList.add('hidden');
-            updateStats();
-            applySeriesFilters();
-        });
-        
-        document.getElementById('moviesTab').addEventListener('click', function() {
-            document.getElementById('moviesTab').classList.add('active');
-            document.getElementById('seriesTab').classList.remove('active');
-            document.getElementById('moviesContent').classList.remove('hidden');
-            document.getElementById('seriesContent').classList.add('hidden');
-            updateStats();
-            applyMovieFilters();
-        });
+        // DOM Elements
+        const seriesTab = document.getElementById('seriesTab');
+        const moviesTab = document.getElementById('moviesTab');
+        const categoriesTab = document.getElementById('categoriesTab');
+        const tagsTab = document.getElementById('tagsTab');
+        const seriesContent = document.getElementById('seriesContent');
+        const moviesContent = document.getElementById('moviesContent');
+        const categoriesContent = document.getElementById('categoriesContent');
+        const tagsContent = document.getElementById('tagsContent');
+        const seriesList = document.getElementById('seriesList');
+        const moviesList = document.getElementById('moviesList');
+        const categoriesList = document.getElementById('categoriesList');
+        const seriesEmpty = document.getElementById('seriesEmpty');
+        const moviesEmpty = document.getElementById('moviesEmpty');
+        const totalStats = document.getElementById('totalStats');
+        const addSeriesBtn = document.getElementById('addSeriesBtn');
+        const addSeriesBtnEmpty = document.getElementById('addSeriesBtnEmpty');
+        const addMovieBtn = document.getElementById('addMovieBtn');
+        const addMovieBtnEmpty = document.getElementById('addMovieBtnEmpty');
+        const addCategoryBtn = document.getElementById('addCategoryBtn');
+        const seriesModal = document.getElementById('seriesModal');
+        const movieModal = document.getElementById('movieModal');
+        const searchSeries = document.getElementById('searchSeries');
+        const searchMovies = document.getElementById('searchMovies');
+        const seriesTagCloud = document.getElementById('seriesTagCloud');
+        const moviesTagCloud = document.getElementById('moviesTagCloud');
 
-        // View options for series
-        document.getElementById('view1Col').addEventListener('click', function() {
-            setSeriesView('1');
-        });
-        
-        document.getElementById('view2Col').addEventListener('click', function() {
-            setSeriesView('2');
-        });
-        
-        document.getElementById('view3Col').addEventListener('click', function() {
-            setSeriesView('3');
-        });
-
-        function setSeriesView(view) {
-            seriesView = view;
-            const seriesList = document.getElementById('seriesList');
-            seriesList.className = `grid grid-${view}-col gap-6`;
+        // Initialize the app
+        function initApp() {
+            updateTotalStats();
+            renderSeriesList();
+            renderMoviesList();
+            renderCategoriesList();
+            renderCategoryFilters();
+            renderTagsList();
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
             
-            // Update active state
-            document.querySelectorAll('#seriesContent .view-button').forEach(btn => {
-                btn.classList.remove('active');
+            // Initialize tag inputs
+            initTagInput('seriesTagsInput', 'seriesTagsContainer');
+            initTagInput('movieTagsInput', 'movieTagsContainer');
+        }
+
+        // Render category chips with counts for series and movies
+        function renderCategoryFilters() {
+            const seriesContainer = document.getElementById('seriesCategoryFilters');
+            const moviesContainer = document.getElementById('moviesCategoryFilters');
+            if (!seriesContainer || !moviesContainer) return;
+
+            seriesContainer.innerHTML = '';
+            moviesContainer.innerHTML = '';
+
+            categoriesData.forEach(cat => {
+                const seriesCount = seriesData.filter(s => s.categories && s.categories.includes(cat.id)).length;
+                const movieCount = moviesData.filter(m => m.categories && m.categories.includes(cat.id)).length;
+
+                const sChip = document.createElement('button');
+                sChip.className = 'category-option';
+                sChip.style.backgroundColor = cat.color;
+                sChip.style.color = 'white';
+                sChip.setAttribute('data-id', cat.id);
+                sChip.innerHTML = `${cat.name} <span>(${seriesCount})</span>`;
+                sChip.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const id = parseInt(this.getAttribute('data-id'));
+                    if (currentSeriesCategory === id) currentSeriesCategory = null; else currentSeriesCategory = id;
+                    // visually mark selected
+                    document.querySelectorAll('#seriesCategoryFilters .category-option').forEach(b => b.classList.remove('selected'));
+                    if (currentSeriesCategory) {
+                        const el = document.querySelector(`#seriesCategoryFilters .category-option[data-id=\"${currentSeriesCategory}\"]`);
+                        if (el) el.classList.add('selected');
+                    }
+                    filterSeries();
+                });
+
+                const mChip = document.createElement('button');
+                mChip.className = 'category-option';
+                mChip.style.backgroundColor = cat.color;
+                mChip.style.color = 'white';
+                mChip.setAttribute('data-id', cat.id);
+                mChip.innerHTML = `${cat.name} <span>(${movieCount})</span>`;
+                mChip.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const id = parseInt(this.getAttribute('data-id'));
+                    if (currentMoviesCategory === id) currentMoviesCategory = null; else currentMoviesCategory = id;
+                    document.querySelectorAll('#moviesCategoryFilters .category-option').forEach(b => b.classList.remove('selected'));
+                    if (currentMoviesCategory) {
+                        const el = document.querySelector(`#moviesCategoryFilters .category-option[data-id=\"${currentMoviesCategory}\"]`);
+                        if (el) el.classList.add('selected');
+                    }
+                    filterMovies();
+                });
+
+                seriesContainer.appendChild(sChip);
+                moviesContainer.appendChild(mChip);
             });
-            document.getElementById(`view${view}Col`).classList.add('active');
+        }
+
+        // Update total stats
+        function updateTotalStats() {
+            const total = seriesData.length + moviesData.length;
+            totalStats.textContent = total;
+        }
+
+        // Render series list
+        // Group series by name
+        function groupSeriesByName(series) {
+            const grouped = {};
+            series.forEach(s => {
+                if (!grouped[s.name]) {
+                    grouped[s.name] = {
+                        name: s.name,
+                        platform: s.platform,
+                        categories: s.categories,
+                        tags: s.tags,
+                        seasons: []
+                    };
+                }
+                grouped[s.name].seasons.push({
+                    id: s.id,
+                    season: s.season,
+                    totalEpisodes: s.totalEpisodes,
+                    watchedEpisodes: s.watchedEpisodes,
+                    updatedAt: s.updatedAt
+                });
+                // Sort seasons
+                grouped[s.name].seasons.sort((a, b) => a.season - b.season);
+            });
+            return Object.values(grouped);
+        }
+
+        function renderSeriesList() {
+            if (filteredSeriesData.length === 0) {
+                seriesList.innerHTML = '';
+                seriesEmpty.classList.remove('hidden');
+                return;
+            }
+
+            seriesEmpty.classList.add('hidden');
+
+            // Group series by name
+            const groupedSeries = groupSeriesByName(filteredSeriesData);
+
+            // Update grid view
+            seriesList.className = `grid gap-6 grid-${seriesView}-col`;
+
+            seriesList.innerHTML = groupedSeries.map(series => {
+                // Get overall status based on all seasons
+                const allSeasons = series.seasons;
+                const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
+                const watchedEpisodes = allSeasons.reduce((sum, s) => sum + s.watchedEpisodes, 0);
+                const progress = (watchedEpisodes / totalEpisodes) * 100;
+                const status = watchedEpisodes === totalEpisodes ? 'completed' 
+                           : watchedEpisodes > 0 ? 'watching' 
+                           : 'planning';
+
+                // Kategori badge'leri
+                const categoryBadges = series.categories && series.categories.length > 0 
+                    ? series.categories.map(catId => {
+                        const category = categoriesData.find(c => c.id === catId);
+                        if (category) {
+                            return `<span class="category-badge" style="background-color: ${category.color}">${category.name}</span>`;
+                        }
+                        return '';
+                    }).join('') 
+                    : '';
+
+                // Etiketler
+                const tags = series.tags && series.tags.length > 0 
+                    ? series.tags.map(tag => `<span class="tag">${tag}</span>`).join('') 
+                    : '';
+
+                // Sezonlar
+                const seasonsHtml = series.seasons.map(season => {
+                    const seasonProgress = (season.watchedEpisodes / season.totalEpisodes) * 100;
+                    const seasonStatus = season.watchedEpisodes === season.totalEpisodes ? 'completed' 
+                                     : season.watchedEpisodes > 0 ? 'watching' 
+                                     : 'planning';
+
+                    return `
+                        <div class="season-item p-4 mb-2 bg-gray-50 dark:bg-gray-800 rounded-lg">
+                            <div class="flex justify-between items-center cursor-pointer season-header" data-season="${season.season}">
+                                <div class="flex items-center gap-2">
+                                    <i class="fas fa-chevron-down season-toggle"></i>
+                                    <span class="font-medium">Sezon ${season.season}</span>
+                                    <span class="status-badge ${seasonStatus}">${getStatusText(seasonStatus)}</span>
+                                </div>
+                                <span>${season.watchedEpisodes}/${season.totalEpisodes}</span>
+                            </div>
+                            <div class="season-content">
+                                <div class="content-inner">
+                                    <div class="mb-2">
+                                        <div class="flex justify-between text-sm mb-1">
+                                            <span>İzlenen Bölüm</span>
+                                            <span>${Math.round(seasonProgress)}%</span>
+                                        </div>
+                                        <div class="progress-bar">
+                                            <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" 
+                                                 style="width: ${seasonProgress}%"></div>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end space-x-2 mt-4">
+                                        <button class="btn btn-secondary btn-sm decrease-episode" data-id="${season.id}">
+                                            <i class="fas fa-minus"></i>
+                                        </button>
+                                        <button class="btn btn-primary btn-sm increase-episode" data-id="${season.id}">
+                                            <i class="fas fa-plus"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                return `
+                    <div class="series-card card p-6 relative">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold mb-1">${series.name}</h3>
+                                <div class="text-gray-600 dark:text-gray-300 mb-2">
+                                    <span class="status-badge ${status}">${getStatusText(status)}</span>
+                                    <span class="ml-2">${series.platform}</span>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button class="edit-icon text-blue-500 hover:text-blue-700" data-name="${series.name}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="delete-icon text-red-500 hover:text-red-700" data-name="${series.name}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+
+                        ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
+                        ${tags ? `<div class="mb-3">${tags}</div>` : ''}
+
+                        <div class="mb-4">
+                            <div class="flex justify-between text-sm mb-1">
+                                <span>Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}</span>
+                                <span>${Math.round(progress)}%</span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${progress}%"></div>
+                            </div>
+                        </div>
+
+                        <div class="seasons-container">
+                            ${seasonsHtml}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add event listeners
+            // Add click event for season headers to toggle content
+            document.querySelectorAll('.season-header').forEach(header => {
+                header.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const content = this.closest('.season-item').querySelector('.season-content');
+                    const toggle = this.querySelector('.season-toggle');
+                    
+                    // Toggle the content
+                    if (content.classList.contains('show')) {
+                        content.classList.remove('show');
+                        toggle.classList.remove('rotate');
+                    } else {
+                        content.classList.add('show');
+                        toggle.classList.add('rotate');
+                    }
+                });
+            });
+
+            // Edit series event listener
+            document.querySelectorAll('.edit-icon').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const name = this.getAttribute('data-name');
+                    const seriesInfo = seriesData.find(s => s.name === name);
+                    if (seriesInfo) {
+                        document.getElementById('seriesModalTitle').textContent = 'Diziyi Düzenle';
+                        document.getElementById('seriesId').value = seriesInfo.id;
+                        document.getElementById('seriesName').value = seriesInfo.name;
+                        document.getElementById('seriesSeason').value = seriesInfo.season;
+                        document.getElementById('seriesTotalEpisodes').value = seriesInfo.totalEpisodes;
+                        document.getElementById('seriesPlatform').value = seriesInfo.platform;
+                        document.getElementById('seriesWatchedEpisodes').value = seriesInfo.watchedEpisodes;
+
+                        // Kategori seçimini ayarla
+                        document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
+                            const catId = parseInt(option.getAttribute('data-id'));
+                            if (seriesInfo.categories && seriesInfo.categories.includes(catId)) {
+                                option.classList.add('selected');
+                            } else {
+                                option.classList.remove('selected');
+                            }
+                        });
+
+                        // Etiketleri ayarla
+                        const tagsContainer = document.getElementById('seriesTagsContainer');
+                        tagsContainer.innerHTML = '';
+                        if (seriesInfo.tags && seriesInfo.tags.length > 0) {
+                            seriesInfo.tags.forEach(tag => {
+                                const tagEl = document.createElement('span');
+                                tagEl.className = 'tag';
+                                tagEl.textContent = tag;
+                                const deleteBtn = document.createElement('button');
+                                deleteBtn.className = 'delete-tag';
+                                deleteBtn.innerHTML = '&times;';
+                                deleteBtn.addEventListener('click', function() {
+                                    tagEl.remove();
+                                });
+                                tagEl.appendChild(deleteBtn);
+                                tagsContainer.appendChild(tagEl);
+                            });
+                        }
+                        const input = document.createElement('input');
+                        input.type = 'text';
+                        input.id = 'seriesTagsInput';
+                        input.className = 'tag-input';
+                        input.placeholder = 'Etiket ekle ve Enter\'a bas';
+                        tagsContainer.appendChild(input);
+                        initTagInput('seriesTagsInput', 'seriesTagsContainer');
+
+                        seriesModal.classList.add('active');
+                    }
+                });
+            });
+
+            document.querySelectorAll('.delete-icon').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const name = this.getAttribute('data-name');
+                    if (confirm(`"${name}" dizisinin tüm sezonlarını silmek istediğinize emin misiniz?`)) {
+                        seriesData = seriesData.filter(s => s.name !== name);
+                        localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                        filteredSeriesData = [...seriesData];
+                        renderSeriesList();
+                        renderCategoryFilters();
+                        updateTotalStats();
+                        updateSeriesTagCloud();
+                    }
+                });
+            });
+
+            document.querySelectorAll('.increase-episode').forEach(btn => {
+                btn.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    const id = this.getAttribute('data-id');
+                    const seasonItemData = seriesData.find(s => s.id == id);
+                    if (seasonItemData && seasonItemData.watchedEpisodes < seasonItemData.totalEpisodes) {
+                        seasonItemData.watchedEpisodes++;
+                        seasonItemData.updatedAt = new Date().toISOString();
+                        localStorage.setItem('seriesData', JSON.stringify(seriesData));
+
+                        // Update the DOM in-place so open sections/modal are not affected
+                        const seasonItem = this.closest('.season-item');
+                        if (seasonItem) {
+                            // Update header count (the second direct span child of .season-header)
+                            const headerCount = seasonItem.querySelector('.season-header > span');
+                            if (headerCount) headerCount.textContent = `${seasonItemData.watchedEpisodes}/${seasonItemData.totalEpisodes}`;
+
+                            // Update season percentage text inside content
+                            const percentText = seasonItem.querySelector('.content-inner .flex.justify-between span:last-child');
+                            const pct = Math.round((seasonItemData.watchedEpisodes / seasonItemData.totalEpisodes) * 100);
+                            if (percentText) percentText.textContent = `${pct}%`;
+
+                            // Update progress bar fill for this season
+                            const progressFill = seasonItem.querySelector('.progress-fill');
+                            if (progressFill) progressFill.style.width = `${pct}%`;
+                        }
+
+                        // Update overall series card totals and progress without full re-render
+                        const card = this.closest('.series-card');
+                        if (card) {
+                            const seriesNameEl = card.querySelector('h3');
+                            const seriesName = seriesNameEl ? seriesNameEl.textContent : null;
+                            if (seriesName) {
+                                const allSeasons = seriesData.filter(s => s.name === seriesName);
+                                const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
+                                const watchedEpisodes = allSeasons.reduce((sum, s) => sum + s.watchedEpisodes, 0);
+                                const overallPct = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
+
+                                const totalSpan = card.querySelector('.mb-4 .flex.justify-between span');
+                                if (totalSpan) totalSpan.textContent = `Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}`;
+
+                                const overallPctSpan = card.querySelector('.mb-4 .flex.justify-between span:last-child');
+                                if (overallPctSpan) overallPctSpan.textContent = `${overallPct}%`;
+
+                                const overallFill = card.querySelector('.progress-bar .progress-fill');
+                                if (overallFill) overallFill.style.width = `${overallPct}%`;
+                            }
+                        }
+                    }
+                });
+            });
+            document.querySelectorAll('.decrease-episode').forEach(btn => {
+                btn.addEventListener('click', function(event) {
+                    event.stopPropagation();
+                    const id = this.getAttribute('data-id');
+                    const seasonItemData = seriesData.find(s => s.id == id);
+                    if (seasonItemData && seasonItemData.watchedEpisodes > 0) {
+                        seasonItemData.watchedEpisodes--;
+                        seasonItemData.updatedAt = new Date().toISOString();
+                        localStorage.setItem('seriesData', JSON.stringify(seriesData));
+
+                        // Update DOM in-place
+                        const seasonItem = this.closest('.season-item');
+                        if (seasonItem) {
+                            const headerCount = seasonItem.querySelector('.season-header > span');
+                            if (headerCount) headerCount.textContent = `${seasonItemData.watchedEpisodes}/${seasonItemData.totalEpisodes}`;
+
+                            const pct = Math.round((seasonItemData.watchedEpisodes / seasonItemData.totalEpisodes) * 100);
+                            const percentText = seasonItem.querySelector('.content-inner .flex.justify-between span:last-child');
+                            if (percentText) percentText.textContent = `${pct}%`;
+
+                            const progressFill = seasonItem.querySelector('.progress-fill');
+                            if (progressFill) progressFill.style.width = `${pct}%`;
+                        }
+
+                        // Update overall series card totals and progress
+                        const card = this.closest('.series-card');
+                        if (card) {
+                            const seriesNameEl = card.querySelector('h3');
+                            const seriesName = seriesNameEl ? seriesNameEl.textContent : null;
+                            if (seriesName) {
+                                const allSeasons = seriesData.filter(s => s.name === seriesName);
+                                const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
+                                const watchedEpisodes = allSeasons.reduce((sum, s) => sum + s.watchedEpisodes, 0);
+                                const overallPct = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
+
+                                const totalSpan = card.querySelector('.mb-4 .flex.justify-between span');
+                                if (totalSpan) totalSpan.textContent = `Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}`;
+
+                                const overallPctSpan = card.querySelector('.mb-4 .flex.justify-between span:last-child');
+                                if (overallPctSpan) overallPctSpan.textContent = `${overallPct}%`;
+
+                                const overallFill = card.querySelector('.progress-bar .progress-fill');
+                                if (overallFill) overallFill.style.width = `${overallPct}%`;
+                            }
+                        }
+                    }
+                });
+            });
+        }
+
+        // Render movies list
+        function renderMoviesList() {
+            if (filteredMoviesData.length === 0) {
+                moviesList.innerHTML = '';
+                moviesEmpty.classList.remove('hidden');
+                return;
+            }
+            
+            moviesEmpty.classList.add('hidden');
+            
+            // Update grid view
+            moviesList.className = `grid gap-6 grid-${moviesView}-col`;
+            
+            moviesList.innerHTML = filteredMoviesData.map(movie => {
+                // Kategori badge'leri
+                const categoryBadges = movie.categories && movie.categories.length > 0 
+                    ? movie.categories.map(catId => {
+                        const category = categoriesData.find(c => c.id === catId);
+                        if (category) {
+                            return `<span class="category-badge" style="background-color: ${category.color}">${category.name}</span>`;
+                        }
+                        return '';
+                    }).join('') 
+                    : '';
+                
+                // Etiketler
+                const tags = movie.tags && movie.tags.length > 0 
+                    ? movie.tags.map(tag => `<span class="tag">${tag}</span>`).join('') 
+                    : '';
+                
+                return `
+                    <div class="movie-card card p-6 relative">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <h3 class="text-xl font-bold mb-1">${movie.name}</h3>
+                                <div class="text-gray-600 dark:text-gray-300">
+                                    <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
+                                </div>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${movie.id}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="delete-icon text-red-500 hover:text-red-700" data-id="${movie.id}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
+                        ${tags ? `<div class="mb-3">${tags}</div>` : ''}
+                        
+                        <div class="flex items-center mb-4">
+                            <span class="watched-indicator ${movie.watched ? 'watched' : 'unwatched'}"></span>
+                            <span class="text-sm">${movie.watched ? 'İzlendi' : 'Henüz izlenmedi'}</span>
+                        </div>
+                        
+                        <div class="text-sm text-gray-600 dark:text-gray-300">
+                            <i class="fas fa-clock mr-1"></i> ${formatDate(movie.updatedAt)}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add event listeners
+            document.querySelectorAll('.edit-icon').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    editMovie(id);
+                });
+            });
+            
+            document.querySelectorAll('.delete-icon').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = this.getAttribute('data-id');
+                    deleteMovie(id);
+                });
+            });
+        }
+
+        // Render categories list
+        function renderCategoriesList() {
+            categoriesList.innerHTML = categoriesData.map(category => `
+                <div class="card p-4 flex items-center justify-between">
+                    <div class="flex items-center">
+                        <span class="w-4 h-4 rounded-full mr-3" style="background-color: ${category.color}"></span>
+                        <span class="font-medium">${category.name}</span>
+                    </div>
+                    <button class="text-red-500 hover:text-red-700 delete-category" data-id="${category.id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            // Add event listeners for delete buttons
+            document.querySelectorAll('.delete-category').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = parseInt(this.getAttribute('data-id'));
+                    deleteCategory(id);
+                });
+            });
+        }
+
+        // Render tags list
+        function renderTagsList() {
+            const tagsList = document.getElementById('tagsList');
+            tagsList.innerHTML = tagsData.map(tag => `
+                <div class="card p-4 flex items-center justify-between">
+                    <span class="font-medium">${tag.name}</span>
+                    <button class="text-red-500 hover:text-red-700 delete-tag" data-id="${tag.id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+
+            // Add event listeners for delete buttons
+            document.querySelectorAll('.delete-tag').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    const id = parseInt(this.getAttribute('data-id'));
+                    deleteTag(id);
+                });
+            });
+        }
+
+        // Update series category selector
+        function updateSeriesCategorySelector() {
+            const selector = document.getElementById('seriesCategorySelector');
+            selector.innerHTML = categoriesData.map(category => `
+                <div class="category-option" data-id="${category.id}" style="background-color: ${category.color}; color: white;">
+                    ${category.name}
+                </div>
+            `).join('');
+            
+            // Add event listeners
+            document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    this.classList.toggle('selected');
+                });
+            });
+        }
+
+        // Update movie category selector
+        function updateMovieCategorySelector() {
+            const selector = document.getElementById('movieCategorySelector');
+            selector.innerHTML = categoriesData.map(category => `
+                <div class="category-option" data-id="${category.id}" style="background-color: ${category.color}; color: white;">
+                    ${category.name}
+                </div>
+            `).join('');
+            
+            // Add event listeners
+            document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
+                option.addEventListener('click', function() {
+                    this.classList.toggle('selected');
+                });
+            });
+        }
+
+        // Update series tag cloud
+        function updateSeriesTagCloud() {
+            const allTags = new Set();
+            seriesData.forEach(series => {
+                if (series.tags && series.tags.length > 0) {
+                    series.tags.forEach(tag => allTags.add(tag));
+                }
+            });
+
+            if (allTags.size > 0) {
+                seriesTagCloud.classList.remove('hidden'); // Ensure visibility
+                seriesTagCloud.style.display = 'flex'; // Explicitly set display
+                seriesTagCloud.innerHTML = Array.from(allTags).map(tag => 
+                    `<span class="tag" data-tag="${tag}">${tag}</span>`
+                ).join('');
+
+                // Add event listeners
+                document.querySelectorAll('#seriesTagCloud .tag').forEach(tagEl => {
+                    tagEl.addEventListener('click', function() {
+                        const tag = this.getAttribute('data-tag');
+                        searchSeries.value = tag;
+                        filterSeries();
+                    });
+                });
+            } else {
+                seriesTagCloud.classList.add('hidden');
+                seriesTagCloud.style.display = 'none'; // Ensure hidden state
+            }
+        }
+
+        // Update movies tag cloud
+        function updateMoviesTagCloud() {
+            const allTags = new Set();
+            moviesData.forEach(movie => {
+                if (movie.tags && movie.tags.length > 0) {
+                    movie.tags.forEach(tag => allTags.add(tag));
+                }
+            });
+
+            if (allTags.size > 0) {
+                moviesTagCloud.classList.remove('hidden'); // Ensure visibility
+                moviesTagCloud.style.display = 'flex'; // Explicitly set display
+                moviesTagCloud.innerHTML = Array.from(allTags).map(tag => 
+                    `<span class="tag" data-tag="${tag}">${tag}</span>`
+                ).join('');
+
+                // Add event listeners
+                document.querySelectorAll('#moviesTagCloud .tag').forEach(tagEl => {
+                    tagEl.addEventListener('click', function() {
+                        const tag = this.getAttribute('data-tag');
+                        searchMovies.value = tag;
+                        filterMovies();
+                    });
+                });
+            } else {
+                moviesTagCloud.classList.add('hidden');
+                moviesTagCloud.style.display = 'none'; // Ensure hidden state
+            }
+        }
+
+        // Get series status
+        function getSeriesStatus(series) {
+            if (series.watchedEpisodes === series.totalEpisodes) {
+                return 'completed';
+            } else if (series.watchedEpisodes > 0) {
+                return 'watching';
+            } else {
+                return 'planning';
+            }
+        }
+
+        // Get status text
+        function getStatusText(status) {
+            switch(status) {
+                case 'completed': return 'Tamamlandı';
+                case 'watching': return 'İzleniyor';
+                case 'planning': return 'Planlanıyor';
+                case 'paused': return 'Duraklatıldı';
+                default: return '';
+            }
+        }
+
+        // Format date
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('tr-TR', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric'
+            });
+        }
+
+        // Filter series
+        function filterSeries() {
+            const searchTerm = searchSeries.value.toLowerCase();
+            
+            filteredSeriesData = seriesData.filter(series => {
+                // Arama terimi ile filtreleme
+                const matchesSearch = series.name.toLowerCase().includes(searchTerm) ||
+                    (series.tags && series.tags.some(tag => tag.toLowerCase().includes(searchTerm)));
+                
+                // Durum ile filtreleme
+                let matchesFilter = true;
+                if (currentSeriesFilter !== 'all') {
+                    const status = getSeriesStatus(series);
+                    matchesFilter = status === currentSeriesFilter;
+                }
+                // Category filter
+                if (currentSeriesCategory) {
+                    matchesFilter = matchesFilter && (series.categories && series.categories.includes(currentSeriesCategory));
+                }
+                
+                return matchesSearch && matchesFilter;
+            });
             
             renderSeriesList();
         }
 
-        // View options for movies
-        document.getElementById('view1ColMovies').addEventListener('click', function() {
-            setMoviesView('1');
-        });
-        
-        document.getElementById('view2ColMovies').addEventListener('click', function() {
-            setMoviesView('2');
-        });
-        
-        document.getElementById('view3ColMovies').addEventListener('click', function() {
-            setMoviesView('3');
-        });
-
-        function setMoviesView(view) {
-            moviesView = view;
-            const moviesList = document.getElementById('moviesList');
-            moviesList.className = `grid grid-${view}-col gap-6`;
+        // Filter movies
+        function filterMovies() {
+            const searchTerm = searchMovies.value.toLowerCase();
             
-            // Update active state
-            document.querySelectorAll('#moviesContent .view-button').forEach(btn => {
-                btn.classList.remove('active');
+            filteredMoviesData = moviesData.filter(movie => {
+                // Arama terimi ile filtreleme
+                const matchesSearch = movie.name.toLowerCase().includes(searchTerm) ||
+                    (movie.tags && movie.tags.some(tag => tag.toLowerCase().includes(searchTerm)));
+                
+                // Durum ile filtreleme
+                let matchesFilter = true;
+                if (currentMoviesFilter !== 'all') {
+                    if (currentMoviesFilter === 'watched') {
+                        matchesFilter = movie.watched;
+                    } else if (currentMoviesFilter === 'not-watched') {
+                        matchesFilter = !movie.watched;
+                    }
+                }
+                // Category filter for movies
+                if (currentMoviesCategory) {
+                    matchesFilter = matchesFilter && (movie.categories && movie.categories.includes(currentMoviesCategory));
+                }
+                
+                return matchesSearch && matchesFilter;
             });
-            document.getElementById(`view${view}ColMovies`).classList.add('active');
             
             renderMoviesList();
         }
 
         // Add new series
-        document.getElementById('addSeriesBtn').addEventListener('click', openSeriesModal);
-        document.getElementById('addSeriesBtnEmpty').addEventListener('click', openSeriesModal);
-
-        function openSeriesModal() {
-            document.getElementById('seriesModalTitle').textContent = 'Yeni Dizi Ekle';
-            document.getElementById('seriesForm').reset();
+        function addSeries() {
+            document.getElementById('seriesModalTitle').textContent = 'Dizi Ekle';
             document.getElementById('seriesId').value = '';
-            document.getElementById('seriesModal').classList.add('active');
+            document.getElementById('seriesName').value = '';
+            document.getElementById('seriesSeason').value = '1';
+            document.getElementById('seriesTotalEpisodes').value = '';
+            document.getElementById('seriesPlatform').value = 'Netflix';
+            document.getElementById('seriesWatchedEpisodes').value = '0';
+            
+            // Reset kategori seçimi
+            document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            // Reset etiketler
+            document.getElementById('seriesTagsContainer').innerHTML = '<input type="text" id="seriesTagsInput" class="tag-input" placeholder="Etiket ekle ve Enter\'a bas">';
+            initTagInput('seriesTagsInput', 'seriesTagsContainer');
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            
+            seriesModal.classList.add('active');
         }
-
-        document.getElementById('seriesForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const id = document.getElementById('seriesId').value;
-            const name = document.getElementById('seriesName').value.trim();
-            const season = parseInt(document.getElementById('seriesSeason').value);
-            const totalEpisodes = parseInt(document.getElementById('seriesTotalEpisodes').value);
-            const platform = document.getElementById('seriesPlatform').value;
-            const watchedEpisodes = parseInt(document.getElementById('seriesWatchedEpisodes').value) || 0;
-            
-            if (!name || !season || !totalEpisodes) {
-                alert('Lütfen zorunlu alanları doldurun');
-                return;
-            }
-            
-            if (watchedEpisodes > totalEpisodes) {
-                alert('İzlenen bölüm sayısı toplam bölümden fazla olamaz');
-                return;
-            }
-            
-            const now = new Date().toISOString();
-            
-            if (id) {
-                // Update existing series
-                const series = seriesData.find(s => s.id == id);
-                if (series) {
-                    series.name = name;
-                    series.season = season;
-                    series.totalEpisodes = totalEpisodes;
-                    series.platform = platform;
-                    series.watchedEpisodes = watchedEpisodes;
-                    series.lastUpdated = now;
-                }
-            } else {
-                // Add new series
-                const newSeries = {
-                    id: Date.now(),
-                    name: name,
-                    season: season,
-                    totalEpisodes: totalEpisodes,
-                    platform: platform,
-                    watchedEpisodes: watchedEpisodes,
-                    lastUpdated: now
-                };
-                seriesData.push(newSeries);
-            }
-            
-            saveData();
-            closeSeriesModal();
-            applySeriesFilters();
-        });
-
-        function closeSeriesModal() {
-            document.getElementById('seriesModal').classList.remove('active');
-        }
-
-        document.getElementById('cancelSeries').addEventListener('click', closeSeriesModal);
-
-        // Add new movie
-        document.getElementById('addMovieBtn').addEventListener('click', openMovieModal);
-        document.getElementById('addMovieBtnEmpty').addEventListener('click', openMovieModal);
-
-        function openMovieModal() {
-            document.getElementById('movieModalTitle').textContent = 'Yeni Film Ekle';
-            document.getElementById('movieForm').reset();
-            document.getElementById('movieId').value = '';
-            document.getElementById('movieModal').classList.add('active');
-        }
-
-        document.getElementById('movieForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-            
-            const id = document.getElementById('movieId').value;
-            const name = document.getElementById('movieName').value.trim();
-            const genre = document.getElementById('movieGenre').value;
-            const watched = document.getElementById('movieWatched').checked;
-            
-            if (!name || !genre) {
-                alert('Lütfen tüm zorunlu alanları doldurun');
-                return;
-            }
-            
-            const now = new Date().toISOString();
-            
-            if (id) {
-                // Update existing movie
-                const movie = moviesData.find(m => m.id == id);
-                if (movie) {
-                    movie.name = name;
-                    movie.genre = genre;
-                    movie.watched = watched;
-                    if (watched && !movie.watchedDate) {
-                        movie.watchedDate = now;
-                    } else if (!watched) {
-                        movie.watchedDate = null;
-                    }
-                    movie.lastUpdated = now;
-                }
-            } else {
-                // Add new movie
-                const newMovie = {
-                    id: Date.now(),
-                    name: name,
-                    genre: genre,
-                    watched: watched,
-                    addedDate: now,
-                    watchedDate: watched ? now : null,
-                    lastUpdated: now
-                };
-                moviesData.push(newMovie);
-            }
-            
-            saveData();
-            closeMovieModal();
-            applyMovieFilters();
-        });
-
-        function closeMovieModal() {
-            document.getElementById('movieModal').classList.remove('active');
-        }
-
-        document.getElementById('cancelMovie').addEventListener('click', closeMovieModal);
 
         // Edit series
-        window.editSeries = function(seriesId) {
-            const series = seriesData.find(s => s.id == seriesId);
-            if (series) {
-                document.getElementById('seriesModalTitle').textContent = 'Dizi Düzenle';
-                document.getElementById('seriesId').value = series.id;
-                document.getElementById('seriesName').value = series.name;
-                document.getElementById('seriesSeason').value = series.season;
-                document.getElementById('seriesTotalEpisodes').value = series.totalEpisodes;
-                document.getElementById('seriesPlatform').value = series.platform || 'Diğer';
-                document.getElementById('seriesWatchedEpisodes').value = series.watchedEpisodes;
-                document.getElementById('seriesModal').classList.add('active');
-            }
-        };
-
-        // Edit movie
-        window.editMovie = function(movieId) {
-            const movie = moviesData.find(m => m.id == movieId);
-            if (movie) {
-                document.getElementById('movieModalTitle').textContent = 'Film Düzenle';
-                document.getElementById('movieId').value = movie.id;
-                document.getElementById('movieName').value = movie.name;
-                document.getElementById('movieGenre').value = movie.genre;
-                document.getElementById('movieWatched').checked = movie.watched;
-                document.getElementById('movieModal').classList.add('active');
-            }
-        };
-
-        // Remove series
-        window.removeSeries = function(seriesId) {
-            if (confirm('Bu diziyi kaldırmak istediğinizden emin misiniz?')) {
-                seriesData = seriesData.filter(s => s.id != seriesId);
-                saveData();
-                applySeriesFilters();
-            }
-        };
-
-        // Remove movie
-        window.removeMovie = function(movieId) {
-            if (confirm('Bu filmi listeden kaldırmak istediğinizden emin misiniz?')) {
-                moviesData = moviesData.filter(m => m.id != movieId);
-                saveData();
-                applyMovieFilters();
-            }
-        };
-
-        // Update watched episodes
-        window.updateEpisodes = function(seriesId, change) {
-            const series = seriesData.find(s => s.id == seriesId);
-            if (series) {
-                series.watchedEpisodes = Math.max(0, Math.min(series.totalEpisodes, series.watchedEpisodes + change));
-                series.lastUpdated = new Date().toISOString();
-                saveData();
-                applySeriesFilters();
-            }
-        };
-
-        // Toggle movie watched status
-        window.toggleWatched = function(movieId) {
-            const movie = moviesData.find(m => m.id == movieId);
-            if (movie) {
-                movie.watched = !movie.watched;
-                movie.lastUpdated = new Date().toISOString();
-                if (movie.watched) {
-                    movie.watchedDate = new Date().toISOString();
+        function editSeries(id) {
+            const series = seriesData.find(s => s.id == id);
+            if (!series) return;
+            
+            document.getElementById('seriesModalTitle').textContent = 'Diziyi Düzenle';
+            document.getElementById('seriesId').value = series.id;
+            document.getElementById('seriesName').value = series.name;
+            document.getElementById('seriesSeason').value = series.season;
+            document.getElementById('seriesTotalEpisodes').value = series.totalEpisodes;
+            document.getElementById('seriesPlatform').value = series.platform;
+            document.getElementById('seriesWatchedEpisodes').value = series.watchedEpisodes;
+            
+            // Kategori seçimini ayarla
+            document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
+                const catId = parseInt(option.getAttribute('data-id'));
+                if (series.categories && series.categories.includes(catId)) {
+                    option.classList.add('selected');
                 } else {
-                    movie.watchedDate = null;
+                    option.classList.remove('selected');
                 }
-                saveData();
-                applyMovieFilters();
+            });
+            
+            // Etiketleri ayarla
+            const tagsContainer = document.getElementById('seriesTagsContainer');
+            tagsContainer.innerHTML = '';
+            if (series.tags && series.tags.length > 0) {
+                series.tags.forEach(tag => {
+                    const tagEl = createTagElement(tag, tagsContainer);
+                    tagsContainer.appendChild(tagEl);
+                });
             }
-        };
-
-        // Save data to localStorage
-        function saveData() {
-            localStorage.setItem('seriesData', JSON.stringify(seriesData));
-            localStorage.setItem('moviesData', JSON.stringify(moviesData));
-            updateStats();
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'seriesTagsInput';
+            input.className = 'tag-input';
+            input.placeholder = 'Etiket ekle ve Enter\'a bas';
+            tagsContainer.appendChild(input);
+            initTagInput('seriesTagsInput', 'seriesTagsContainer');
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            
+            seriesModal.classList.add('active');
         }
 
-        // Update stats
-        function updateStats() {
-            const total = seriesData.length + moviesData.length;
-            document.getElementById('totalStats').textContent = total;
+        // Delete series
+        function deleteSeries(id) {
+            if (confirm('Bu diziyi silmek istediğinize emin misiniz?')) {
+                seriesData = seriesData.filter(s => s.id != id);
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                filterSeries();
+                renderCategoryFilters();
+                updateTotalStats();
+                updateSeriesTagCloud();
+            }
+        }
+
+        // Increase episode
+        function increaseEpisode(id) {
+            const series = seriesData.find(s => s.id == id);
+            if (series && series.watchedEpisodes < series.totalEpisodes) {
+                series.watchedEpisodes++;
+                series.updatedAt = new Date().toISOString();
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                filterSeries();
+            }
+        }
+
+        // Decrease episode
+        function decreaseEpisode(id) {
+            const series = seriesData.find(s => s.id == id);
+            if (series && series.watchedEpisodes > 0) {
+                series.watchedEpisodes--;
+                series.updatedAt = new Date().toISOString();
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                filterSeries();
+            }
+        }
+
+        // Add new movie
+        function addMovie() {
+            document.getElementById('movieModalTitle').textContent = 'Film Ekle';
+            document.getElementById('movieId').value = '';
+            document.getElementById('movieName').value = '';
+            document.getElementById('movieWatched').checked = false;
+            
+            // Reset kategori seçimi
+            document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
+                option.classList.remove('selected');
+            });
+            
+            // Reset etiketler
+            document.getElementById('movieTagsContainer').innerHTML = '<input type="text" id="movieTagsInput" class="tag-input" placeholder="Etiket ekle ve Enter\'a bas">';
+            initTagInput('movieTagsInput', 'movieTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            
+            movieModal.classList.add('active');
+        }
+
+        // Edit movie
+        function editMovie(id) {
+            const movie = moviesData.find(m => m.id == id);
+            if (!movie) return;
+            
+            document.getElementById('movieModalTitle').textContent = 'Filmi Düzenle';
+            document.getElementById('movieId').value = movie.id;
+            document.getElementById('movieName').value = movie.name;
+            document.getElementById('movieWatched').checked = movie.watched;
+            
+            // Kategori seçimini ayarla
+            document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
+                const catId = parseInt(option.getAttribute('data-id'));
+                if (movie.categories && movie.categories.includes(catId)) {
+                    option.classList.add('selected');
+                } else {
+                    option.classList.remove('selected');
+                }
+            });
+            
+            // Etiketleri ayarla
+            const tagsContainer = document.getElementById('movieTagsContainer');
+            tagsContainer.innerHTML = '';
+            if (movie.tags && movie.tags.length > 0) {
+                movie.tags.forEach(tag => {
+                    const tagEl = createTagElement(tag, tagsContainer);
+                    tagsContainer.appendChild(tagEl);
+                });
+            }
+            const input = document.createElement('input');
+            input.type = 'text';
+            input.id = 'movieTagsInput';
+            input.className = 'tag-input';
+            input.placeholder = 'Etiket ekle ve Enter\'a bas';
+            tagsContainer.appendChild(input);
+            initTagInput('movieTagsInput', 'movieTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            
+            movieModal.classList.add('active');
+        }
+
+        // Delete movie
+        function deleteMovie(id) {
+            if (confirm('Bu filmi silmek istediğinize emin misiniz?')) {
+                moviesData = moviesData.filter(m => m.id != id);
+                localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                filterMovies();
+                renderCategoryFilters();
+                updateTotalStats();
+                updateMoviesTagCloud();
+            }
+        }
+
+        // Add new category
+        function addCategory() {
+            const name = document.getElementById('newCategoryName').value.trim();
+            const color = document.getElementById('newCategoryColor').value;
+            
+            if (!name) {
+                alert('Lütfen bir kategori adı girin.');
+                return;
+            }
+            
+            const newId = categoriesData.length > 0 ? Math.max(...categoriesData.map(c => c.id)) + 1 : 1;
+            categoriesData.push({
+                id: newId,
+                name: name,
+                color: color
+            });
+            
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+            
+            // Reset form
+            document.getElementById('newCategoryName').value = '';
+            document.getElementById('newCategoryColor').value = '#6366f1';
+            
+            // Update UI
+            renderCategoriesList();
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            renderCategoryFilters();
+        }
+
+        // Delete category
+        function deleteCategory(id) {
+            if (confirm('Bu kategoriyi silmek istediğinize emin misiniz? Bu kategoriye sahip tüm içeriklerden bu kategori kaldırılacak.')) {
+                // Kategoriyi içeriklerden kaldır
+                seriesData.forEach(series => {
+                    if (series.categories) {
+                        series.categories = series.categories.filter(catId => catId !== id);
+                    }
+                });
+                
+                moviesData.forEach(movie => {
+                    if (movie.categories) {
+                        movie.categories = movie.categories.filter(catId => catId !== id);
+                    }
+                });
+                
+                // Kategoriyi sil
+                categoriesData = categoriesData.filter(c => c.id !== id);
+                
+                // LocalStorage'ı güncelle
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+                
+                // UI'ı güncelle
+                renderSeriesList();
+                renderMoviesList();
+                renderCategoriesList();
+                updateSeriesCategorySelector();
+                updateMovieCategorySelector();
+                renderCategoryFilters();
+            }
+        }
+
+        // Add new tag
+        function addTag() {
+            const name = document.getElementById('newTagName').value.trim();
+
+            if (!name) {
+                alert('Lütfen bir etiket adı girin.');
+                return;
+            }
+
+            const newId = tagsData.length > 0 ? Math.max(...tagsData.map(t => t.id)) + 1 : 1;
+            tagsData.push({
+                id: newId,
+                name: name
+            });
+
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+            // Reset form
+            document.getElementById('newTagName').value = '';
+
+            // Update UI
+            renderTagsList();
+            // Refresh suggestion chips in modals
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+        }
+
+        // Delete tag
+        function deleteTag(id) {
+            if (confirm('Bu etiketi silmek istediğinize emin misiniz?')) {
+                tagsData = tagsData.filter(t => t.id !== id);
+                localStorage.setItem('tagsData', JSON.stringify(tagsData));
+                renderTagsList();
+                renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+                renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            }
+        }
+
+        // Initialize tag input
+        function initTagInput(inputId, containerId) {
+            const input = document.getElementById(inputId);
+            const container = document.getElementById(containerId);
+
+            input.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && this.value.trim() !== '') {
+                    e.preventDefault();
+
+                    const tag = this.value.trim();
+                    const tagEl = createTagElement(tag, container);
+                    container.insertBefore(tagEl, this);
+                    this.value = '';
+                }
+            });
+
+            // Enable deletion for existing tags
+            container.querySelectorAll('.tag').forEach(tagEl => {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-tag';
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.addEventListener('click', function() {
+                    container.removeChild(tagEl);
+                });
+                tagEl.appendChild(deleteBtn);
+            });
+
+            // If there are global tags, render suggestion chips (for series/movie modals)
+            const suggestionsId = inputId === 'seriesTagsInput' ? 'seriesTagOptions' : (inputId === 'movieTagsInput' ? 'movieTagOptions' : null);
+            if (suggestionsId) renderTagOptions(suggestionsId, containerId);
+        }
+
+        // Render selectable tag options under modal inputs
+        function renderTagOptions(optionsContainerId, targetContainerId) {
+            const optionsEl = document.getElementById(optionsContainerId);
+            if (!optionsEl) return;
+
+            // Clear existing
+            optionsEl.innerHTML = '';
+
+            tagsData.forEach(tag => {
+                const chip = document.createElement('span');
+                chip.className = 'tag';
+                chip.textContent = tag.name;
+                chip.setAttribute('data-tag', tag.name);
+
+                chip.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    const container = document.getElementById(targetContainerId);
+                    // If already selected (there's a .tag with same text), remove it
+                    const exists = Array.from(container.querySelectorAll('.tag')).some(t => t.firstChild && t.firstChild.textContent === tag.name);
+                    if (exists) {
+                        // remove first matching tag element (ignore delete button text)
+                        const toRemove = Array.from(container.querySelectorAll('.tag')).find(t => t.firstChild && t.firstChild.textContent === tag.name);
+                        if (toRemove) container.removeChild(toRemove);
+                    } else {
+                        const tagEl = createTagElement(tag.name, container);
+                        // Insert before input if present
+                        const input = container.querySelector('.tag-input');
+                        if (input) container.insertBefore(tagEl, input);
+                        else container.appendChild(tagEl);
+                    }
+                });
+
+                optionsEl.appendChild(chip);
+            });
+        }
+
+        // Create tag element with delete functionality
+        function createTagElement(tag, container) {
+            const tagEl = document.createElement('span');
+            tagEl.className = 'tag';
+            tagEl.textContent = tag;
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'delete-tag';
+            deleteBtn.innerHTML = '&times;';
+            deleteBtn.addEventListener('click', function() {
+                container.removeChild(tagEl);
+            });
+
+            tagEl.appendChild(deleteBtn);
+            return tagEl;
+        }
+
+        // Get selected categories from selector
+        function getSelectedCategories(selectorId) {
+            const selected = [];
+            document.querySelectorAll(`#${selectorId} .category-option.selected`).forEach(option => {
+                selected.push(parseInt(option.getAttribute('data-id')));
+            });
+            return selected;
+        }
+
+        // Get tags from container
+        function getTagsFromContainer(containerId) {
+            const tags = [];
+            document.querySelectorAll(`#${containerId} .tag`).forEach(tagEl => {
+                tags.push(tagEl.textContent);
+            });
+            return tags;
         }
 
         // Export data
         document.getElementById('exportData').addEventListener('click', function() {
             const data = {
-                seriesData: seriesData,
-                moviesData: moviesData,
-                exportDate: new Date().toISOString(),
-                version: '3.0'
+                series: seriesData,
+                movies: moviesData,
+                categories: categoriesData
             };
             
-            const dataStr = JSON.stringify(data, null, 2);
-            const dataBlob = new Blob([dataStr], { type: 'application/json' });
-            const url = URL.createObjectURL(dataBlob);
+            const dataStr = JSON.stringify(data);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
             
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = `izleme-takip-yedek-${new Date().toISOString().split('T')[0]}.json`;
-            link.click();
+            const exportFileDefaultName = 'izleme-takip-yedek.json';
             
-            URL.revokeObjectURL(url);
-            alert('Verileriniz başarıyla yedeklendi! Dosya indirildi.');
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
         });
-        
+
         // Import data
         document.getElementById('importData').addEventListener('change', function(e) {
             const file = e.target.files[0];
@@ -1055,375 +2239,237 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    const importedData = JSON.parse(e.target.result);
+                    const data = JSON.parse(e.target.result);
                     
-                    if (!importedData.seriesData || !importedData.moviesData) {
-                        throw new Error('Geçersiz veri formatı');
-                    }
+                    if (data.series) seriesData = data.series;
+                    if (data.movies) moviesData = data.movies;
+                    if (data.categories) categoriesData = data.categories;
                     
-                    const seriesCount = importedData.seriesData.length;
-                    const moviesCount = importedData.moviesData.length;
+                    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
                     
-                    if (confirm(`Yedek dosyasından ${seriesCount} dizi ve ${moviesCount} film bulundu. Mevcut verilerin üzerine yazmak istiyor musunuz?`)) {
-                        seriesData = importedData.seriesData;
-                        moviesData = importedData.moviesData;
-                        saveData();
-                        applySeriesFilters();
-                        applyMovieFilters();
-                        alert('Veriler başarıyla yüklendi!');
-                    }
-                } catch (error) {
-                    alert('Dosya okunamadı veya geçersiz bir veri formatı: ' + error.message);
+                    initApp();
+                    alert('Veriler başarıyla yüklendi!');
+                } catch (err) {
+                    alert('Dosya yüklenirken bir hata oluştu: ' + err.message);
                 }
-                
-                e.target.value = '';
             };
-            
             reader.readAsText(file);
+            
+            // Reset input
+            this.value = '';
         });
 
-        // Series filters
-        document.querySelectorAll('#seriesContent .filter-button').forEach(button => {
-            button.addEventListener('click', function() {
-                document.querySelectorAll('#seriesContent .filter-button').forEach(btn => {
-                    btn.classList.remove('active');
+        // Event listeners
+        seriesTab.addEventListener('click', function() {
+            seriesTab.classList.add('active');
+            moviesTab.classList.remove('active');
+            categoriesTab.classList.remove('active');
+            tagsTab.classList.remove('active');
+            seriesContent.classList.remove('hidden');
+            moviesContent.classList.add('hidden');
+            categoriesContent.classList.add('hidden');
+            tagsContent.classList.add('hidden');
+        });
+
+        moviesTab.addEventListener('click', function() {
+            moviesTab.classList.add('active');
+            seriesTab.classList.remove('active');
+            categoriesTab.classList.remove('active');
+            tagsTab.classList.remove('active');
+            moviesContent.classList.remove('hidden');
+            seriesContent.classList.add('hidden');
+            categoriesContent.classList.add('hidden');
+            tagsContent.classList.add('hidden');
+        });
+
+        categoriesTab.addEventListener('click', function() {
+            categoriesTab.classList.add('active');
+            seriesTab.classList.remove('active');
+            moviesTab.classList.remove('active');
+            tagsTab.classList.remove('active');
+            categoriesContent.classList.remove('hidden');
+            seriesContent.classList.add('hidden');
+            moviesContent.classList.add('hidden');
+            tagsContent.classList.add('hidden');
+        });
+
+        tagsTab.addEventListener('click', function() {
+            tagsTab.classList.add('active');
+            seriesTab.classList.remove('active');
+            moviesTab.classList.remove('active');
+            categoriesTab.classList.remove('active');
+            tagsContent.classList.remove('hidden');
+            seriesContent.classList.add('hidden');
+            moviesContent.classList.add('hidden');
+            categoriesContent.classList.add('hidden');
+        });
+
+        addSeriesBtn.addEventListener('click', addSeries);
+        addSeriesBtnEmpty.addEventListener('click', addSeries);
+        addMovieBtn.addEventListener('click', addMovie);
+        addMovieBtnEmpty.addEventListener('click', addMovie);
+        addCategoryBtn.addEventListener('click', addCategory);
+        document.getElementById('addTagBtn').addEventListener('click', addTag);
+
+        document.getElementById('cancelSeries').addEventListener('click', function() {
+            seriesModal.classList.remove('active');
+        });
+
+        document.getElementById('cancelMovie').addEventListener('click', function() {
+            movieModal.classList.remove('active');
+        });
+
+        // Series form submit
+        document.getElementById('seriesForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('seriesId').value;
+            const name = document.getElementById('seriesName').value;
+            const season = parseInt(document.getElementById('seriesSeason').value);
+            const totalEpisodes = parseInt(document.getElementById('seriesTotalEpisodes').value);
+            const platform = document.getElementById('seriesPlatform').value;
+            const watchedEpisodes = parseInt(document.getElementById('seriesWatchedEpisodes').value);
+            const categories = getSelectedCategories('seriesCategorySelector');
+            const tags = getTagsFromContainer('seriesTagsContainer');
+            
+            if (id) {
+                // Edit existing series
+                const index = seriesData.findIndex(s => s.id == id);
+                if (index !== -1) {
+                    seriesData[index] = {
+                        ...seriesData[index],
+                        name,
+                        season,
+                        totalEpisodes,
+                        platform,
+                        watchedEpisodes,
+                        categories,
+                        tags,
+                        updatedAt: new Date().toISOString()
+                    };
+                }
+            } else {
+                // Add new series
+                const newId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
+                seriesData.push({
+                    id: newId,
+                    name,
+                    season,
+                    totalEpisodes,
+                    platform,
+                    watchedEpisodes,
+                    categories,
+                    tags,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
                 });
-                this.classList.add('active');
-                currentSeriesFilter = this.dataset.filter;
-                applySeriesFilters();
+            }
+            
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            seriesModal.classList.remove('active');
+            filterSeries();
+            updateTotalStats();
+            updateSeriesTagCloud();
+        });
+
+        // Movie form submit
+        document.getElementById('movieForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('movieId').value;
+            const name = document.getElementById('movieName').value;
+            const watched = document.getElementById('movieWatched').checked;
+            const categories = getSelectedCategories('movieCategorySelector');
+            const tags = getTagsFromContainer('movieTagsContainer');
+            
+            if (id) {
+                // Edit existing movie
+                const index = moviesData.findIndex(m => m.id == id);
+                if (index !== -1) {
+                    moviesData[index] = {
+                        ...moviesData[index],
+                        name,
+                        watched,
+                        categories,
+                        tags,
+                        updatedAt: new Date().toISOString()
+                    };
+                }
+            } else {
+                // Add new movie
+                const newId = moviesData.length > 0 ? Math.max(...moviesData.map(m => m.id)) + 1 : 1;
+                moviesData.push({
+                    id: newId,
+                    name,
+                    watched,
+                    categories,
+                    tags,
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                });
+            }
+            
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+            movieModal.classList.remove('active');
+            filterMovies();
+            updateTotalStats();
+            updateMoviesTagCloud();
+        });
+
+        // Search and filter events
+        searchSeries.addEventListener('input', filterSeries);
+        searchMovies.addEventListener('input', filterMovies);
+
+        // Filter buttons
+        document.querySelectorAll('.filter-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const filter = this.getAttribute('data-filter');
+                
+                if (this.closest('#seriesContent')) {
+                    currentSeriesFilter = filter;
+                    document.querySelectorAll('#seriesContent .filter-button').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    filterSeries();
+                } else {
+                    currentMoviesFilter = filter;
+                    document.querySelectorAll('#moviesContent .filter-button').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    filterMovies();
+                }
             });
         });
 
-        function applySeriesFilters() {
-            const searchInput = document.getElementById('searchSeries').value.toLowerCase().trim();
-            
-            // Group series by name
-            const groupedSeries = {};
-            seriesData.forEach(series => {
-                if (!groupedSeries[series.name]) {
-                    groupedSeries[series.name] = [];
+        // View options
+        document.querySelectorAll('.view-button').forEach(btn => {
+            btn.addEventListener('click', function() {
+                const view = this.getAttribute('data-view');
+                
+                if (this.closest('#seriesContent')) {
+                    seriesView = view;
+                    document.querySelectorAll('#seriesContent .view-button').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    renderSeriesList();
+                } else {
+                    moviesView = view;
+                    document.querySelectorAll('#moviesContent .view-button').forEach(b => {
+                        b.classList.remove('active');
+                    });
+                    this.classList.add('active');
+                    renderMoviesList();
                 }
-                groupedSeries[series.name].push(series);
-            });
-            
-            // Sort each group by season number
-            Object.keys(groupedSeries).forEach(name => {
-                groupedSeries[name].sort((a, b) => a.season - b.season);
-            });
-            
-            let filtered = groupedSeries;
-            
-            // Apply filter to the main display (based on the most recent season)
-            if (currentSeriesFilter !== 'all') {
-                const tempFiltered = {};
-                
-                Object.keys(filtered).forEach(name => {
-                    const seasons = filtered[name];
-                    const latestSeason = seasons[seasons.length - 1]; // Most recent season
-                    
-                    let include = false;
-                    
-                    if (currentSeriesFilter === 'completed') {
-                        include = latestSeason.watchedEpisodes >= latestSeason.totalEpisodes;
-                    } else if (currentSeriesFilter === 'watching') {
-                        include = latestSeason.watchedEpisodes > 0 && latestSeason.watchedEpisodes < latestSeason.totalEpisodes;
-                    } else if (currentSeriesFilter === 'planning') {
-                        include = latestSeason.watchedEpisodes === 0;
-                    }
-                    
-                    if (include) {
-                        tempFiltered[name] = seasons;
-                    }
-                });
-                
-                filtered = tempFiltered;
-            }
-            
-            // Apply search
-            if (searchInput) {
-                const tempFiltered = {};
-                
-                Object.keys(filtered).forEach(name => {
-                    if (name.toLowerCase().includes(searchInput)) {
-                        tempFiltered[name] = filtered[name];
-                    }
-                });
-                
-                filtered = tempFiltered;
-            }
-            
-            // Convert back to array for rendering
-            filteredSeriesData = Object.keys(filtered).map(name => ({
-                name: name,
-                seasons: filtered[name]
-            }));
-            
-            renderSeriesList();
-        }
-
-        // Movie filters
-        document.querySelectorAll('#moviesContent .filter-button').forEach(button => {
-            button.addEventListener('click', function() {
-                document.querySelectorAll('#moviesContent .filter-button').forEach(btn => {
-                    btn.classList.remove('active');
-                });
-                this.classList.add('active');
-                currentMoviesFilter = this.dataset.filter;
-                applyMovieFilters();
             });
         });
 
-        function applyMovieFilters() {
-            const searchInput = document.getElementById('searchMovies').value.toLowerCase().trim();
-            
-            let filtered = moviesData;
-            
-            // Apply filter
-            if (currentMoviesFilter === 'watched') {
-                filtered = filtered.filter(m => m.watched);
-            } else if (currentMoviesFilter === 'not-watched') {
-                filtered = filtered.filter(m => !m.watched);
-            }
-            
-            // Apply search
-            if (searchInput) {
-                filtered = filtered.filter(movie => 
-                    movie.name.toLowerCase().includes(searchInput)
-                );
-            }
-            
-            filteredMoviesData = filtered;
-            renderMoviesList();
-        }
-
-        // Search functionality
-        document.getElementById('searchSeries').addEventListener('input', applySeriesFilters);
-        document.getElementById('searchMovies').addEventListener('input', applyMovieFilters);
-
-        // Toggle season details
-        window.toggleSeason = function(seriesName, seasonNum) {
-            const seasonId = `season-${seriesName.replace(/\s+/g, '-')}-${seasonNum}`;
-            const seasonElement = document.getElementById(seasonId);
-            const toggleIcon = document.querySelector(`[data-season="${seasonId}"]`);
-            
-            if (seasonElement) {
-                seasonElement.classList.toggle('show');
-                if (toggleIcon) {
-                    toggleIcon.classList.toggle('rotate');
-                }
-            }
-        };
-
-        // Render series list
-        function renderSeriesList() {
-            const seriesList = document.getElementById('seriesList');
-            const emptyState = document.getElementById('seriesEmpty');
-            
-            if (seriesData.length === 0) {
-                seriesList.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                return;
-            }
-            
-            emptyState.classList.add('hidden');
-            seriesList.classList.remove('hidden');
-            
-            let html = '';
-            
-            filteredSeriesData.forEach(seriesGroup => {
-                const name = seriesGroup.name;
-                const seasons = seriesGroup.seasons;
-                
-                // Sort seasons by season number
-                seasons.sort((a, b) => a.season - b.season);
-                
-                // Get the most recent season for status display
-                const latestSeason = seasons[seasons.length - 1];
-                const progress = (latestSeason.watchedEpisodes / latestSeason.totalEpisodes) * 100;
-                const isCompleted = latestSeason.watchedEpisodes >= latestSeason.totalEpisodes;
-                const status = isCompleted ? 'completed' : 
-                             (latestSeason.watchedEpisodes > 0 ? 'watching' : 'planning');
-                
-                html += `
-                <div class="series-card card p-6">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-1">${name}</h3>
-                            <div class="flex items-center gap-3 mb-2">
-                                <span class="font-medium text-indigo-600 dark:text-indigo-400">Son Sezon: S${latestSeason.season}</span>
-                                ${latestSeason.platform ? `<span class="text-gray-500 dark:text-gray-400">${latestSeason.platform}</span>` : ''}
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button onclick="editSeries(${latestSeason.id})" class="edit-icon text-blue-600 hover:text-blue-800">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button onclick="removeSeries(${latestSeason.id})" class="delete-icon text-red-600 hover:text-red-800">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center gap-3 mb-3">
-                        <span class="status-badge ${status}">
-                            ${isCompleted ? 'Tamamlandı' : 
-                              latestSeason.watchedEpisodes > 0 ? 'İzleniyor' : 'Planlanıyor'}
-                        </span>
-                        <span class="text-sm text-gray-600 dark:text-gray-400">
-                            ${latestSeason.watchedEpisodes}/${latestSeason.totalEpisodes} bölüm
-                        </span>
-                    </div>
-                    
-                    <div class="mb-4">
-                        <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400 mb-1">
-                            <span>İlerleme</span>
-                            <span>${Math.round(progress)}%</span>
-                        </div>
-                        <div class="progress-bar">
-                            <div class="progress-fill ${isCompleted ? 'bg-green-500' : 'bg-indigo-500'}" style="width: ${progress}%"></div>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center justify-between mb-4">
-                        <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg p-1">
-                            <button onclick="updateEpisodes(${latestSeason.id}, -1)" class="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-red-500 hover:bg-red-50 rounded">
-                                <i class="fas fa-minus"></i>
-                            </button>
-                            <span class="mx-3 font-medium">${latestSeason.watchedEpisodes}</span>
-                            <button onclick="updateEpisodes(${latestSeason.id}, 1)" class="w-8 h-8 flex items-center justify-center text-gray-600 hover:text-green-500 hover:bg-green-50 rounded">
-                                <i class="fas fa-plus"></i>
-                            </button>
-                        </div>
-                        <span class="text-xs text-gray-500 dark:text-gray-400">
-                            Son: ${new Date(latestSeason.lastUpdated).toLocaleDateString('tr-TR')}
-                        </span>
-                    </div>
-                    
-                    <!-- All Seasons -->
-                    <div class="season-list">
-                        <div class="font-semibold text-gray-700 dark:text-gray-300 mb-2">Tüm Sezonlar (${seasons.length})</div>
-                `;
-                
-                seasons.forEach(season => {
-                    const seasonProgress = (season.watchedEpisodes / season.totalEpisodes) * 100;
-                    const seasonId = `season-${name.replace(/\s+/g, '-')}-${season.season}`;
-                    
-                    html += `
-                    <div class="season-item">
-                        <div class="season-header" onclick="toggleSeason('${name}', ${season.season})">
-                            <div>
-                                <span class="font-medium">Sezon ${season.season}</span>
-                                <span class="text-sm text-gray-500 dark:text-gray-400 ml-2">${season.watchedEpisodes}/${season.totalEpisodes} bölüm</span>
-                            </div>
-                            <i class="fas fa-chevron-down season-toggle" data-season="${seasonId}"></i>
-                        </div>
-                        <div class="season-content" id="${seasonId}">
-                            <div class="flex items-center gap-2 mb-2">
-                                ${season.platform ? `<span class="text-xs bg-gray-200 dark:bg-gray-700 px-2 py-1 rounded text-gray-800 dark:text-gray-200">${season.platform}</span>` : ''}
-                                <span class="text-xs text-gray-500 dark:text-gray-400">${Math.round(seasonProgress)}% tamamlandı</span>
-                            </div>
-                            <div class="progress-bar mb-3">
-                                <div class="progress-fill ${season.watchedEpisodes >= season.totalEpisodes ? 'bg-green-500' : 'bg-indigo-500'}" style="width: ${seasonProgress}%"></div>
-                            </div>
-                            <div class="flex items-center justify-between">
-                                <div class="flex items-center border border-gray-300 dark:border-gray-600 rounded-lg p-1">
-                                    <button onclick="updateEpisodes(${season.id}, -1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-red-500 hover:bg-red-50 rounded text-sm">
-                                        <i class="fas fa-minus"></i>
-                                    </button>
-                                    <span class="mx-2 font-medium text-sm">${season.watchedEpisodes}</span>
-                                    <button onclick="updateEpisodes(${season.id}, 1)" class="w-6 h-6 flex items-center justify-center text-gray-600 hover:text-green-500 hover:bg-green-50 rounded text-sm">
-                                        <i class="fas fa-plus"></i>
-                                    </button>
-                                </div>
-                                <span class="text-xs text-gray-500 dark:text-gray-400">
-                                    Son: ${new Date(season.lastUpdated).toLocaleDateString('tr-TR')}
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                    `;
-                });
-                
-                html += `
-                    </div>
-                </div>
-                `;
-            });
-            
-            seriesList.innerHTML = html;
-        }
-        
-        // Render movies list
-        function renderMoviesList() {
-            const moviesList = document.getElementById('moviesList');
-            const emptyState = document.getElementById('moviesEmpty');
-            
-            if (moviesData.length === 0) {
-                moviesList.classList.add('hidden');
-                emptyState.classList.remove('hidden');
-                return;
-            }
-            
-            emptyState.classList.add('hidden');
-            moviesList.classList.remove('hidden');
-            
-            // Sort by watched status and last updated
-            filteredMoviesData.sort((a, b) => {
-                if (a.watched !== b.watched) {
-                    return a.watched - b.watched;
-                }
-                return new Date(b.lastUpdated) - new Date(a.lastUpdated);
-            });
-            
-            let html = '';
-            
-            filteredMoviesData.forEach(movie => {
-                html += `
-                <div class="movie-card card p-6">
-                    <div class="flex justify-between items-start mb-4">
-                        <div>
-                            <h3 class="text-xl font-bold text-gray-800 dark:text-white mb-2">${movie.name}</h3>
-                            <div class="flex items-center gap-3">
-                                <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">
-                                    ${movie.watched ? 'İzlendi' : 'İzlenmedi'}
-                                </span>
-                                <span class="text-sm text-gray-500 dark:text-gray-400">${movie.genre}</span>
-                            </div>
-                        </div>
-                        <div class="flex gap-2">
-                            <button onclick="editMovie(${movie.id})" class="edit-icon text-blue-600 hover:text-blue-800">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button onclick="removeMovie(${movie.id})" class="delete-icon text-red-600 hover:text-red-800">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    
-                    <div class="flex items-center mb-4">
-                        <div class="checkbox-container mr-3" onclick="toggleWatched(${movie.id})">
-                            <div class="custom-checkbox ${movie.watched ? 'checked' : ''}">
-                               <label class="cursor-pointer"> ${movie.watched ? '✓' : ''}İzlendi olarak işaretle</label>
-                            </div>
-                        </div>
-                        
-                    </div>
-                    
-                    <div class="text-sm text-gray-600 dark:text-gray-400">
-                        Eklenme: ${new Date(movie.addedDate).toLocaleDateString('tr-TR')}
-                        ${movie.watchedDate ? `<br>İzlenme: ${new Date(movie.watchedDate).toLocaleDateString('tr-TR')}` : ''}
-                    </div>
-                </div>
-                `;
-            });
-            
-            moviesList.innerHTML = html;
-        }
-        
-        // Initial render
-        updateStats();
-        applySeriesFilters();
-        applyMovieFilters();
+        // Initialize the app
+        initApp();
     </script>
 </body>
 </html>
