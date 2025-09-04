@@ -1884,7 +1884,7 @@
             tagsContainer.innerHTML = '';
             if (series.tags && series.tags.length > 0) {
                 series.tags.forEach(tag => {
-                    const tagEl = createTagElement(tag, tagsContainer);
+                    const tagEl = createTagElement(tag, tagsContainer, false);
                     tagsContainer.appendChild(tagEl);
                 });
             }
@@ -1979,7 +1979,7 @@
             tagsContainer.innerHTML = '';
             if (movie.tags && movie.tags.length > 0) {
                 movie.tags.forEach(tag => {
-                    const tagEl = createTagElement(tag, tagsContainer);
+                    const tagEl = createTagElement(tag, tagsContainer, false);
                     tagsContainer.appendChild(tagEl);
                 });
             }
@@ -2119,22 +2119,13 @@
                     e.preventDefault();
 
                     const tag = this.value.trim();
-                    const tagEl = createTagElement(tag, container);
+                    const tagEl = createTagElement(tag, container, false);
                     container.insertBefore(tagEl, this);
                     this.value = '';
                 }
             });
 
-            // Enable deletion for existing tags
-            container.querySelectorAll('.tag').forEach(tagEl => {
-                const deleteBtn = document.createElement('button');
-                deleteBtn.className = 'delete-tag';
-                deleteBtn.innerHTML = '&times;';
-                deleteBtn.addEventListener('click', function() {
-                    container.removeChild(tagEl);
-                });
-                tagEl.appendChild(deleteBtn);
-            });
+            // Existing tags don't need delete buttons automatically added
 
             // If there are global tags, render suggestion chips (for series/movie modals)
             const suggestionsId = inputId === 'seriesTagsInput' ? 'seriesTagOptions' : (inputId === 'movieTagsInput' ? 'movieTagOptions' : null);
@@ -2165,7 +2156,7 @@
                         const toRemove = Array.from(container.querySelectorAll('.tag')).find(t => t.firstChild && t.firstChild.textContent === tag.name);
                         if (toRemove) container.removeChild(toRemove);
                     } else {
-                        const tagEl = createTagElement(tag.name, container);
+                        const tagEl = createTagElement(tag.name, container, false);
                         // Insert before input if present
                         const input = container.querySelector('.tag-input');
                         if (input) container.insertBefore(tagEl, input);
@@ -2177,20 +2168,22 @@
             });
         }
 
-        // Create tag element with delete functionality
-        function createTagElement(tag, container) {
+        // Create tag element with optional delete functionality
+        function createTagElement(tag, container, showDeleteButton = true) {
             const tagEl = document.createElement('span');
             tagEl.className = 'tag';
             tagEl.textContent = tag;
 
-            const deleteBtn = document.createElement('button');
-            deleteBtn.className = 'delete-tag';
-            deleteBtn.innerHTML = '&times;';
-            deleteBtn.addEventListener('click', function() {
-                container.removeChild(tagEl);
-            });
-
-            tagEl.appendChild(deleteBtn);
+            if (showDeleteButton) {
+                const deleteBtn = document.createElement('button');
+                deleteBtn.className = 'delete-tag';
+                deleteBtn.innerHTML = '&times;';
+                deleteBtn.addEventListener('click', function() {
+                    container.removeChild(tagEl);
+                });
+                tagEl.appendChild(deleteBtn);
+            }
+            
             return tagEl;
         }
 
