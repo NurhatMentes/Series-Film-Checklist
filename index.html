@@ -201,6 +201,8 @@
             padding: 24px;
             width: 90%;
             max-width: 500px;
+            max-height: 90vh;
+            overflow-y: auto;
             box-shadow: 0 20px 40px rgba(0,0,0,0.2);
             transform: translateY(20px);
             transition: transform 0.3s ease;
@@ -649,6 +651,58 @@
             border-radius: 12px;
         }
         
+        /* Sezon Form Stilleri */
+        .season-form-item {
+            padding: 1rem;
+            border: 1px solid var(--border-light);
+            border-radius: 8px;
+            background: #f9fafb;
+            position: relative;
+        }
+        
+        .dark-theme .season-form-item {
+            background: #334155;
+            border-color: #475569;
+        }
+        
+        .season-form-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 1rem;
+        }
+        
+        .season-form-title {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        
+        .remove-season-btn {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 0.25rem 0.5rem;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.75rem;
+        }
+        
+        .remove-season-btn:hover {
+            background: #dc2626;
+        }
+        
+        .season-form-fields {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 1rem;
+        }
+        
+        @media (max-width: 768px) {
+            .season-form-fields {
+                grid-template-columns: 1fr;
+            }
+        }
+        
         .dark-theme .tag-cloud {
             background: rgba(30, 41, 59, 0.3);
         }
@@ -949,14 +1003,47 @@
                     <label for="seriesName">Dizi Adı *</label>
                     <input type="text" id="seriesName" class="form-control" required>
                 </div>
-                <div class="grid grid-cols-2 gap-4">
-                    <div class="form-group">
-                        <label for="seriesSeason">Sezon *</label>
-                        <input type="number" id="seriesSeason" class="form-control" min="1" value="1" required>
+                <!-- Sezon Seçimi -->
+                <div class="form-group">
+                    <label for="seasonSelector">Düzenlenecek Sezon</label>
+                    <div class="flex gap-2">
+                        <select id="seasonSelector" class="form-control flex-1">
+                            <option value="">Sezon seçin...</option>
+                        </select>
+                        <button type="button" id="addNewSeasonBtn" class="btn btn-primary btn-sm">
+                            <i class="fas fa-plus mr-1"></i> Yeni Sezon
+                        </button>
                     </div>
-                    <div class="form-group">
-                        <label for="seriesTotalEpisodes">Toplam Bölüm *</label>
-                        <input type="number" id="seriesTotalEpisodes" class="form-control" min="1" required>
+                </div>
+                
+                <!-- Seçilen Sezon Bilgileri -->
+                <div id="selectedSeasonInfo" class="form-group" style="display: none;">
+                    <div class="season-form-item">
+                        <div class="season-form-header">
+                            <h4 class="season-form-title">Sezon Bilgileri</h4>
+                            <button type="button" id="deleteSeasonBtn" class="remove-season-btn" style="display: none;">
+                                <i class="fas fa-trash mr-1"></i> Sezonu Sil
+                            </button>
+                        </div>
+                        <div class="season-form-fields">
+                            <div>
+                                <label>Sezon Numarası</label>
+                                <input type="number" id="selectedSeasonNumber" class="form-control" min="1" required>
+                            </div>
+                            <div>
+                                <label>Toplam Bölüm</label>
+                                <input type="number" id="selectedSeasonTotalEpisodes" class="form-control" min="1" required>
+                            </div>
+                            <div>
+                                <label>İzlenen Bölüm</label>
+                                <input type="number" id="selectedSeasonWatchedEpisodes" class="form-control" min="0">
+                            </div>
+                        </div>
+                        <div class="season-form-actions" style="margin-top: 15px;">
+                            <button type="button" id="saveNewSeasonBtn" class="btn btn-success" style="display: none;">
+                                <i class="fas fa-plus mr-1"></i> Yeni Sezonu Kaydet
+                            </button>
+                        </div>
                     </div>
                 </div>
                 <div class="form-group">
@@ -970,10 +1057,6 @@
                         <option value="Exxen">Exxen</option>
                         <option value="Diğer">Diğer</option>
                     </select>
-                </div>
-                <div class="form-group">
-                    <label for="seriesWatchedEpisodes">İzlenen Bölüm</label>
-                    <input type="number" id="seriesWatchedEpisodes" class="form-control" min="0">
                 </div>
                 
                 <!-- Kategori seçimi -->
@@ -1156,7 +1239,7 @@
                         if (el) el.classList.add('selected');
                     }
                     filterSeries();
-                });
+                 });
 
                 const mChip = document.createElement('button');
                 mChip.className = 'category-option';
@@ -1363,51 +1446,7 @@
                     const name = this.getAttribute('data-name');
                     const seriesInfo = seriesData.find(s => s.name === name);
                     if (seriesInfo) {
-                        document.getElementById('seriesModalTitle').textContent = 'Diziyi Düzenle';
-                        document.getElementById('seriesId').value = seriesInfo.id;
-                        document.getElementById('seriesName').value = seriesInfo.name;
-                        document.getElementById('seriesSeason').value = seriesInfo.season;
-                        document.getElementById('seriesTotalEpisodes').value = seriesInfo.totalEpisodes;
-                        document.getElementById('seriesPlatform').value = seriesInfo.platform;
-                        document.getElementById('seriesWatchedEpisodes').value = seriesInfo.watchedEpisodes;
-
-                        // Kategori seçimini ayarla
-                        document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
-                            const catId = parseInt(option.getAttribute('data-id'));
-                            if (seriesInfo.categories && seriesInfo.categories.includes(catId)) {
-                                option.classList.add('selected');
-                            } else {
-                                option.classList.remove('selected');
-                            }
-                        });
-
-                        // Etiketleri ayarla
-                        const tagsContainer = document.getElementById('seriesTagsContainer');
-                        tagsContainer.innerHTML = '';
-                        if (seriesInfo.tags && seriesInfo.tags.length > 0) {
-                            seriesInfo.tags.forEach(tag => {
-                                const tagEl = document.createElement('span');
-                                tagEl.className = 'tag';
-                                tagEl.textContent = tag;
-                                const deleteBtn = document.createElement('button');
-                                deleteBtn.className = 'delete-tag';
-                                deleteBtn.innerHTML = '&times;';
-                                deleteBtn.addEventListener('click', function() {
-                                    tagEl.remove();
-                                });
-                                tagEl.appendChild(deleteBtn);
-                                tagsContainer.appendChild(tagEl);
-                            });
-                        }
-                        const input = document.createElement('input');
-                        input.type = 'text';
-                        input.id = 'seriesTagsInput';
-                        input.className = 'tag-input';
-                        input.placeholder = 'Etiket ekle ve Enter\'a bas';
-                        tagsContainer.appendChild(input);
-                        initTagInput('seriesTagsInput', 'seriesTagsContainer');
-
-                        seriesModal.classList.add('active');
+                        editSeries(seriesInfo.id);
                     }
                 });
             });
@@ -1838,10 +1877,7 @@
             document.getElementById('seriesModalTitle').textContent = 'Dizi Ekle';
             document.getElementById('seriesId').value = '';
             document.getElementById('seriesName').value = '';
-            document.getElementById('seriesSeason').value = '1';
-            document.getElementById('seriesTotalEpisodes').value = '';
             document.getElementById('seriesPlatform').value = 'Netflix';
-            document.getElementById('seriesWatchedEpisodes').value = '0';
             
             // Reset kategori seçimi
             document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
@@ -1853,6 +1889,11 @@
             initTagInput('seriesTagsInput', 'seriesTagsContainer');
             renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
             
+            // Sezon formunu temizle ve ilk sezonu ekle
+            document.getElementById('seasonsContainer').innerHTML = '';
+            seasonCounter = 0;
+            addSeasonForm();
+            
             seriesModal.classList.add('active');
         }
 
@@ -1861,13 +1902,13 @@
             const series = seriesData.find(s => s.id == id);
             if (!series) return;
             
+            // Aynı isimli tüm sezonları bul
+            const allSeasons = seriesData.filter(s => s.name === series.name);
+            
             document.getElementById('seriesModalTitle').textContent = 'Diziyi Düzenle';
             document.getElementById('seriesId').value = series.id;
             document.getElementById('seriesName').value = series.name;
-            document.getElementById('seriesSeason').value = series.season;
-            document.getElementById('seriesTotalEpisodes').value = series.totalEpisodes;
             document.getElementById('seriesPlatform').value = series.platform;
-            document.getElementById('seriesWatchedEpisodes').value = series.watchedEpisodes;
             
             // Kategori seçimini ayarla
             document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
@@ -1896,6 +1937,9 @@
             tagsContainer.appendChild(input);
             initTagInput('seriesTagsInput', 'seriesTagsContainer');
             renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            
+            // Sezon seçicisini doldur
+            loadSeasonsToSelector(allSeasons, series.id);
             
             seriesModal.classList.add('active');
         }
@@ -2187,6 +2231,139 @@
             return tagEl;
         }
 
+        // Sezon yönetim fonksiyonları
+        let seasonCounter = 0;
+        
+        function addSeasonForm() {
+            seasonCounter++;
+            const container = document.getElementById('seasonsContainer');
+            
+            const seasonDiv = document.createElement('div');
+            seasonDiv.className = 'season-form-item';
+            seasonDiv.setAttribute('data-season-id', seasonCounter);
+            
+            seasonDiv.innerHTML = `
+                <div class="season-form-header">
+                    <span class="season-form-title">Sezon ${seasonCounter}</span>
+                    <button type="button" class="remove-season-btn" onclick="removeSeasonForm(${seasonCounter})">
+                        <i class="fas fa-times"></i> Kaldır
+                    </button>
+                </div>
+                <div class="season-form-fields">
+                    <div class="form-group">
+                        <label>Sezon Numarası</label>
+                        <input type="number" class="form-control season-number" min="1" value="${seasonCounter}" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Toplam Bölüm</label>
+                        <input type="number" class="form-control season-total-episodes" min="1" required>
+                    </div>
+                    <div class="form-group">
+                        <label>İzlenen Bölüm</label>
+                        <input type="number" class="form-control season-watched-episodes" min="0" value="0">
+                    </div>
+                </div>
+            `;
+            
+            container.appendChild(seasonDiv);
+        }
+        
+        function removeSeasonForm(seasonId) {
+            const seasonDiv = document.querySelector(`[data-season-id="${seasonId}"]`);
+            if (seasonDiv) {
+                seasonDiv.remove();
+            }
+        }
+        
+        function getSeasonsFromForm() {
+            const seasons = [];
+            const seasonForms = document.querySelectorAll('.season-form-item');
+            
+            seasonForms.forEach(form => {
+                const seasonNumber = parseInt(form.querySelector('.season-number').value);
+                const totalEpisodes = parseInt(form.querySelector('.season-total-episodes').value);
+                const watchedEpisodes = parseInt(form.querySelector('.season-watched-episodes').value) || 0;
+                
+                seasons.push({
+                    season: seasonNumber,
+                    totalEpisodes: totalEpisodes,
+                    watchedEpisodes: watchedEpisodes
+                });
+            });
+            
+            return seasons;
+        }
+        
+        function loadSeasonsToSelector(seasons, selectedSeasonId) {
+            const selector = document.getElementById('seasonSelector');
+            selector.innerHTML = '<option value="">Sezon seçin...</option>';
+            
+            if (seasons && seasons.length > 0) {
+                seasons.forEach(season => {
+                    const option = document.createElement('option');
+                    option.value = season.id;
+                    option.textContent = `Sezon ${season.season} (${season.watchedEpisodes}/${season.totalEpisodes} bölüm)`;
+                    if (season.id == selectedSeasonId) {
+                        option.selected = true;
+                    }
+                    selector.appendChild(option);
+                });
+            }
+            
+            // Seçili sezon varsa bilgilerini göster
+            if (selectedSeasonId) {
+                loadSelectedSeasonInfo(selectedSeasonId);
+            }
+        }
+        
+        function loadSelectedSeasonInfo(seasonId) {
+            const season = seriesData.find(s => s.id == seasonId);
+            if (!season) return;
+            
+            document.getElementById('selectedSeasonNumber').value = season.season;
+            document.getElementById('selectedSeasonTotalEpisodes').value = season.totalEpisodes;
+            document.getElementById('selectedSeasonWatchedEpisodes').value = season.watchedEpisodes;
+            
+            document.getElementById('selectedSeasonInfo').style.display = 'block';
+            document.getElementById('deleteSeasonBtn').style.display = 'inline-block';
+        }
+        
+        function clearSelectedSeasonInfo() {
+            document.getElementById('selectedSeasonNumber').value = '';
+            document.getElementById('selectedSeasonTotalEpisodes').value = '';
+            document.getElementById('selectedSeasonWatchedEpisodes').value = '';
+            
+            document.getElementById('selectedSeasonInfo').style.display = 'none';
+            document.getElementById('deleteSeasonBtn').style.display = 'none';
+        }
+        
+        function showNewSeasonForm() {
+            const seriesName = document.getElementById('seriesName').value;
+            if (!seriesName) {
+                alert('Önce dizi adını girin.');
+                return;
+            }
+            
+            // Mevcut sezonları kontrol et
+            const existingSeasons = seriesData.filter(s => s.name === seriesName);
+            const nextSeasonNumber = existingSeasons.length > 0 ? Math.max(...existingSeasons.map(s => s.season)) + 1 : 1;
+            
+            document.getElementById('selectedSeasonNumber').value = nextSeasonNumber;
+            document.getElementById('selectedSeasonTotalEpisodes').value = '';
+            document.getElementById('selectedSeasonWatchedEpisodes').value = 0;
+            
+            document.getElementById('selectedSeasonInfo').style.display = 'block';
+            document.getElementById('deleteSeasonBtn').style.display = 'none';
+            
+            // Selector'ı temizle ve yeni sezon modunu işaretle
+            document.getElementById('seasonSelector').value = '';
+            document.getElementById('seasonSelector').setAttribute('data-new-season', 'true');
+            
+            // Butonları güncelle
+            document.querySelector('#seriesForm button[type="submit"]').style.display = 'none';
+            document.getElementById('saveNewSeasonBtn').style.display = 'block';
+        }
+
         // Get selected categories from selector
         function getSelectedCategories(selectorId) {
             const selected = [];
@@ -2305,6 +2482,90 @@
         addMovieBtnEmpty.addEventListener('click', addMovie);
         addCategoryBtn.addEventListener('click', addCategory);
         document.getElementById('addTagBtn').addEventListener('click', addTag);
+        // Sezon seçimi event listener'ları
+        document.getElementById('seasonSelector').addEventListener('change', function() {
+            const selectedSeasonId = this.value;
+            // Yeni sezon modunu temizle
+            this.removeAttribute('data-new-season');
+            
+            // Butonları eski haline getir
+            document.querySelector('#seriesForm button[type="submit"]').style.display = 'block';
+            document.getElementById('saveNewSeasonBtn').style.display = 'none';
+            
+            if (selectedSeasonId) {
+                loadSelectedSeasonInfo(selectedSeasonId);
+            } else {
+                clearSelectedSeasonInfo();
+            }
+        });
+        
+        document.getElementById('addNewSeasonBtn').addEventListener('click', showNewSeasonForm);
+        
+        document.getElementById('saveNewSeasonBtn').addEventListener('click', function() {
+            const seriesName = document.getElementById('seriesName').value;
+            const seasonNumber = parseInt(document.getElementById('selectedSeasonNumber').value);
+            const totalEpisodes = parseInt(document.getElementById('selectedSeasonTotalEpisodes').value);
+            const watchedEpisodes = parseInt(document.getElementById('selectedSeasonWatchedEpisodes').value) || 0;
+            const platform = document.getElementById('seriesPlatform').value;
+            const categories = getSelectedCategories('seriesCategorySelector');
+            const tags = getTagsFromContainer('seriesTagsContainer');
+            
+            if (!seriesName || !seasonNumber || !totalEpisodes) {
+                alert('Dizi adı, sezon numarası ve toplam bölüm sayısı gereklidir!');
+                return;
+            }
+            
+            // Yeni sezon ekle
+            const newSeason = {
+                id: Date.now(),
+                name: seriesName,
+                season: seasonNumber,
+                totalEpisodes: totalEpisodes,
+                platform,
+                watchedEpisodes: watchedEpisodes,
+                categories,
+                tags,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
+            };
+            
+            seriesData.push(newSeason);
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            
+            // Sezon selector'ını güncelle ve yeni sezonu seç
+            const allSeasons = seriesData.filter(s => s.name === seriesName);
+            loadSeasonsToSelector(allSeasons, newSeason.id);
+            loadSelectedSeasonInfo(newSeason.id);
+            
+            // Butonları eski haline getir
+            document.querySelector('#seriesForm button[type="submit"]').style.display = 'block';
+            document.getElementById('saveNewSeasonBtn').style.display = 'none';
+            document.getElementById('seasonSelector').removeAttribute('data-new-season');
+            
+            // Listeyi güncelle
+            filterSeries();
+            updateTotalStats();
+            updateSeriesTagCloud();
+        });
+        
+        document.getElementById('deleteSeasonBtn').addEventListener('click', function() {
+            const seasonId = document.getElementById('seasonSelector').value;
+            if (seasonId && confirm('Bu sezonu silmek istediğinize emin misiniz?')) {
+                // Sezonu sil
+                seriesData = seriesData.filter(s => s.id != seasonId);
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                
+                // Selector'ı güncelle
+                const seriesName = document.getElementById('seriesName').value;
+                const remainingSeasons = seriesData.filter(s => s.name === seriesName);
+                loadSeasonsToSelector(remainingSeasons, null);
+                clearSelectedSeasonInfo();
+                
+                // Listeyi güncelle
+                renderSeriesList();
+                updateTotalStats();
+            }
+        });
 
         document.getElementById('cancelSeries').addEventListener('click', function() {
             seriesModal.classList.remove('active');
@@ -2320,43 +2581,100 @@
             
             const id = document.getElementById('seriesId').value;
             const name = document.getElementById('seriesName').value;
-            const season = parseInt(document.getElementById('seriesSeason').value);
-            const totalEpisodes = parseInt(document.getElementById('seriesTotalEpisodes').value);
             const platform = document.getElementById('seriesPlatform').value;
-            const watchedEpisodes = parseInt(document.getElementById('seriesWatchedEpisodes').value);
             const categories = getSelectedCategories('seriesCategorySelector');
             const tags = getTagsFromContainer('seriesTagsContainer');
             
             if (id) {
-                // Edit existing series
-                const index = seriesData.findIndex(s => s.id == id);
-                if (index !== -1) {
-                    seriesData[index] = {
-                        ...seriesData[index],
-                        name,
-                        season,
-                        totalEpisodes,
-                        platform,
-                        watchedEpisodes,
-                        categories,
-                        tags,
-                        updatedAt: new Date().toISOString()
-                    };
+                // Düzenleme modu
+                const selectedSeasonId = document.getElementById('seasonSelector').value;
+                const isNewSeason = document.getElementById('seasonSelector').getAttribute('data-new-season') === 'true';
+                
+                if (!selectedSeasonId) {
+                    // Sezon seçilmemiş - Dizinin genel özelliklerini güncelle
+                    const seriesSeasons = seriesData.filter(s => s.name === name);
+                    seriesSeasons.forEach(season => {
+                        const seasonIndex = seriesData.findIndex(s => s.id === season.id);
+                        if (seasonIndex !== -1) {
+                            seriesData[seasonIndex] = {
+                                ...seriesData[seasonIndex],
+                                name,
+                                platform,
+                                categories,
+                                tags,
+                                updatedAt: new Date().toISOString()
+                            };
+                        }
+                    });
+                } else {
+                    // Sezon seçilmiş - Sezon bilgilerini kontrol et
+                    const seasonNumber = parseInt(document.getElementById('selectedSeasonNumber').value);
+                    const totalEpisodes = parseInt(document.getElementById('selectedSeasonTotalEpisodes').value);
+                    const watchedEpisodes = parseInt(document.getElementById('selectedSeasonWatchedEpisodes').value) || 0;
+                    
+                    if (!seasonNumber || !totalEpisodes) {
+                        alert('Sezon numarası ve toplam bölüm sayısı gereklidir!');
+                        return;
+                    }
+                    
+                    if (isNewSeason) {
+                        // Yeni sezon ekle
+                        const newSeasonId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
+                        seriesData.push({
+                            id: newSeasonId,
+                            name,
+                            platform,
+                            season: seasonNumber,
+                            totalEpisodes,
+                            watchedEpisodes,
+                            categories,
+                            tags,
+                            createdAt: new Date().toISOString(),
+                            updatedAt: new Date().toISOString()
+                        });
+                    } else {
+                        // Mevcut sezonu güncelle
+                        const seasonIndex = seriesData.findIndex(s => s.id == selectedSeasonId);
+                        if (seasonIndex !== -1) {
+                            seriesData[seasonIndex] = {
+                                ...seriesData[seasonIndex],
+                                name,
+                                platform,
+                                season: seasonNumber,
+                                totalEpisodes,
+                                watchedEpisodes,
+                                categories,
+                                tags,
+                                updatedAt: new Date().toISOString()
+                            };
+                        }
+                    }
                 }
             } else {
-                // Add new series
-                const newId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
-                seriesData.push({
-                    id: newId,
-                    name,
-                    season,
-                    totalEpisodes,
-                    platform,
-                    watchedEpisodes,
-                    categories,
-                    tags,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                // Yeni dizi ekleme modu
+                const seasons = getSeasonsFromForm();
+                
+                // Sezon kontrolü
+                if (seasons.length === 0) {
+                    alert('En az bir sezon eklemelisiniz!');
+                    return;
+                }
+                
+                // Yeni dizi ekle - her sezon için ayrı kayıt
+                seasons.forEach(seasonData => {
+                    const newId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
+                    seriesData.push({
+                        id: newId,
+                        name,
+                        season: seasonData.season,
+                        totalEpisodes: seasonData.totalEpisodes,
+                        platform,
+                        watchedEpisodes: seasonData.watchedEpisodes,
+                        categories,
+                        tags,
+                        createdAt: new Date().toISOString(),
+                        updatedAt: new Date().toISOString()
+                    });
                 });
             }
             
