@@ -906,9 +906,21 @@
                     </div>
                 </div>
                 <div class="text-center">
-                    <h3 class="text-white font-semibold mb-2">Toplam</h3>
-                    <div class="text-2xl font-bold text-white mb-1" id="totalStats">0</div>
-                    <p class="text-purple-100 text-sm">Kayıtlı İçerik</p>
+                    <h3 class="text-white font-semibold mb-3">İstatistikler</h3>
+                    <div class="grid grid-cols-2 gap-4 mb-2">
+                        <div class="text-center">
+                            <div class="text-xl font-bold text-white mb-1" id="seriesStats">0</div>
+                            <p class="text-purple-100 text-xs">Dizi</p>
+                        </div>
+                        <div class="text-center">
+                            <div class="text-xl font-bold text-white mb-1" id="moviesStats">0</div>
+                            <p class="text-purple-100 text-xs">Film</p>
+                        </div>
+                    </div>
+                    <div class="border-t border-white/20 pt-2">
+                        <div class="text-2xl font-bold text-white mb-1" id="totalStats">0</div>
+                        <p class="text-purple-100 text-sm">Toplam İçerik</p>
+                    </div>
                 </div>
             </div>
         </div>
@@ -1355,6 +1367,8 @@
         const seriesEmpty = document.getElementById('seriesEmpty');
         const moviesEmpty = document.getElementById('moviesEmpty');
         const totalStats = document.getElementById('totalStats');
+        const seriesStats = document.getElementById('seriesStats');
+        const moviesStats = document.getElementById('moviesStats');
         const addSeriesBtn = document.getElementById('addSeriesBtn');
         const addSeriesBtnEmpty = document.getElementById('addSeriesBtnEmpty');
         const addMovieBtn = document.getElementById('addMovieBtn');
@@ -1498,7 +1512,12 @@
 
         // Update total stats
         function updateTotalStats() {
-            const total = seriesData.length + moviesData.length;
+            const seriesCount = seriesData.length;
+            const moviesCount = moviesData.length;
+            const total = seriesCount + moviesCount;
+            
+            seriesStats.textContent = seriesCount;
+            moviesStats.textContent = moviesCount;
             totalStats.textContent = total;
         }
 
