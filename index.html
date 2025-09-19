@@ -457,6 +457,19 @@
             grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        @media (max-width: 1024px) {
+            .grid-3-col {
+                grid-template-columns: repeat(2, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 640px) {
+            .grid-3-col,
+            .grid-2-col {
+                grid-template-columns: repeat(1, minmax(0, 1fr));
+            }
+        }
+
         .theme-toggle {
             position: fixed;
             top: 20px;
@@ -1168,8 +1181,8 @@
         let currentMoviesFilter = 'all';
         let currentSeriesCategory = null;
         let currentMoviesCategory = null;
-        let seriesView = '1';
-        let moviesView = '1';
+        let seriesView = '3';
+        let moviesView = '3';
 
         // Check for saved theme
         const savedTheme = localStorage.getItem('theme') || 'light';
