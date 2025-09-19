@@ -302,6 +302,26 @@
             font-size: 14px;
         }
 
+        .trailer-btn {
+            background: linear-gradient(45deg, #ff0000, #ff4444);
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .trailer-btn:hover {
+            background: linear-gradient(45deg, #cc0000, #ff3333);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(255, 0, 0, 0.3);
+        }
+
         .watched-indicator {
             width: 16px;
             height: 16px;
@@ -745,6 +765,111 @@
                 justify-content: center;
             }
         }
+
+        /* Fragman Modal Stilleri */
+        .trailer-modal {
+            z-index: 10000;
+        }
+
+        .trailer-modal-content {
+            max-width: 90vw;
+            max-height: 90vh;
+            width: 800px;
+            padding: 0;
+            border-radius: 12px;
+            overflow: hidden;
+            background: var(--card-light);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            transform: none;
+        }
+
+        .trailer-modal .modal-header {
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 0;
+        }
+
+        .trailer-modal .modal-header h3 {
+            margin: 0;
+            font-size: 1.2rem;
+            font-weight: 600;
+        }
+
+        .close-trailer-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 30px;
+            height: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background-color 0.2s;
+        }
+
+        .close-trailer-btn:hover {
+            background-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .trailer-container {
+            position: relative;
+            width: 100%;
+            height: 0;
+            padding-bottom: 56.25%; /* 16:9 aspect ratio */
+            background: #000;
+        }
+
+        .trailer-container iframe {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Fragman butonu stilleri */
+        .trailer-btn {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            margin-left: 8px;
+        }
+
+        .trailer-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(255, 107, 107, 0.3);
+        }
+
+        .trailer-btn i {
+            font-size: 0.9rem;
+        }
+
+        @media (max-width: 768px) {
+            .trailer-modal-content {
+                width: 95vw;
+                max-width: 95vw;
+            }
+            
+            .trailer-modal .modal-header h3 {
+                font-size: 1rem;
+            }
+        }
     </style>
 </head>
 
@@ -1091,6 +1216,13 @@
                     </select>
                 </div>
 
+                <div class="form-group">
+                    <label for="seriesTrailerUrl">YouTube Fragman Linki</label>
+                    <input type="url" id="seriesTrailerUrl" name="seriesTrailerUrl" class="form-control" 
+                           placeholder="https://www.youtube.com/watch?v=...">
+                    <small class="text-gray-400 mt-1">YouTube video linkini buraya yapıştırın (isteğe bağlı)</small>
+                </div>
+
                 <!-- Kategori seçimi -->
                 <div class="form-group">
                     <label>Kategoriler</label>
@@ -1147,6 +1279,13 @@
                             placeholder="Etiket ekle ve Enter'a bas">
                     </div>
                     <div id="movieTagOptions" class="tag-cloud mt-2"></div>
+                </div>
+
+                <div class="form-group">
+                    <label for="movieTrailerUrl">YouTube Fragman Linki</label>
+                    <input type="url" id="movieTrailerUrl" name="movieTrailerUrl" class="form-control" 
+                           placeholder="https://www.youtube.com/watch?v=...">
+                    <small class="text-gray-400 mt-1">YouTube video linkini buraya yapıştırın (isteğe bağlı)</small>
                 </div>
 
                 <div class="form-group">
@@ -1485,6 +1624,9 @@
                                 </div>
                             </div>
                             <div class="flex space-x-2">
+                                ${series.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${series.trailerUrl}" data-title="${series.name}">
+                                    <i class="fab fa-youtube"></i> Fragman
+                                </button>` : ''}
                                 <button class="edit-icon text-blue-500 hover:text-blue-700" data-name="${series.name}">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -1699,6 +1841,9 @@
                                 </div>
                             </div>
                             <div class="flex space-x-2">
+                                ${movie.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${movie.trailerUrl}" data-title="${movie.name}">
+                                    <i class="fab fa-youtube"></i> Fragman
+                                </button>` : ''}
                                 <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${movie.id}">
                                     <i class="fas fa-edit"></i>
                                 </button>
@@ -1896,6 +2041,90 @@
             });
         }
 
+        // YouTube video ID çıkarma fonksiyonu
+        function extractYouTubeVideoId(url) {
+            if (!url) return null;
+            
+            const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+            const match = url.match(regExp);
+            return (match && match[7].length === 11) ? match[7] : null;
+        }
+
+        // YouTube URL'den video ID'sini çıkar
+        function extractYouTubeVideoId(url) {
+            if (!url) return null;
+            
+            // Eğer sadece video ID ise direkt döndür
+            if (url.length === 11 && /^[a-zA-Z0-9_-]+$/.test(url)) {
+                return url;
+            }
+            
+            // YouTube URL formatlarını kontrol et
+            const patterns = [
+                /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+                /youtube\.com\/watch\?.*v=([a-zA-Z0-9_-]{11})/
+            ];
+            
+            for (const pattern of patterns) {
+                const match = url.match(pattern);
+                if (match) {
+                    return match[1];
+                }
+            }
+            
+            return null;
+        }
+
+        // YouTube fragman modal'ını göster
+        function showTrailerModal(videoUrl, title) {
+            console.log('showTrailerModal çağrıldı:', videoUrl, title);
+            
+            const videoId = extractYouTubeVideoId(videoUrl);
+            console.log('Çıkarılan video ID:', videoId);
+            
+            if (!videoId) {
+                console.log('Geçerli video ID bulunamadı, fonksiyon sonlandırılıyor');
+                alert('Geçerli bir YouTube URL\'si veya video ID\'si giriniz.');
+                return;
+            }
+            
+            const modal = document.createElement('div');
+            modal.className = 'modal trailer-modal active';
+            modal.style.display = 'flex';
+            modal.innerHTML = `
+                <div class="trailer-modal-content">
+                    <div class="modal-header">
+                        <h3>${title} - Fragman</h3>
+                        <button class="close-trailer-btn">&times;</button>
+                    </div>
+                    <div class="trailer-container">
+                        <iframe 
+                            width="100%" 
+                            height="100%"
+                            src="https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0&showinfo=0&modestbranding=1" 
+                            frameborder="0" 
+                            allowfullscreen
+                            allow="autoplay; encrypted-media; fullscreen">
+                        </iframe>
+                    </div>
+                </div>
+            `;
+            
+            document.body.appendChild(modal);
+            
+            // Modal'ı kapatma
+            const closeBtn = modal.querySelector('.close-trailer-btn');
+            closeBtn.addEventListener('click', () => {
+                document.body.removeChild(modal);
+            });
+            
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
+        }
+
         // Filter series
         function filterSeries() {
             const searchTerm = searchSeries.value.toLowerCase();
@@ -1988,6 +2217,7 @@
             document.getElementById('seriesId').value = series.id;
             document.getElementById('seriesName').value = series.name;
             document.getElementById('seriesPlatform').value = series.platform;
+            document.getElementById('seriesTrailerUrl').value = series.trailerUrl || '';
 
             // Kategori seçimini ayarla
             document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
@@ -2086,6 +2316,7 @@
             document.getElementById('movieId').value = movie.id;
             document.getElementById('movieName').value = movie.name;
             document.getElementById('movieWatched').checked = movie.watched;
+            document.getElementById('movieTrailerUrl').value = movie.trailerUrl || '';
 
             // Kategori seçimini ayarla
             document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
@@ -2577,6 +2808,17 @@
         addMovieBtnEmpty.addEventListener('click', addMovie);
         addCategoryBtn.addEventListener('click', addCategory);
         document.getElementById('addTagBtn').addEventListener('click', addTag);
+        
+        // Fragman butonları için event listener (event delegation kullanarak)
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.trailer-btn')) {
+                const btn = e.target.closest('.trailer-btn');
+                const trailerUrl = btn.getAttribute('data-trailer-url');
+                const title = btn.getAttribute('data-title');
+                console.log('Fragman butonu tıklandı:', trailerUrl, title);
+                showTrailerModal(trailerUrl, title);
+            }
+        });
         // Sezon seçimi event listener'ları
         document.getElementById('seasonSelector').addEventListener('change', function () {
             const selectedSeasonId = this.value;
@@ -2683,6 +2925,7 @@
             const platform = document.getElementById('seriesPlatform').value;
             const categories = getSelectedCategories('seriesCategorySelector');
             const tags = getTagsFromContainer('seriesTagsContainer');
+            const trailerUrl = document.getElementById('seriesTrailerUrl').value;
 
             if (id) {
                 // Düzenleme modu
@@ -2696,13 +2939,14 @@
                         const seasonIndex = seriesData.findIndex(s => s.id === season.id);
                         if (seasonIndex !== -1) {
                             seriesData[seasonIndex] = {
-                                ...seriesData[seasonIndex],
-                                name,
-                                platform,
-                                categories,
-                                tags,
-                                updatedAt: new Date().toISOString()
-                            };
+                            ...seriesData[seasonIndex],
+                            name,
+                            platform,
+                            categories,
+                            tags,
+                            trailerUrl,
+                            updatedAt: new Date().toISOString()
+                        };
                         }
                     });
                 } else {
@@ -2732,6 +2976,7 @@
                             watchedEpisodes,
                             categories,
                             tags,
+                            trailerUrl,
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString()
                         });
@@ -2748,6 +2993,7 @@
                                 watchedEpisodes,
                                 categories,
                                 tags,
+                                trailerUrl,
                                 updatedAt: new Date().toISOString()
                             };
                         }
@@ -2775,6 +3021,7 @@
                         watchedEpisodes: seasonData.watchedEpisodes,
                         categories,
                         tags,
+                        trailerUrl,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
                     });
@@ -2797,6 +3044,7 @@
             const watched = document.getElementById('movieWatched').checked;
             const categories = getSelectedCategories('movieCategorySelector');
             const tags = getTagsFromContainer('movieTagsContainer');
+            const trailerUrl = document.getElementById('movieTrailerUrl').value;
 
             if (id) {
                 // Edit existing movie
@@ -2808,6 +3056,7 @@
                         watched,
                         categories,
                         tags,
+                        trailerUrl,
                         updatedAt: new Date().toISOString()
                     };
                 }
@@ -2820,6 +3069,7 @@
                     watched,
                     categories,
                     tags,
+                    trailerUrl,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 });
