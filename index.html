@@ -1235,6 +1235,30 @@
                     <small class="text-gray-400 mt-1">YouTube video linkini buraya yapıştırın (isteğe bağlı)</small>
                 </div>
 
+                <!-- IMDB Puanı -->
+                <div class="form-group">
+                    <label for="seriesImdbRating">IMDB Puanı</label>
+                    <input type="number" id="seriesImdbRating" name="seriesImdbRating" class="form-control" 
+                           min="0" max="10" step="0.1" placeholder="7.5">
+                    <small class="text-gray-400 mt-1">0-10 arası puan girebilirsiniz (isteğe bağlı)</small>
+                </div>
+
+                <!-- Açıklama -->
+                <div class="form-group">
+                    <label for="seriesDescription">Açıklama</label>
+                    <textarea id="seriesDescription" name="seriesDescription" class="form-control" 
+                              rows="3" placeholder="Dizi hakkında kısa açıklama..."></textarea>
+                    <small class="text-gray-400 mt-1">Dizi hakkında kısa bir açıklama yazabilirsiniz (isteğe bağlı)</small>
+                </div>
+
+                <!-- Resim Linki -->
+                <div class="form-group">
+                    <label for="seriesImageUrl">Resim Linki</label>
+                    <input type="url" id="seriesImageUrl" name="seriesImageUrl" class="form-control" 
+                           placeholder="https://example.com/image.jpg">
+                    <small class="text-gray-400 mt-1">Dizi posteri veya kapak resmi linki (isteğe bağlı)</small>
+                </div>
+
                 <!-- Kategori seçimi -->
                 <div class="form-group">
                     <label>Kategoriler</label>
@@ -1298,6 +1322,30 @@
                     <input type="url" id="movieTrailerUrl" name="movieTrailerUrl" class="form-control" 
                            placeholder="https://www.youtube.com/watch?v=...">
                     <small class="text-gray-400 mt-1">YouTube video linkini buraya yapıştırın (isteğe bağlı)</small>
+                </div>
+
+                <!-- IMDB Puanı -->
+                <div class="form-group">
+                    <label for="movieImdbRating">IMDB Puanı</label>
+                    <input type="number" id="movieImdbRating" name="movieImdbRating" class="form-control" 
+                           min="0" max="10" step="0.1" placeholder="7.5">
+                    <small class="text-gray-400 mt-1">0-10 arası puan girebilirsiniz (isteğe bağlı)</small>
+                </div>
+
+                <!-- Açıklama -->
+                <div class="form-group">
+                    <label for="movieDescription">Açıklama</label>
+                    <textarea id="movieDescription" name="movieDescription" class="form-control" 
+                              rows="3" placeholder="Film hakkında kısa açıklama..."></textarea>
+                    <small class="text-gray-400 mt-1">Film hakkında kısa bir açıklama yazabilirsiniz (isteğe bağlı)</small>
+                </div>
+
+                <!-- Resim Linki -->
+                <div class="form-group">
+                    <label for="movieImageUrl">Resim Linki</label>
+                    <input type="url" id="movieImageUrl" name="movieImageUrl" class="form-control" 
+                           placeholder="https://example.com/image.jpg">
+                    <small class="text-gray-400 mt-1">Film posteri veya kapak resmi linki (isteğe bağlı)</small>
                 </div>
 
                 <div class="form-group">
@@ -1533,6 +1581,9 @@
                         categories: s.categories,
                         tags: s.tags,
                         trailerUrl: s.trailerUrl,
+                        imdbRating: s.imdbRating,
+                        description: s.description,
+                        imageUrl: s.imageUrl,
                         seasons: []
                     };
                 }
@@ -1635,15 +1686,18 @@
 
                 return `
                     <div class="series-card card p-6 relative">
+                        ${series.imageUrl ? `<div class="mb-4"><img src="${series.imageUrl}" alt="${series.name}" class="w-full h-48 object-cover rounded-lg"></div>` : ''}
                         <div class="flex justify-between items-start mb-4">
                             <div>
                                 <h3 class="text-xl font-bold mb-1">${series.name}</h3>
                                 <div class="text-gray-600 dark:text-gray-300 mb-2">
                                     <span class="status-badge ${status}">${getStatusText(status)}</span>
                                     <span class="ml-2">${series.platform}</span>
+                                    ${series.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${series.imdbRating}</span>` : ''}
                                 </div>
+                                ${series.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${series.description}</p>` : ''}
                             </div>
-                            <div class="flex space-x-2">
+                            <div class="flex space-x-1">
                                 ${series.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${series.trailerUrl}" data-title="${series.name}">
                                     <i class="fab fa-youtube"></i> Fragman
                                 </button>` : ''}
@@ -1853,12 +1907,15 @@
 
                 return `
                     <div class="movie-card card p-6 relative">
+                        ${movie.imageUrl ? `<div class="mb-4"><img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-48 object-cover rounded-lg"></div>` : ''}
                         <div class="flex justify-between items-start mb-4">
                             <div>
                                 <h3 class="text-xl font-bold mb-1">${movie.name}</h3>
-                                <div class="text-gray-600 dark:text-gray-300">
+                                <div class="text-gray-600 dark:text-gray-300 mb-2">
                                     <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
+                                    ${movie.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${movie.imdbRating}</span>` : ''}
                                 </div>
+                                ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${movie.description}</p>` : ''}
                             </div>
                             <div class="flex space-x-2">
                                 ${movie.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${movie.trailerUrl}" data-title="${movie.name}">
@@ -2238,6 +2295,9 @@
             document.getElementById('seriesName').value = series.name;
             document.getElementById('seriesPlatform').value = series.platform;
             document.getElementById('seriesTrailerUrl').value = series.trailerUrl || '';
+            document.getElementById('seriesImdbRating').value = series.imdbRating || '';
+            document.getElementById('seriesDescription').value = series.description || '';
+            document.getElementById('seriesImageUrl').value = series.imageUrl || '';
 
             // Kategori seçimini ayarla
             document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
@@ -2337,6 +2397,9 @@
             document.getElementById('movieName').value = movie.name;
             document.getElementById('movieWatched').checked = movie.watched;
             document.getElementById('movieTrailerUrl').value = movie.trailerUrl || '';
+            document.getElementById('movieImdbRating').value = movie.imdbRating || '';
+            document.getElementById('movieDescription').value = movie.description || '';
+            document.getElementById('movieImageUrl').value = movie.imageUrl || '';
 
             // Kategori seçimini ayarla
             document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
@@ -2946,6 +3009,9 @@
             const categories = getSelectedCategories('seriesCategorySelector');
             const tags = getTagsFromContainer('seriesTagsContainer');
             const trailerUrl = document.getElementById('seriesTrailerUrl').value;
+            const imdbRating = document.getElementById('seriesImdbRating').value;
+            const description = document.getElementById('seriesDescription').value;
+            const imageUrl = document.getElementById('seriesImageUrl').value;
 
             if (id) {
                 // Düzenleme modu
@@ -2965,6 +3031,9 @@
                             categories,
                             tags,
                             trailerUrl,
+                            imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                            description,
+                            imageUrl,
                             updatedAt: new Date().toISOString()
                         };
                         }
@@ -2997,6 +3066,9 @@
                             categories,
                             tags,
                             trailerUrl,
+                            imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                            description,
+                            imageUrl,
                             createdAt: new Date().toISOString(),
                             updatedAt: new Date().toISOString()
                         });
@@ -3014,6 +3086,9 @@
                                 categories,
                                 tags,
                                 trailerUrl,
+                                imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                                description,
+                                imageUrl,
                                 updatedAt: new Date().toISOString()
                             };
                         }
@@ -3042,6 +3117,9 @@
                         categories,
                         tags,
                         trailerUrl,
+                        imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                        description,
+                        imageUrl,
                         createdAt: new Date().toISOString(),
                         updatedAt: new Date().toISOString()
                     });
@@ -3065,6 +3143,9 @@
             const categories = getSelectedCategories('movieCategorySelector');
             const tags = getTagsFromContainer('movieTagsContainer');
             const trailerUrl = document.getElementById('movieTrailerUrl').value;
+            const imdbRating = document.getElementById('movieImdbRating').value;
+            const description = document.getElementById('movieDescription').value;
+            const imageUrl = document.getElementById('movieImageUrl').value;
 
             if (id) {
                 // Edit existing movie
@@ -3077,6 +3158,9 @@
                         categories,
                         tags,
                         trailerUrl,
+                        imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                        description,
+                        imageUrl,
                         updatedAt: new Date().toISOString()
                     };
                 }
@@ -3090,6 +3174,9 @@
                     categories,
                     tags,
                     trailerUrl,
+                    imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                    description,
+                    imageUrl,
                     createdAt: new Date().toISOString(),
                     updatedAt: new Date().toISOString()
                 });

@@ -13,12 +13,20 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - Birden fazla sezon ekleyin
 - Her sezon için bölüm ilerlemesi takibi
 - Platform bilgisi (Netflix, Disney+, Amazon Prime vb.)
+- **IMDB puanı ekleme** (1-10 arası)
+- **Dizi açıklaması** ve detaylı bilgiler
+- **Resim linki** ile görsel zenginleştirme
+- YouTube fragman linki entegrasyonu
 - Tüm sezonları tek bir kartta görüntüleyin
 - Sezon detaylarını aç/kapa ile görüntüleyin
 
 ### 🎬 Film Listesi
 - İzlenecek filmleri ekleyin
 - Film türüne göre sınıflandırın
+- **IMDB puanı ekleme** (1-10 arası)
+- **Film açıklaması** ve detaylı bilgiler
+- **Resim linki** ile görsel zenginleştirme
+- YouTube fragman linki entegrasyonu
 - "İzlendi" işaretleyici ile durum takibi
 - İzleme tarihini otomatik kaydetme
 
@@ -89,6 +97,27 @@ Sağ üst köşedeki ay/güneş simgesine tıklayarak karanlık veya aydınlık 
 | ⚠️ | Farklı cihazda açılırsa | Yedek dosyası ile aktarın |
 | ❌ | İnternet kesilirse | Etkilenmez, offline çalışır |
 | ❌ | Sunucu sorunu | Etkilenmez, yerel depolama kullanır |
+
+## Son Güncellemeler (v1.2.0)
+
+### 🆕 Yeni Özellikler
+- **IMDB Puanı**: Dizi ve filmlerinize 1-10 arası puan verebilirsiniz
+- **Açıklama Alanı**: Her içerik için detaylı açıklama ekleyebilirsiniz
+- **Resim Linki**: Poster veya kapak resmi URL'si ekleyebilirsiniz
+- **Görsel Kartlar**: Resim eklenmiş içerikler artık kartlarda görüntülenir
+- **Yıldız Puanı**: IMDB puanları sarı yıldız ikonu ile gösterilir
+
+### 🔧 Teknik İyileştirmeler
+- Form validasyonları güncellendi
+- Dizi ve film düzenleme fonksiyonları yeni alanları destekliyor
+- Responsive tasarım korundu
+- Mevcut veriler etkilenmeden yeni alanlar eklendi
+
+### 📱 Kullanıcı Deneyimi
+- Kartlarda daha zengin görsel içerik
+- IMDB puanı ile hızlı kalite değerlendirmesi
+- Açıklama ile içerik hakkında daha fazla bilgi
+- Resim ile görsel tanıma kolaylığı
 
 ## Kurulum
 
