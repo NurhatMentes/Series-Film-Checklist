@@ -870,6 +870,39 @@
                 font-size: 1rem;
             }
         }
+
+        /* Uzun açıklamalar için scroll özelliği */
+        .description-text {
+            max-height: 120px;
+            overflow-y: auto;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
+        }
+
+        .description-text::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .description-text::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .description-text::-webkit-scrollbar-thumb {
+            background-color: rgba(156, 163, 175, 0.5);
+            border-radius: 3px;
+        }
+
+        .description-text::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(156, 163, 175, 0.7);
+        }
+
+        .dark-theme .description-text::-webkit-scrollbar-thumb {
+            background-color: rgba(71, 85, 105, 0.5);
+        }
+
+        .dark-theme .description-text::-webkit-scrollbar-thumb:hover {
+            background-color: rgba(71, 85, 105, 0.7);
+        }
     </style>
 </head>
 
@@ -1740,27 +1773,29 @@
                 return `
                     <div class="series-card card p-6 relative">
                         ${series.imageUrl ? `<div class="mb-4"><img src="${series.imageUrl}" alt="${series.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <h3 class="text-xl font-bold mb-1">${series.name}</h3>
-                                <div class="text-gray-600 dark:text-gray-300 mb-2">
-                                    <span class="status-badge ${status}">${getStatusText(status)}</span>
-                                    <span class="ml-2">${series.platform}</span>
-                                    ${series.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${series.imdbRating}</span>` : ''}
+                        <div class="mb-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-xl font-bold">${series.name}</h3>
+                                    ${series.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${series.trailerUrl}" data-title="${series.name}">
+                                        <i class="fab fa-youtube"></i> Fragman
+                                    </button>` : ''}
                                 </div>
-                                ${series.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${series.description}</p>` : ''}
+                                <div class="flex space-x-1 ml-2">
+                                    <button class="edit-icon text-blue-500 hover:text-blue-700" data-name="${series.name}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="delete-icon text-red-500 hover:text-red-700" data-name="${series.name}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex space-x-1">
-                                ${series.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${series.trailerUrl}" data-title="${series.name}">
-                                    <i class="fab fa-youtube"></i> Fragman
-                                </button>` : ''}
-                                <button class="edit-icon text-blue-500 hover:text-blue-700" data-name="${series.name}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="delete-icon text-red-500 hover:text-red-700" data-name="${series.name}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                            <div class="text-gray-600 dark:text-gray-300 mb-2">
+                                <span class="status-badge ${status}">${getStatusText(status)}</span>
+                                <span class="ml-2">${series.platform}</span>
+                                ${series.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${series.imdbRating}</span>` : ''}
                             </div>
+                            ${series.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${series.description}</p>` : ''}
                         </div>
 
                         ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
@@ -1964,26 +1999,28 @@
                 return `
                     <div class="movie-card card p-6 relative">
                         ${movie.imageUrl ? `<div class="mb-4"><img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <h3 class="text-xl font-bold mb-1">${movie.name}</h3>
-                                <div class="text-gray-600 dark:text-gray-300 mb-2">
-                                    <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
-                                    ${movie.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${movie.imdbRating}</span>` : ''}
+                        <div class="mb-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="flex items-center space-x-2">
+                                    <h3 class="text-xl font-bold">${movie.name}</h3>
+                                    ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${movie.trailerUrl}" data-title="${movie.name}">
+                                        <i class="fab fa-youtube"></i> Fragman
+                                    </button>` : ''}
                                 </div>
-                                ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2">${movie.description}</p>` : ''}
+                                <div class="flex space-x-1 ml-2">
+                                    <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${movie.id}">
+                                        <i class="fas fa-edit"></i>
+                                    </button>
+                                    <button class="delete-icon text-red-500 hover:text-red-700" data-id="${movie.id}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
                             </div>
-                            <div class="flex space-x-2">
-                                ${movie.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${movie.trailerUrl}" data-title="${movie.name}">
-                                    <i class="fab fa-youtube"></i> Fragman
-                                </button>` : ''}
-                                <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${movie.id}">
-                                    <i class="fas fa-edit"></i>
-                                </button>
-                                <button class="delete-icon text-red-500 hover:text-red-700" data-id="${movie.id}">
-                                    <i class="fas fa-trash"></i>
-                                </button>
+                            <div class="text-gray-600 dark:text-gray-300 mb-2">
+                                <span class="status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
+                                ${movie.imdbRating ? `<span class="ml-2 text-yellow-500"><i class="fas fa-star"></i> ${movie.imdbRating}</span>` : ''}
                             </div>
+                            ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${movie.description}</p>` : ''}
                         </div>
                         
                         ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
