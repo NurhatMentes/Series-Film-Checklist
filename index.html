@@ -973,19 +973,33 @@
                     </div>
 
                     <div class="filters-container bg-white/5 p-3 rounded-lg">
-                        <div class="flex flex-wrap gap-2 mb-3">
-                            <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
-                                <i class="fas fa-layer-group mr-1"></i> Tümü
-                            </button>
-                            <button class="filter-button btn btn-secondary btn-sm" data-filter="completed">
-                                <i class="fas fa-check-circle mr-1"></i> Tamamlanan
-                            </button>
-                            <button class="filter-button btn btn-secondary btn-sm" data-filter="watching">
-                                <i class="fas fa-play-circle mr-1"></i> İzleniyor
-                            </button>
-                            <button class="filter-button btn btn-secondary btn-sm" data-filter="planning">
-                                <i class="fas fa-clock mr-1"></i> Planlanan
-                            </button>
+                        <div class="flex flex-wrap gap-2 mb-3 items-center">
+                            <div class="flex flex-wrap gap-2">
+                                <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
+                                    <i class="fas fa-layer-group mr-1"></i> Tümü
+                                </button>
+                                <button class="filter-button btn btn-secondary btn-sm" data-filter="completed">
+                                    <i class="fas fa-check-circle mr-1"></i> Tamamlanan
+                                </button>
+                                <button class="filter-button btn btn-secondary btn-sm" data-filter="watching">
+                                    <i class="fas fa-play-circle mr-1"></i> İzleniyor
+                                </button>
+                                <button class="filter-button btn btn-secondary btn-sm" data-filter="planning">
+                                    <i class="fas fa-clock mr-1"></i> Planlanan
+                                </button>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
+                                <select id="seriesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="newest">En Yeni</option>
+                                    <option value="oldest">En Eski</option>
+                                    <option value="alphabetical">A-Z</option>
+                                    <option value="alphabetical-desc">Z-A</option>
+                                    <option value="rating-desc">IMDB Puanı (Yüksek)</option>
+                                    <option value="rating-asc">IMDB Puanı (Düşük)</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="flex flex-col">
@@ -1051,16 +1065,30 @@
                     </div>
 
                     <div class="filters-container bg-white/5 p-3 rounded-lg">
-                        <div class="flex flex-wrap gap-2 mb-3">
-                            <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
-                                <i class="fas fa-layer-group mr-1"></i> Tümü
-                            </button>
-                            <button class="filter-button btn btn-secondary btn-sm" data-filter="watched">
-                                <i class="fas fa-eye mr-1"></i> İzlendi
-                            </button>
-                            <button class="filter-button btn btn-secondary btn-sm" data-filter="not-watched">
-                                <i class="fas fa-eye-slash mr-1"></i> İzlenmedi
-                            </button>
+                        <div class="flex flex-wrap gap-2 mb-3 items-center">
+                            <div class="flex flex-wrap gap-2">
+                                <button class="filter-button btn btn-secondary btn-sm active" data-filter="all">
+                                    <i class="fas fa-layer-group mr-1"></i> Tümü
+                                </button>
+                                <button class="filter-button btn btn-secondary btn-sm" data-filter="watched">
+                                    <i class="fas fa-eye mr-1"></i> İzlendi
+                                </button>
+                                <button class="filter-button btn btn-secondary btn-sm" data-filter="not-watched">
+                                    <i class="fas fa-eye-slash mr-1"></i> İzlenmedi
+                                </button>
+                            </div>
+                            
+                            <div class="flex items-center gap-2 ml-auto">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
+                                <select id="moviesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="newest">En Yeni</option>
+                                    <option value="oldest">En Eski</option>
+                                    <option value="alphabetical">A-Z</option>
+                                    <option value="alphabetical-desc">Z-A</option>
+                                    <option value="rating-desc">IMDB Puanı (Yüksek)</option>
+                                    <option value="rating-asc">IMDB Puanı (Düşük)</option>
+                                </select>
+                            </div>
                         </div>
 
                         <div class="flex flex-col">
@@ -1383,6 +1411,31 @@
         let seriesView = '3';
         let moviesView = '3';
 
+        // Image loading error handling
+        function handleImageError(img) {
+            img.style.display = 'none';
+            const placeholder = img.parentElement;
+            if (placeholder) {
+                placeholder.innerHTML = `
+                    <div class="w-full h-48 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+                        <i class="fas fa-image text-gray-400 text-4xl"></i>
+                    </div>
+                `;
+            }
+        }
+
+        function setupImageErrorHandling() {
+            // Setup error handling for all images
+            document.querySelectorAll('img').forEach(img => {
+                if (!img.hasAttribute('data-error-handled')) {
+                    img.setAttribute('data-error-handled', 'true');
+                    img.addEventListener('error', function() {
+                        handleImageError(this);
+                    });
+                }
+            });
+        }
+
         // Check for saved theme
         const savedTheme = localStorage.getItem('theme') || 'light';
         if (savedTheme === 'dark') {
@@ -1686,7 +1739,7 @@
 
                 return `
                     <div class="series-card card p-6 relative">
-                        ${series.imageUrl ? `<div class="mb-4"><img src="${series.imageUrl}" alt="${series.name}" class="w-full h-48 object-cover rounded-lg"></div>` : ''}
+                        ${series.imageUrl ? `<div class="mb-4"><img src="${series.imageUrl}" alt="${series.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
                         <div class="flex justify-between items-start mb-4">
                             <div>
                                 <h3 class="text-xl font-bold mb-1">${series.name}</h3>
@@ -1873,6 +1926,9 @@
                     }
                 });
             });
+
+            // Setup image error handling after DOM update
+            setTimeout(setupImageErrorHandling, 100);
         }
 
         // Render movies list
@@ -1907,7 +1963,7 @@
 
                 return `
                     <div class="movie-card card p-6 relative">
-                        ${movie.imageUrl ? `<div class="mb-4"><img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-48 object-cover rounded-lg"></div>` : ''}
+                        ${movie.imageUrl ? `<div class="mb-4"><img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
                         <div class="flex justify-between items-start mb-4">
                             <div>
                                 <h3 class="text-xl font-bold mb-1">${movie.name}</h3>
@@ -1946,6 +2002,9 @@
             }).join('');
 
             // Event listeners artık event delegation ile yönetiliyor
+            
+            // Setup image error handling after DOM update
+            setTimeout(setupImageErrorHandling, 100);
         }
 
         // Render categories list
@@ -3237,6 +3296,64 @@
                     renderMoviesList();
                 }
             });
+        });
+
+        // Sorting functions
+        function sortSeries(sortType) {
+            switch (sortType) {
+                case 'newest':
+                    filteredSeriesData.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                    break;
+                case 'oldest':
+                    filteredSeriesData.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+                    break;
+                case 'alphabetical':
+                    filteredSeriesData.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+                    break;
+                case 'alphabetical-desc':
+                    filteredSeriesData.sort((a, b) => b.name.localeCompare(a.name, 'tr'));
+                    break;
+                case 'rating-desc':
+                    filteredSeriesData.sort((a, b) => (b.imdbRating || 0) - (a.imdbRating || 0));
+                    break;
+                case 'rating-asc':
+                    filteredSeriesData.sort((a, b) => (a.imdbRating || 0) - (b.imdbRating || 0));
+                    break;
+            }
+            renderSeriesList();
+        }
+
+        function sortMovies(sortType) {
+            switch (sortType) {
+                case 'newest':
+                    filteredMoviesData.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+                    break;
+                case 'oldest':
+                    filteredMoviesData.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+                    break;
+                case 'alphabetical':
+                    filteredMoviesData.sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+                    break;
+                case 'alphabetical-desc':
+                    filteredMoviesData.sort((a, b) => b.name.localeCompare(a.name, 'tr'));
+                    break;
+                case 'rating-desc':
+                    filteredMoviesData.sort((a, b) => (b.imdbRating || 0) - (a.imdbRating || 0));
+                    break;
+                case 'rating-asc':
+                    filteredMoviesData.sort((a, b) => (a.imdbRating || 0) - (b.imdbRating || 0));
+                    break;
+            }
+            renderMoviesList();
+        }
+
+        // Sort event listeners
+        document.getElementById('seriesSortSelect').addEventListener('change', function() {
+            sortSeries(this.value);
+        });
+
+        document.getElementById('moviesSortSelect').addEventListener('change', function() {
+            sortMovies(this.value);
         });
 
         // Sezon ekleme butonuna basınca required ekle
