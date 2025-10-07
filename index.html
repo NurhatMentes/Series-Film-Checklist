@@ -1477,6 +1477,7 @@
                             <button id="showQrBtn" class="btn btn-secondary"><i class="fas fa-qrcode mr-1"></i> QR Göster</button>
                             <button id="scanQrBtn" class="btn btn-secondary"><i class="fas fa-camera mr-1"></i> QR Tara</button>
                             <button id="connectBtn" class="btn btn-success"><i class="fas fa-link mr-1"></i> Bağlan</button>
+                            <button id="resetPairingBtn" class="btn btn-warning"><i class="fas fa-redo mr-1"></i> Sıfırla</button>
                         </div>
                         <div id="qrContainer" class="mt-2"></div>
                     </div>
@@ -3274,6 +3275,23 @@
             }
         }
 
+        function resetPairingState() {
+            pairingState = 'waiting';
+            isInitiator = false;
+            if (rtcPeer) {
+                rtcPeer.close();
+                rtcPeer = null;
+            }
+            if (rtcChannel) {
+                rtcChannel.close();
+                rtcChannel = null;
+            }
+            if (pairingCode) pairingCode.value = '';
+            if (codeLabel) codeLabel.textContent = 'Eşleştirme Kodu';
+            updatePairingStatus('Hazır - Yeni eşleştirme başlatabilirsiniz');
+            updateInstructions('waiting');
+        }
+
         async function connectToPeer() {
             const codeValue = pairingCode.value.trim();
             if (!codeValue) {
@@ -3315,12 +3333,28 @@
                     updatePairingStatus('Bağlantı kuruluyor...');
                     updateInstructions('connected');
                     
+                } else if (pairingState === 'answer-received') {
+                    // Cevap kodu zaten üretildi, tekrar bağlanmaya çalışıyor
+                    updatePairingStatus('Cevap kodu zaten üretildi. İlk cihaza verin ve orada "Bağlan" butonuna basın.', 'error');
+                    
+                } else if (pairingState === 'connected') {
+                    // Zaten bağlı, yeni eşleştirme başlatmak istiyor
+                    const restart = confirm('Zaten bağlısınız. Yeni bir eşleştirme başlatmak istiyor musunuz?');
+                    if (restart) {
+                        resetPairingState();
+                        updatePairingStatus('Durum sıfırlandı. Yeni eşleştirme başlatabilirsiniz.');
+                    }
+                    
                 } else {
-                    alert('Beklenmeyen durum. Sayfayı yenileyin ve tekrar deneyin.');
+                    // Bilinmeyen durum - güvenli sıfırlama
+                    console.warn('Bilinmeyen pairingState:', pairingState);
+                    resetPairingState();
+                    updatePairingStatus('Durum sıfırlandı. Lütfen tekrar deneyin.');
                 }
                 
             } catch (e) { 
                 updatePairingStatus('Bağlantı hatası: ' + e.message, 'error');
+                console.error('WebRTC bağlantı hatası:', e);
             }
         }
 
@@ -3347,6 +3381,13 @@
         if (generateCodeBtn) generateCodeBtn.addEventListener('click', generateCode);
         if (connectBtn) connectBtn.addEventListener('click', connectToPeer);
         if (showQrBtn) showQrBtn.addEventListener('click', showQrCode);
+        
+        // Reset pairing button
+        const resetPairingBtn = document.getElementById('resetPairingBtn');
+        if (resetPairingBtn) resetPairingBtn.addEventListener('click', function() {
+            resetPairingState();
+            updatePairingStatus('Durum sıfırlandı. Yeni eşleştirme başlatabilirsiniz.');
+        });
         // Sezon seçimi event listener'ları
         document.getElementById('seasonSelector').addEventListener('change', function () {
             const selectedSeasonId = this.value;
