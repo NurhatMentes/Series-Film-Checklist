@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>İzleme Takip Uygulaması</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -1511,6 +1511,7 @@
         // --- P2P Sync State ---
         let pushDebounceTimer = null;
         let peerPushDebounceTimer = null;
+        let connectTimeoutTimer = null;
         // Data storage
         let seriesData = JSON.parse(localStorage.getItem('seriesData')) || [];
         let moviesData = JSON.parse(localStorage.getItem('moviesData')) || [];
@@ -3196,6 +3197,8 @@
             if (!rtcChannel) return;
             rtcChannel.onopen = () => {
                 updatePairingStatus('Bağlandı! Cihazlar senkronize edildi.', 'success');
+                if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} connectTimeoutTimer = null; }
+                updateInstructions('connected');
                 pairingState = 'connected';
                 try { rtcChannel.send(JSON.stringify({ type: 'syncData', payload: getAllDataPayload() })); } catch (_) {}
             };
@@ -3218,6 +3221,26 @@
             rtcPeer.ondatachannel = (ev) => { rtcChannel = ev.channel; setupRtcChannel(); };
             rtcPeer.onicecandidate = () => { /* manual signaling: SDP yeterli */ };
             if (rtcInitiator) { rtcChannel = rtcPeer.createDataChannel('sync'); setupRtcChannel(); }
+        }
+
+        // ICE adayları tamamen toplanana kadar bekle
+        function waitForIceGatheringComplete(pc) {
+            return new Promise(resolve => {
+                if (!pc) return resolve();
+                if (pc.iceGatheringState === 'complete') return resolve();
+                const check = () => {
+                    if (pc.iceGatheringState === 'complete') {
+                        pc.removeEventListener('icegatheringstatechange', check);
+                        resolve();
+                    }
+                };
+                pc.addEventListener('icegatheringstatechange', check);
+                // Güvenlik için maksimum bekleme (10 sn), bazı ortamlarda state olayı gelmeyebilir
+                setTimeout(() => { 
+                    pc.removeEventListener('icegatheringstatechange', check);
+                    resolve();
+                }, 10000);
+            });
         }
 
         function updatePairingStatus(message, type = 'info') {
@@ -3247,6 +3270,9 @@
                     <p><strong>✓ Adım 1-3 tamamlandı:</strong> Cevap kodu alındı</p>
                     <p><strong>→ Adım 4:</strong> "Bağlan" butonuna basın</p>
                 `,
+                'connecting': `
+                    <p><strong>Bağlantı kuruluyor...</strong> Lütfen bekleyin.</p>
+                `,
                 'connected': `
                     <p><strong>✓ Tüm adımlar tamamlandı!</strong> Cihazlar başarıyla eşleştirildi.</p>
                     <p>Artık verileriniz otomatik olarak senkronize edilecek.</p>
@@ -3261,6 +3287,8 @@
                 initRtcPeer(true);
                 const offer = await rtcPeer.createOffer();
                 await rtcPeer.setLocalDescription(offer);
+                updatePairingStatus('Kod hazırlanıyor - Ağ bilgileri toplanıyor...');
+                await waitForIceGatheringComplete(rtcPeer);
                 pairingCode.value = encodeSignal(rtcPeer.localDescription);
                 
                 updatePairingStatus('Kod üretildi - Diğer cihaza paylaşın');
@@ -3312,6 +3340,8 @@
                     await rtcPeer.setRemoteDescription(remote);
                     const answer = await rtcPeer.createAnswer();
                     await rtcPeer.setLocalDescription(answer);
+                    updatePairingStatus('Cevap hazırlanıyor - Ağ bilgileri toplanıyor...');
+                    await waitForIceGatheringComplete(rtcPeer);
                     
                     // Answer kodunu göster
                     pairingCode.value = encodeSignal(rtcPeer.localDescription);
@@ -3331,7 +3361,15 @@
                     
                     await rtcPeer.setRemoteDescription(ans);
                     updatePairingStatus('Bağlantı kuruluyor...');
-                    updateInstructions('connected');
+                    updateInstructions('connecting');
+                    // Zaman aşımı: eğer 12 saniye içinde bağlanmazsa açık hata ver
+                    if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} }
+                    connectTimeoutTimer = setTimeout(() => {
+                        if (pairingState !== 'connected' || !rtcChannel || rtcChannel.readyState !== 'open') {
+                            updatePairingStatus('Bağlantı kurulamadı. Ağ veya WebRTC engeli olabilir.', 'error');
+                            updateInstructions('answer-received');
+                        }
+                    }, 12000);
                     
                 } else if (pairingState === 'answer-received') {
                     // Cevap kodu zaten üretildi, tekrar bağlanmaya çalışıyor
