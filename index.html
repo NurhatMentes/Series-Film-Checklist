@@ -871,6 +871,31 @@
             }
         }
 
+        /* Senkronizasyon butonu */
+        .sync-btn {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+            color: white;
+            border: none;
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            box-shadow: 0 8px 20px rgba(22, 163, 74, 0.35);
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            z-index: 1000;
+        }
+        .sync-btn:hover { transform: translateY(-1px); }
+
+        .sync-modal .modal-header { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
+        .sync-modal-content { width: 720px; max-width: 92vw; }
+        .sync-form .form-group { margin-bottom: 12px; }
+        .sync-form textarea { min-height: 140px; resize: vertical; }
+
         /* Uzun açıklamalar için scroll özelliği */
         .description-text {
             max-height: 120px;
@@ -1423,7 +1448,80 @@
         </div>
     </div>
 
+    <button id="openSyncModal" class="sync-btn"><i class="fas fa-sync-alt"></i> Senkronizasyon</button>
+
+    <!-- Senkronizasyon Modal -->
+    <div id="syncModal" class="modal">
+        <div class="modal-content sync-modal-content">
+            <div class="modal-header">
+                <h3>Senkronizasyon Ayarları</h3>
+                <button id="closeSyncModal" class="close-trailer-btn">&times;</button>
+            </div>
+            <div class="p-6 sync-form">
+                <div class="form-group">
+                    <label for="syncKeyInput">Senkronizasyon Anahtarı</label>
+                    <input type="text" id="syncKeyInput" class="form-control" placeholder="ör: benim-listem">
+                    <small class="text-gray-400 mt-1">Aynı anahtar ile diğer cihazlarda bağlanın.</small>
+                </div>
+                <!-- Firebase bölümü kaldırıldı; sadece WebRTC ile eşleştirme kullanılacak -->
+                <div class="mt-6 border-t border-gray-600 pt-4">
+                    <h4 class="text-lg font-semibold mb-2">Kodla Eşleştirme (WebRTC)</h4>
+                    <p class="text-gray-400 text-sm mb-3">Sunucu gerekmez. Bir cihazda Offer kodu üretip diğer cihaza yapıştırın; diğer cihazdaki Answer kodunu ilk cihaza geri yapıştırın.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label class="block text-sm mb-1">Başlatan cihaz: Üretilen kod (Offer)</label>
+                            <textarea id="rtcOfferCode" class="form-control" placeholder="Offer kodu burada görünecek"></textarea>
+                            <div class="flex gap-2 mt-2 items-center">
+                                <button id="rtcOfferShowQrBtn" class="btn btn-secondary"><i class="fas fa-qrcode mr-1"></i> Offer'ı QR Göster</button>
+                                <div id="offerQrContainer" class="mt-2"></div>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-1">Bağlanan cihaz: Karşıdan gelen kod (Offer)</label>
+                            <textarea id="rtcRemoteOffer" class="form-control" placeholder="Diğer cihazdan gelen Offer kodunu buraya yapıştırın"></textarea>
+                            <div class="flex gap-2 mt-2 items-center">
+                                <button id="rtcScanOfferBtn" class="btn btn-secondary"><i class="fas fa-camera mr-1"></i> Offer QR Tara</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-3 mt-3 items-start">
+                        <button id="rtcGenerateOfferBtn" class="btn btn-secondary"><i class="fas fa-key mr-1"></i> Kod Üret (Offer)</button>
+                        <button id="rtcAcceptOfferBtn" class="btn btn-secondary"><i class="fas fa-check mr-1"></i> Kodu Kabul Et (Answer üret)</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                        <div>
+                            <label class="block text-sm mb-1">Bağlanan cihaz: Üretilen cevap kodu (Answer)</label>
+                            <textarea id="rtcAnswerCode" class="form-control" placeholder="Answer kodu burada görünecek"></textarea>
+                        </div>
+                        <div>
+                            <label class="block text-sm mb-1">Başlatan cihaz: Karşıdan gelen cevap kodu (Answer)</label>
+                            <textarea id="rtcRemoteAnswer" class="form-control" placeholder="Diğer cihazdan gelen Answer kodunu buraya yapıştırın"></textarea>
+                            <div class="flex gap-2 mt-2 items-center">
+                                <button id="rtcScanAnswerBtn" class="btn btn-secondary"><i class="fas fa-camera mr-1"></i> Answer QR Tara</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-3 mt-3 items-start">
+                        <button id="rtcFinishPairBtn" class="btn btn-secondary"><i class="fas fa-link mr-1"></i> Eşleşmeyi Bitir</button>
+                        <p id="rtcStatus" class="text-gray-300">Durum: Eşleşmedi</p>
+                    </div>
+                    <div class="mt-3">
+                        <div id="qrScannerContainer" class="border border-gray-600 rounded p-2 hidden"></div>
+                        <button id="stopQrScanBtn" class="btn btn-secondary mt-2 hidden"><i class="fas fa-stop mr-1"></i> Tarayıcıyı Durdur</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- QR Code libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.9/html5-qrcode.min.js"></script>
+
     <script>
+        // --- P2P Sync State ---
+        let pushDebounceTimer = null;
+        let peerPushDebounceTimer = null;
         // Data storage
         let seriesData = JSON.parse(localStorage.getItem('seriesData')) || [];
         let moviesData = JSON.parse(localStorage.getItem('moviesData')) || [];
@@ -1442,6 +1540,66 @@
         let currentSeriesCategory = null;
         let currentMoviesCategory = null;
         let seriesView = '3';
+
+        // --- Sync helpers (P2P) ---
+
+        function getAllDataPayload() {
+            return {
+                series: seriesData,
+                movies: moviesData,
+                categories: categoriesData,
+                tags: tagsData,
+                updatedAt: Date.now(),
+                origin: window.location.origin
+            };
+        }
+
+        // Bulut push kaldırıldı
+
+        function schedulePeerPush() {
+            if (!rtcChannel || rtcChannel.readyState !== 'open') return;
+            clearTimeout(peerPushDebounceTimer);
+            peerPushDebounceTimer = setTimeout(() => {
+                try {
+                    const payload = getAllDataPayload();
+                    rtcChannel.send(JSON.stringify({ type: 'syncData', payload }));
+                    if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: P2P gönderildi (' + new Date(payload.updatedAt).toLocaleTimeString() + ')';
+                } catch (_) {}
+            }, 600);
+        }
+
+        // Bulut push kaldırıldı
+
+        function applyRemoteData(data) {
+            if (!data) return;
+            // P2P için zaman kıyasını basitçe uygula
+            seriesData = Array.isArray(data.series) ? data.series : seriesData;
+            moviesData = Array.isArray(data.movies) ? data.movies : moviesData;
+            categoriesData = Array.isArray(data.categories) ? data.categories : categoriesData;
+            tagsData = Array.isArray(data.tags) ? data.tags : tagsData;
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+            filterSeries();
+            filterMovies();
+            renderCategoryFilters();
+            updateTotalStats();
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: P2P veri alındı';
+        }
+
+        // Bulut aboneliği kaldırıldı
+
+        // Patch localStorage.setItem to auto-push
+        const __origSetItem = localStorage.setItem.bind(localStorage);
+        localStorage.setItem = function(key, value) {
+            __origSetItem(key, value);
+            if (['seriesData','moviesData','categoriesData','tagsData'].includes(key)) {
+                schedulePeerPush();
+            }
+        };
         let moviesView = '3';
 
         // Image loading error handling
@@ -1501,6 +1659,25 @@
         const seriesEmpty = document.getElementById('seriesEmpty');
         const moviesEmpty = document.getElementById('moviesEmpty');
         const totalStats = document.getElementById('totalStats');
+        // Sync UI elements
+        const openSyncModalBtn = document.getElementById('openSyncModal');
+        const syncModalEl = document.getElementById('syncModal');
+        const closeSyncModalBtn = document.getElementById('closeSyncModal');
+        const syncKeyInput = document.getElementById('syncKeyInput');
+        const firebaseConfigInput = document.getElementById('firebaseConfigInput');
+        const connectSyncBtn = document.getElementById('connectSyncBtn');
+        const syncNowBtn = document.getElementById('syncNowBtn');
+        const disconnectSyncBtn = document.getElementById('disconnectSyncBtn');
+        const syncStatusEl = document.getElementById('syncStatus');
+        // WebRTC pairing elements
+        const rtcOfferCode = document.getElementById('rtcOfferCode');
+        const rtcRemoteOffer = document.getElementById('rtcRemoteOffer');
+        const rtcGenerateOfferBtn = document.getElementById('rtcGenerateOfferBtn');
+        const rtcAcceptOfferBtn = document.getElementById('rtcAcceptOfferBtn');
+        const rtcAnswerCode = document.getElementById('rtcAnswerCode');
+        const rtcRemoteAnswer = document.getElementById('rtcRemoteAnswer');
+        const rtcFinishPairBtn = document.getElementById('rtcFinishPairBtn');
+        const rtcStatusEl = document.getElementById('rtcStatus');
         const seriesStats = document.getElementById('seriesStats');
         const moviesStats = document.getElementById('moviesStats');
         const addSeriesBtn = document.getElementById('addSeriesBtn');
@@ -3007,6 +3184,78 @@
                 showTrailerModal(trailerUrl, title);
             }
         });
+
+        // Sync Modal events (WebRTC-only)
+        openSyncModalBtn.addEventListener('click', () => { syncModalEl.classList.add('active'); });
+        closeSyncModalBtn.addEventListener('click', () => { syncModalEl.classList.remove('active'); });
+
+        // --- WebRTC Pairing logic ---
+        const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+        let rtcPeer = null;
+        let rtcChannel = null;
+        let rtcInitiator = false;
+
+        function encodeSignal(obj) { try { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); } catch (e) { return ''; } }
+        function decodeSignal(str) { try { return JSON.parse(decodeURIComponent(escape(atob((str || '').trim())))); } catch (e) { alert('Geçersiz kod'); return null; } }
+
+        function setupRtcChannel() {
+            if (!rtcChannel) return;
+            rtcChannel.onopen = () => {
+                if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: Eşleşti (kanal açık)';
+                try { rtcChannel.send(JSON.stringify({ type: 'syncData', payload: getAllDataPayload() })); } catch (_) {}
+            };
+            rtcChannel.onmessage = (ev) => {
+                try {
+                    const msg = JSON.parse(ev.data);
+                    if (msg && msg.type === 'syncData' && msg.payload) { applyRemoteData(msg.payload); }
+                } catch (_) {}
+            };
+            rtcChannel.onclose = () => { if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: Kanal kapandı'; };
+        }
+
+        function initRtcPeer(initiator) {
+            rtcInitiator = !!initiator;
+            rtcPeer = new RTCPeerConnection(RTC_CONFIG);
+            rtcPeer.ondatachannel = (ev) => { rtcChannel = ev.channel; setupRtcChannel(); };
+            rtcPeer.onicecandidate = () => { /* manual signaling: SDP yeterli */ };
+            if (rtcInitiator) { rtcChannel = rtcPeer.createDataChannel('sync'); setupRtcChannel(); }
+        }
+
+        async function generateOffer() {
+            try {
+                initRtcPeer(true);
+                const offer = await rtcPeer.createOffer();
+                await rtcPeer.setLocalDescription(offer);
+                rtcOfferCode.value = encodeSignal(rtcPeer.localDescription);
+                if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: Offer oluşturuldu, kodu paylaşın';
+            } catch (e) { alert('Offer oluşturulamadı: ' + e.message); }
+        }
+
+        async function acceptOffer() {
+            const remote = decodeSignal(rtcRemoteOffer.value);
+            if (!remote) return;
+            try {
+                initRtcPeer(false);
+                await rtcPeer.setRemoteDescription(remote);
+                const answer = await rtcPeer.createAnswer();
+                await rtcPeer.setLocalDescription(answer);
+                rtcAnswerCode.value = encodeSignal(rtcPeer.localDescription);
+                if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: Answer üretildi, ilk cihaza verin';
+            } catch (e) { alert('Offer kabul edilemedi: ' + e.message); }
+        }
+
+        async function finishPairing() {
+            const ans = decodeSignal(rtcRemoteAnswer.value);
+            if (!ans) return;
+            try {
+                await rtcPeer.setRemoteDescription(ans);
+                if (rtcStatusEl) rtcStatusEl.textContent = 'Durum: Eşleşme tamamlandı';
+            } catch (e) { alert('Answer uygulanamadı: ' + e.message); }
+        }
+
+        rtcGenerateOfferBtn.addEventListener('click', generateOffer);
+        rtcAcceptOfferBtn.addEventListener('click', acceptOffer);
+        rtcFinishPairBtn.addEventListener('click', finishPairing);
         // Sezon seçimi event listener'ları
         document.getElementById('seasonSelector').addEventListener('change', function () {
             const selectedSeasonId = this.value;
