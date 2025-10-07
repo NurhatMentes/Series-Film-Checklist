@@ -520,6 +520,24 @@
             background: rgba(30, 41, 59, 0.4);
         }
 
+        /* Tabs container wraps on small screens */
+        .tabs-container { flex-wrap: wrap; gap: 8px; }
+        @media (max-width: 640px) {
+            .tab-button { padding: 0.5rem 0.75rem; font-size: 0.9rem; }
+        }
+
+        /* Sort row alignment on mobile */
+        @media (max-width: 768px) {
+            .sort-row { margin-left: 0 !important; width: 100%; justify-content: flex-start; }
+            .section-header .search-container { width: 100%; margin-right: 0; }
+        }
+
+        /* Modal padding tweak on mobile */
+        @media (max-width: 640px) {
+            .modal-content { padding: 16px; }
+            .app-container { padding: 12px; }
+        }
+
         /* Yeni eklenen stiller */
         .category-badge {
             display: inline-block;
@@ -984,7 +1002,7 @@
         </div>
 
         <!-- Tabs -->
-        <div class="flex bg-white/10 backdrop-blur-sm rounded-xl p-2 mb-8 justify-center">
+        <div class="tabs-container flex bg-white/10 backdrop-blur-sm rounded-xl p-2 mb-8 justify-center">
             <button id="seriesTab" class="tab-button px-6 py-3 font-medium text-white border-none active">
                 <i class="fas fa-tv mr-2"></i> Diziler
             </button>
@@ -1003,7 +1021,7 @@
         <div id="seriesContent" class="tab-content">
             <div class="card p-6 mb-6">
                 <div class="grid grid-cols-1 gap-4">
-                    <div class="flex justify-between items-center">
+                    <div class="section-header flex justify-between items-center">
                         <div class="search-container flex-grow mr-4">
                             <div class="relative">
                                 <input type="text" id="searchSeries" class="form-control pl-10"
@@ -1047,7 +1065,7 @@
                                 </button>
                             </div>
                             
-                            <div class="flex items-center gap-2 ml-auto">
+                            <div class="sort-row flex items-center gap-2 ml-auto">
                                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
                                 <select id="seriesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
                                     <option value="newest">En Yeni</option>
@@ -1095,7 +1113,7 @@
         <div id="moviesContent" class="tab-content hidden">
             <div class="card p-6 mb-6">
                 <div class="grid grid-cols-1 gap-4">
-                    <div class="flex justify-between items-center">
+                    <div class="section-header flex justify-between items-center">
                         <div class="search-container flex-grow mr-4">
                             <div class="relative">
                                 <input type="text" id="searchMovies" class="form-control pl-10"
@@ -1136,7 +1154,7 @@
                                 </button>
                             </div>
                             
-                            <div class="flex items-center gap-2 ml-auto">
+                            <div class="sort-row flex items-center gap-2 ml-auto">
                                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
                                 <select id="moviesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
                                     <option value="newest">En Yeni</option>
