@@ -86,6 +86,51 @@
             border-radius: 3px;
         }
 
+        /* Yerleşim toggle butonları */
+        .layout-toggle {
+            display: inline-flex;
+            gap: 8px;
+        }
+
+        .layout-toggle-btn {
+            padding: 6px 10px;
+            border-radius: 20px;
+            border: 1px solid var(--border-light);
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);
+            color: #334155;
+            font-size: 0.75rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .dark-theme .layout-toggle-btn {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+
+        .layout-toggle-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+        }
+
+        .layout-toggle-btn.active {
+            border-color: var(--primary);
+            color: var(--primary);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
+        }
+
+        /* Kart başlıkları için tipografi ve kısaltma */
+        .card-title {
+            font-weight: 700;
+            letter-spacing: 0.2px;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+        }
+
         .series-card,
         .movie-card {
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -115,6 +160,60 @@
             transition: width 0.4s ease;
         }
 
+        /* Poster konteyneri için görsel iyileştirme */
+        .poster-wrapper {
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+            position: relative;
+        }
+
+        .poster-overlay {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to top, rgba(0,0,0,0.35), rgba(0,0,0,0.0) 40%);
+            pointer-events: none;
+        }
+
+        /* Poster üzerinde bilgi şeridi */
+        .poster-info {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding: 8px 10px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #fff;
+            background: linear-gradient(to top, rgba(0,0,0,0.6), rgba(0,0,0,0));
+            font-size: 0.875rem;
+            font-weight: 600;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.4);
+            pointer-events: none;
+        }
+
+        .poster-info .title {
+            overflow: hidden;
+            white-space: nowrap;
+            text-overflow: ellipsis;
+            max-width: 75%;
+        }
+
+        .poster-info .meta {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 700;
+        }
+
+        .poster-badge {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 2;
+        }
+
         .status-badge {
             font-size: 0.75rem;
             padding: 0.25rem 0.75rem;
@@ -142,6 +241,44 @@
             color: white;
         }
 
+        /* Kategori rozetleri ve etiketler için görsel iyileştirme */
+        .category-badge {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            color: #fff;
+            font-weight: 600;
+            box-shadow: 0 6px 14px rgba(0, 0, 0, 0.08);
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            background: rgba(99, 102, 241, 0.12);
+            border: 1px solid var(--border-light);
+            color: var(--text-light);
+            font-weight: 500;
+            margin-right: 0.5rem;
+            margin-bottom: 0.5rem;
+            transition: all 0.2s ease;
+        }
+
+        .tag:hover {
+            background: rgba(99, 102, 241, 0.18);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
+        }
+
+        .dark-theme .tag {
+            background: rgba(148, 163, 184, 0.15);
+            color: #e2e8f0;
+            border-color: #334155;
+        }
+
         .filter-button {
             transition: all 0.3s ease;
             border-radius: 12px;
@@ -158,11 +295,12 @@
         }
 
         .filter-button.active {
-            background: linear-gradient(45deg, var(--primary), var(--secondary));
+            background: linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%);
             color: white;
             font-weight: 600;
             border-color: transparent;
-            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+            box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+            text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
         }
 
         .edit-icon,
@@ -477,6 +615,12 @@
             grid-template-columns: repeat(3, minmax(0, 1fr));
         }
 
+        /* Kart gridlerinde eşit yükseklik yerine içeriğe göre yükseklik */
+        #seriesList,
+        #moviesList {
+            align-items: start;
+        }
+
         @media (max-width: 1024px) {
             .grid-3-col {
                 grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -489,6 +633,15 @@
                 grid-template-columns: repeat(1, minmax(0, 1fr));
             }
         }
+
+        /* Masonry layout: dikey boşlukları içeriğe göre azaltır */
+        .masonry {
+            column-gap: 1rem; /* daha sıkı yatay boşluk */
+        }
+        .masonry-1-col { column-count: 1; }
+        .masonry-2-col { column-count: 2; }
+        .masonry-3-col { column-count: 3; }
+        .masonry-item { break-inside: avoid; margin-bottom: 1rem; }
 
         .theme-toggle {
             position: fixed;
@@ -914,37 +1067,12 @@
         .sync-form .form-group { margin-bottom: 12px; }
         .sync-form textarea { min-height: 140px; resize: vertical; }
 
-        /* Uzun açıklamalar için scroll özelliği */
+        /* Uzun açıklamalar için line-clamp ile kısaltma (scroll yerine) */
         .description-text {
-            max-height: 120px;
-            overflow-y: auto;
-            scrollbar-width: thin;
-            scrollbar-color: rgba(156, 163, 175, 0.5) transparent;
-        }
-
-        .description-text::-webkit-scrollbar {
-            width: 6px;
-        }
-
-        .description-text::-webkit-scrollbar-track {
-            background: transparent;
-        }
-
-        .description-text::-webkit-scrollbar-thumb {
-            background-color: rgba(156, 163, 175, 0.5);
-            border-radius: 3px;
-        }
-
-        .description-text::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(156, 163, 175, 0.7);
-        }
-
-        .dark-theme .description-text::-webkit-scrollbar-thumb {
-            background-color: rgba(71, 85, 105, 0.5);
-        }
-
-        .dark-theme .description-text::-webkit-scrollbar-thumb:hover {
-            background-color: rgba(71, 85, 105, 0.7);
+            display: -webkit-box;
+            -webkit-line-clamp: 4;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
         }
     </style>
 </head>
@@ -1042,6 +1170,25 @@
                                     <i class="fas fa-th"></i>
                                 </button>
                             </div>
+                            <div class="flex items-center gap-2 mr-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Görsel oranı:</span>
+                                <select id="posterAspectSelectSeries" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="aspect-[2/3]">Dikey 2:3</option>
+                                    <option value="aspect-video">Yatay 16:9</option>
+                                    <option value="aspect-square">Kare 1:1</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2 mr-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Yerleşim:</span>
+                                <select id="layoutModeSelectSeries" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="grid">Grid</option>
+                                    <option value="masonry">Masonry</option>
+                                </select>
+                                <div class="layout-toggle ml-2">
+                                    <button id="layoutToggleGridSeries" class="layout-toggle-btn" data-mode="grid"><i class="fas fa-th mr-1"></i> Grid</button>
+                                    <button id="layoutToggleMasonrySeries" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
+                                </div>
+                            </div>
                             <button id="addSeriesBtn" class="btn btn-primary">
                                 <i class="fas fa-plus mr-2"></i> Yeni Dizi
                             </button>
@@ -1133,6 +1280,25 @@
                                 <button class="view-button" id="view3ColMovies" data-view="3">
                                     <i class="fas fa-th"></i>
                                 </button>
+                            </div>
+                            <div class="flex items-center gap-2 mr-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Görsel oranı:</span>
+                                <select id="posterAspectSelectMovies" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="aspect-[2/3]">Dikey 2:3</option>
+                                    <option value="aspect-video">Yatay 16:9</option>
+                                    <option value="aspect-square">Kare 1:1</option>
+                                </select>
+                            </div>
+                            <div class="flex items-center gap-2 mr-2">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Yerleşim:</span>
+                                <select id="layoutModeSelectMovies" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                    <option value="grid">Grid</option>
+                                    <option value="masonry">Masonry</option>
+                                </select>
+                                <div class="layout-toggle ml-2">
+                                    <button id="layoutToggleGridMovies" class="layout-toggle-btn" data-mode="grid"><i class="fas fa-th mr-1"></i> Grid</button>
+                                    <button id="layoutToggleMasonryMovies" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
+                                </div>
                             </div>
                             <button id="addMovieBtn" class="btn btn-primary">
                                 <i class="fas fa-plus mr-2"></i> Yeni Film
@@ -1548,6 +1714,10 @@
         let currentSeriesCategory = null;
         let currentMoviesCategory = null;
         let seriesView = '3';
+        // Görsel oranı: Tailwind aspect-ratio class
+        let posterAspect = localStorage.getItem('posterAspect') || 'aspect-[2/3]';
+        // Kart yerleşimi modu: 'grid' veya 'masonry'
+        let layoutMode = localStorage.getItem('layoutMode') || 'masonry';
 
         // --- Sync helpers (P2P) ---
 
@@ -1885,7 +2055,9 @@
             const groupedSeries = groupSeriesByName(filteredSeriesData);
 
             // Update grid view
-            seriesList.className = `grid gap-6 grid-${seriesView}-col`;
+        seriesList.className = layoutMode === 'masonry'
+            ? `masonry masonry-${seriesView}-col`
+            : `grid gap-6 grid-${seriesView}-col`;
 
             seriesList.innerHTML = groupedSeries.map(series => {
                 // Get overall status based on all seasons
@@ -1957,12 +2129,17 @@
                 }).join('');
 
                 return `
-                    <div class="series-card card p-6 relative">
-                        ${series.imageUrl ? `<div class="mb-4"><img src="${series.imageUrl}" alt="${series.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
+        <div class="series-card card p-6 relative masonry-item">
+        ${series.imageUrl ? `<div class="mb-4 ${posterAspect} poster-wrapper">
+                            <span class="poster-badge status-badge ${status}">${getStatusText(status)}</span>
+                            <img src="${series.imageUrl}" alt="${series.name}" class="w-full h-full object-cover" onerror="handleImageError(this)">
+                            <div class="poster-overlay"></div>
+                            <div class="poster-info"><span class="title">${series.name}</span>${series.imdbRating ? `<span class="meta"><i class="fas fa-star text-yellow-400"></i> ${series.imdbRating}</span>` : ''}</div>
+                        </div>` : `<div class="mb-4 ${posterAspect} poster-wrapper flex items-center justify-center bg-slate-200 dark:bg-slate-700"><i class="fa-solid fa-image text-slate-500 dark:text-slate-300 text-3xl"></i></div>`}
                         <div class="mb-4">
                             <div class="flex justify-between items-start mb-2">
                                 <div class="flex items-center space-x-2">
-                                    <h3 class="text-xl font-bold">${series.name}</h3>
+        <h3 class="text-xl card-title">${series.name}</h3>
                                     ${series.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${series.trailerUrl}" data-title="${series.name}">
                                         <i class="fab fa-youtube"></i> Fragman
                                     </button>` : ''}
@@ -2163,7 +2340,9 @@
             moviesEmpty.classList.add('hidden');
 
             // Update grid view
-            moviesList.className = `grid gap-6 grid-${moviesView}-col`;
+        moviesList.className = layoutMode === 'masonry'
+            ? `masonry masonry-${moviesView}-col`
+            : `grid gap-6 grid-${moviesView}-col`;
 
             moviesList.innerHTML = filteredMoviesData.map(movie => {
                 // Kategori badge'leri
@@ -2183,12 +2362,17 @@
                     : '';
 
                 return `
-                    <div class="movie-card card p-6 relative">
-                        ${movie.imageUrl ? `<div class="mb-4"><img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-48 object-cover rounded-lg" onerror="handleImageError(this)"></div>` : ''}
+        <div class="movie-card card p-6 relative masonry-item">
+        ${movie.imageUrl ? `<div class="mb-4 ${posterAspect} poster-wrapper">
+                            <span class="poster-badge status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
+                            <img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-full object-cover" onerror="handleImageError(this)">
+                            <div class="poster-overlay"></div>
+                            <div class="poster-info"><span class="title">${movie.name}</span>${movie.imdbRating ? `<span class="meta"><i class="fas fa-star text-yellow-400"></i> ${movie.imdbRating}</span>` : ''}</div>
+                        </div>` : `<div class="mb-4 ${posterAspect} poster-wrapper flex items-center justify-center bg-slate-200 dark:bg-slate-700"><i class="fa-solid fa-image text-slate-500 dark:text-slate-300 text-3xl"></i></div>`}
                         <div class="mb-4">
                             <div class="flex justify-between items-start mb-2">
                                 <div class="flex items-center space-x-2">
-                                    <h3 class="text-xl font-bold">${movie.name}</h3>
+        <h3 class="text-xl card-title">${movie.name}</h3>
                                     ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${movie.trailerUrl}" data-title="${movie.name}">
                                         <i class="fab fa-youtube"></i> Fragman
                                     </button>` : ''}
@@ -2868,23 +3052,59 @@
             // Clear existing
             optionsEl.innerHTML = '';
 
-            tagsData.forEach(tag => {
+            // Build unified suggestion set from global tags and existing series/movies
+            const suggestionSet = new Set();
+            // Global tags defined in Tags tab
+            if (Array.isArray(tagsData) && tagsData.length > 0) {
+                tagsData.forEach(t => {
+                    if (t && typeof t.name === 'string' && t.name.trim() !== '') {
+                        suggestionSet.add(t.name.trim());
+                    }
+                });
+            }
+            // Tags from existing series
+            if (Array.isArray(seriesData) && seriesData.length > 0) {
+                seriesData.forEach(s => {
+                    if (s && Array.isArray(s.tags)) {
+                        s.tags.forEach(tag => {
+                            if (typeof tag === 'string' && tag.trim() !== '') {
+                                suggestionSet.add(tag.trim());
+                            }
+                        });
+                    }
+                });
+            }
+            // Tags from existing movies
+            if (Array.isArray(moviesData) && moviesData.length > 0) {
+                moviesData.forEach(m => {
+                    if (m && Array.isArray(m.tags)) {
+                        m.tags.forEach(tag => {
+                            if (typeof tag === 'string' && tag.trim() !== '') {
+                                suggestionSet.add(tag.trim());
+                            }
+                        });
+                    }
+                });
+            }
+
+            // Render suggestion chips (sorted for consistency)
+            Array.from(suggestionSet).sort((a, b) => a.localeCompare(b, 'tr')).forEach(tagName => {
                 const chip = document.createElement('span');
                 chip.className = 'tag';
-                chip.textContent = tag.name;
-                chip.setAttribute('data-tag', tag.name);
+                chip.textContent = tagName;
+                chip.setAttribute('data-tag', tagName);
 
                 chip.addEventListener('click', function (e) {
                     e.stopPropagation();
                     const container = document.getElementById(targetContainerId);
                     // If already selected (there's a .tag with same text), remove it
-                    const exists = Array.from(container.querySelectorAll('.tag')).some(t => t.firstChild && t.firstChild.textContent === tag.name);
+                    const exists = Array.from(container.querySelectorAll('.tag')).some(t => t.firstChild && t.firstChild.textContent === tagName);
                     if (exists) {
                         // remove first matching tag element (ignore delete button text)
-                        const toRemove = Array.from(container.querySelectorAll('.tag')).find(t => t.firstChild && t.firstChild.textContent === tag.name);
+                        const toRemove = Array.from(container.querySelectorAll('.tag')).find(t => t.firstChild && t.firstChild.textContent === tagName);
                         if (toRemove) container.removeChild(toRemove);
                     } else {
-                        const tagEl = createTagElement(tag.name, container, false);
+                        const tagEl = createTagElement(tagName, container, false);
                         // Insert before input if present
                         const input = container.querySelector('.tag-input');
                         if (input) container.insertBefore(tagEl, input);
@@ -3780,6 +4000,101 @@
                 }
             });
         });
+
+        // Poster aspect ratio selectors
+        const posterAspectSelectSeries = document.getElementById('posterAspectSelectSeries');
+        const posterAspectSelectMovies = document.getElementById('posterAspectSelectMovies');
+        const layoutModeSelectSeries = document.getElementById('layoutModeSelectSeries');
+        const layoutModeSelectMovies = document.getElementById('layoutModeSelectMovies');
+
+        function syncPosterAspectSelects(value) {
+            if (posterAspectSelectSeries) posterAspectSelectSeries.value = value;
+            if (posterAspectSelectMovies) posterAspectSelectMovies.value = value;
+        }
+
+        function syncLayoutModeSelects(value) {
+            if (layoutModeSelectSeries) layoutModeSelectSeries.value = value;
+            if (layoutModeSelectMovies) layoutModeSelectMovies.value = value;
+        }
+
+        // Initialize selects with current value
+        syncPosterAspectSelects(posterAspect);
+        syncLayoutModeSelects(layoutMode);
+
+        function handleLayoutModeChange(value) {
+            layoutMode = value;
+            localStorage.setItem('layoutMode', layoutMode);
+            syncLayoutModeSelects(layoutMode);
+            syncLayoutToggleActive(layoutMode);
+            renderSeriesList();
+            renderMoviesList();
+        }
+
+        function handlePosterAspectChange(value, context) {
+            posterAspect = value;
+            localStorage.setItem('posterAspect', posterAspect);
+            // Re-render lists; prefer current visible tab if context known
+            if (context === 'series') {
+                renderSeriesList();
+            } else if (context === 'movies') {
+                renderMoviesList();
+            } else {
+                // Fallback: render both
+                renderSeriesList();
+                renderMoviesList();
+            }
+            // Keep both selects in sync
+            syncPosterAspectSelects(posterAspect);
+        }
+
+        if (posterAspectSelectSeries) {
+            posterAspectSelectSeries.addEventListener('change', function () {
+                handlePosterAspectChange(this.value, 'series');
+            });
+        }
+
+        if (posterAspectSelectMovies) {
+            posterAspectSelectMovies.addEventListener('change', function () {
+                handlePosterAspectChange(this.value, 'movies');
+            });
+        }
+
+        if (layoutModeSelectSeries) {
+            layoutModeSelectSeries.addEventListener('change', function () {
+                handleLayoutModeChange(this.value);
+            });
+        }
+
+        if (layoutModeSelectMovies) {
+            layoutModeSelectMovies.addEventListener('change', function () {
+                handleLayoutModeChange(this.value);
+            });
+        }
+
+        // Yerleşim toggle butonları
+        const layoutToggleGridSeries = document.getElementById('layoutToggleGridSeries');
+        const layoutToggleMasonrySeries = document.getElementById('layoutToggleMasonrySeries');
+        const layoutToggleGridMovies = document.getElementById('layoutToggleGridMovies');
+        const layoutToggleMasonryMovies = document.getElementById('layoutToggleMasonryMovies');
+
+        function syncLayoutToggleActive(value) {
+            const setActive = (gridBtn, masonryBtn) => {
+                if (!gridBtn || !masonryBtn) return;
+                gridBtn.classList.toggle('active', value === 'grid');
+                masonryBtn.classList.toggle('active', value === 'masonry');
+            };
+            setActive(layoutToggleGridSeries, layoutToggleMasonrySeries);
+            setActive(layoutToggleGridMovies, layoutToggleMasonryMovies);
+        }
+
+        // İlk aktif durumu ayarla
+        syncLayoutToggleActive(layoutMode);
+
+        // Toggle click olayları
+        if (layoutToggleGridSeries) layoutToggleGridSeries.addEventListener('click', () => handleLayoutModeChange('grid'));
+        if (layoutToggleMasonrySeries) layoutToggleMasonrySeries.addEventListener('click', () => handleLayoutModeChange('masonry'));
+        if (layoutToggleGridMovies) layoutToggleGridMovies.addEventListener('click', () => handleLayoutModeChange('grid'));
+        if (layoutToggleMasonryMovies) layoutToggleMasonryMovies.addEventListener('click', () => handleLayoutModeChange('masonry'));
 
         // Sorting functions
         function sortSeries(sortType) {
