@@ -1121,6 +1121,17 @@
                             <p class="text-purple-100 text-xs">Film</p>
                         </div>
                     </div>
+                    <!-- Sade özet satırları -->
+                    <div class="space-y-1 mb-2">
+                        <p class="text-purple-100 text-xs">
+                            <span class="text-white font-semibold">Filmler:</span>
+                            <span id="moviesStatusSummary">İzlenen 0 / İzlenmeyen 0</span>
+                        </p>
+                        <p class="text-purple-100 text-xs">
+                            <span class="text-white font-semibold">Diziler:</span>
+                            <span id="seriesStatusSummary">Tamamlanan 0 / İzlenen 0 / Planlanan 0</span>
+                        </p>
+                    </div>
                     <div class="border-t border-white/20 pt-2">
                         <div class="text-2xl font-bold text-white mb-1" id="totalStats">0</div>
                         <p class="text-purple-100 text-sm">Toplam İçerik</p>
@@ -1859,6 +1870,8 @@
         const qrContainer = document.getElementById('qrContainer');
         const seriesStats = document.getElementById('seriesStats');
         const moviesStats = document.getElementById('moviesStats');
+        const moviesStatusSummary = document.getElementById('moviesStatusSummary');
+        const seriesStatusSummary = document.getElementById('seriesStatusSummary');
         const addSeriesBtn = document.getElementById('addSeriesBtn');
         const addSeriesBtnEmpty = document.getElementById('addSeriesBtnEmpty');
         const addMovieBtn = document.getElementById('addMovieBtn');
@@ -2005,10 +2018,38 @@
             const seriesCount = seriesData.length;
             const moviesCount = moviesData.length;
             const total = seriesCount + moviesCount;
-            
+
+            // Toplam içerik sayıları
             seriesStats.textContent = seriesCount;
             moviesStats.textContent = moviesCount;
             totalStats.textContent = total;
+
+            // Film istatistikleri: izlendi / izlenmedi (özet satırı)
+            const watchedMovies = moviesData.filter(m => m.watched).length;
+            const unwatchedMovies = moviesCount - watchedMovies;
+            if (moviesStatusSummary) {
+                moviesStatusSummary.textContent = `İzlenen ${watchedMovies} / İzlenmeyen ${unwatchedMovies}`;
+            }
+
+            // Dizi istatistikleri: tamamlanan / izleniyor / planlanan (özet satırı, dizi bazında)
+            const seriesNames = Array.from(new Set(seriesData.map(s => s.name)));
+            let completed = 0, watching = 0, planning = 0;
+            seriesNames.forEach(name => {
+                const seasons = seriesData.filter(s => s.name === name);
+                const totalEpisodes = seasons.reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
+                const watchedEpisodes = seasons.reduce((sum, s) => sum + (s.watchedEpisodes || 0), 0);
+                const status = totalEpisodes > 0 && watchedEpisodes === totalEpisodes
+                    ? 'completed'
+                    : watchedEpisodes > 0
+                        ? 'watching'
+                        : 'planning';
+                if (status === 'completed') completed++;
+                else if (status === 'watching') watching++;
+                else planning++;
+            });
+            if (seriesStatusSummary) {
+                seriesStatusSummary.textContent = `Tamamlanan ${completed} / İzlenen ${watching} / Planlanan ${planning}`;
+            }
         }
 
         // Render series list
