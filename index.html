@@ -1897,6 +1897,12 @@
             updateSeriesTagCloud();
             updateMoviesTagCloud();
 
+            // Varsayılan sıralamayı uygula
+            const seriesSortSelect = document.getElementById('seriesSortSelect');
+            const moviesSortSelect = document.getElementById('moviesSortSelect');
+            if (seriesSortSelect) sortSeries(seriesSortSelect.value);
+            if (moviesSortSelect) sortMovies(moviesSortSelect.value);
+
             // Initialize tag inputs
             initTagInput('seriesTagsInput', 'seriesTagsContainer');
             initTagInput('movieTagsInput', 'movieTagsContainer');
@@ -2741,7 +2747,13 @@
                 return matchesSearch && matchesFilter;
             });
 
-            renderSeriesList();
+            // Mevcut seçime göre sıralamayı uygula
+            const seriesSortSelect = document.getElementById('seriesSortSelect');
+            if (seriesSortSelect) {
+                sortSeries(seriesSortSelect.value);
+            } else {
+                renderSeriesList();
+            }
         }
 
         // Filter movies
@@ -2770,7 +2782,13 @@
                 return matchesSearch && matchesFilter;
             });
 
-            renderMoviesList();
+            // Mevcut seçime göre sıralamayı uygula
+            const moviesSortSelect = document.getElementById('moviesSortSelect');
+            if (moviesSortSelect) {
+                sortMovies(moviesSortSelect.value);
+            } else {
+                renderMoviesList();
+            }
         }
 
         // Add new series
@@ -4188,7 +4206,7 @@
 
         // Sort event listeners
         document.getElementById('seriesSortSelect').addEventListener('change', function() {
-            sortSeries(this.value);
+            sortSeries(this.value );
         });
 
         document.getElementById('moviesSortSelect').addEventListener('change', function() {
