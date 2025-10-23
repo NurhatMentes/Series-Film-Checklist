@@ -18,6 +18,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - **IMDB puanı ekleme** (1-10 arası)
 - **Dizi açıklaması** ve detaylı bilgiler
 - **Resim linki** ile görsel zenginleştirme
+- **Çıkış tarihi rozeti** - Yayın durumunu görsel olarak takip edin
 - YouTube fragman linki entegrasyonu
 - Tüm sezonları tek bir kartta görüntüleyin
 - Sezon detaylarını aç/kapa ile görüntüleyin
@@ -28,6 +29,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - **IMDB puanı ekleme** (1-10 arası)
 - **Film açıklaması** ve detaylı bilgiler
 - **Resim linki** ile görsel zenginleştirme
+- **Çıkış tarihi rozeti** - Vizyona giriş durumunu görsel olarak takip edin
 - YouTube fragman linki entegrasyonu
 - "İzlendi" işaretleyici ile durum takibi
 - İzleme tarihini otomatik kaydetme
@@ -58,11 +60,13 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - Sezon numarası
 - Toplam bölüm sayısı
 - Platform (isteğe bağlı)
+- Çıkış tarihi (isteğe bağlı) - Yayın durumu rozetini görüntülemek için
 - Şu ana kadar izlenen bölüm sayısı
 
 ### 🎞️ Film Ekleme
 - Film adı
 - Tür (Aksiyon, Dram, Komedi vb.)
+- Çıkış tarihi (isteğe bağlı) - Vizyona giriş durumu rozetini görüntülemek için
 - "İzlendi" onay kutusu
 
 ### 🔍 Filtreleme
@@ -79,6 +83,17 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 
 ### 🌙 Tema Değiştirme
 Sağ üst köşedeki ay/güneş simgesine tıklayarak karanlık veya aydınlık temayı seçebilirsiniz.
+
+### 🏷️ Çıkış Tarihi Rozetleri
+Dizi ve filmlerinize çıkış tarihi eklediğinizde, otomatik olarak durumu gösteren renkli rozetler görüntülenir:
+
+- 🟢 **Yayında/Vizyonda** - İçerik şu anda yayında (yeşil + nabız animasyonu)
+- 🟡 **Bugün Çıkıyor** - İçerik bugün yayınlanıyor (turuncu + parlama animasyonu)
+- 🔴 **1-7 gün içinde** - Yakında çıkacak (kırmızı rozet)
+- 🔵 **8-30 gün içinde** - Orta vadede çıkacak (mavi rozet)
+- ⚫ **30+ gün sonra** - Uzak gelecekte çıkacak (gri rozet)
+
+Rozetler, içeriğinizin durumunu bir bakışta anlamanızı sağlar ve hangi içeriklerin ne zaman çıkacağını kolayca takip edebilirsiniz.
 
 ## Veri Güvenliği
 
@@ -100,26 +115,34 @@ Sağ üst köşedeki ay/güneş simgesine tıklayarak karanlık veya aydınlık 
 | ❌ | İnternet kesilirse | Etkilenmez, offline çalışır |
 | ❌ | Sunucu sorunu | Etkilenmez, yerel depolama kullanır |
 
-## Son Güncellemeler (v1.2.0)
+## Son Güncellemeler (v1.3.0)
 
 ### 🆕 Yeni Özellikler
+- **Çıkış Tarihi Rozetleri**: Dizi ve filmlerinize çıkış tarihi ekleyerek otomatik durum rozetleri görüntüleyin
+- **Dinamik Durum Gösterimi**: 5 farklı rozet türü ile yayın/vizyona giriş durumunu takip edin
+- **Animasyonlu Rozetler**: Yayında olan içerikler için nabız animasyonu, bugün çıkanlar için parlama efekti
+- **Akıllı Tarih Hesaplama**: Günlere göre otomatik renk kodlaması (yeşil, turuncu, kırmızı, mavi, gri)
+
+### 🔧 Teknik İyileştirmeler
+- Çıkış tarihi alanı dizi ve film formlarına eklendi
+- `groupSeriesByName` fonksiyonu çıkış tarihi verilerini koruyacak şekilde güncellendi
+- CSS animasyonları ve rozet stilleri eklendi
+- Tarih hesaplama algoritması optimize edildi
+
+### 📱 Kullanıcı Deneyimi
+- Bir bakışta içerik durumu görünürlüğü
+- Hangi içeriklerin ne zaman çıkacağını kolayca takip etme
+- Görsel olarak zenginleştirilmiş kart görünümü
+- Daha iyi içerik organizasyonu
+
+## Önceki Güncellemeler (v1.2.0)
+
+### 🆕 Özellikler
 - **IMDB Puanı**: Dizi ve filmlerinize 1-10 arası puan verebilirsiniz
 - **Açıklama Alanı**: Her içerik için detaylı açıklama ekleyebilirsiniz
 - **Resim Linki**: Poster veya kapak resmi URL'si ekleyebilirsiniz
 - **Görsel Kartlar**: Resim eklenmiş içerikler artık kartlarda görüntülenir
 - **Yıldız Puanı**: IMDB puanları sarı yıldız ikonu ile gösterilir
-
-### 🔧 Teknik İyileştirmeler
-- Form validasyonları güncellendi
-- Dizi ve film düzenleme fonksiyonları yeni alanları destekliyor
-- Responsive tasarım korundu
-- Mevcut veriler etkilenmeden yeni alanlar eklendi
-
-### 📱 Kullanıcı Deneyimi
-- Kartlarda daha zengin görsel içerik
-- IMDB puanı ile hızlı kalite değerlendirmesi
-- Açıklama ile içerik hakkında daha fazla bilgi
-- Resim ile görsel tanıma kolaylığı
 
 ## Kurulum
 
