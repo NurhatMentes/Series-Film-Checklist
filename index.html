@@ -1425,6 +1425,11 @@
                                 <i class="fas fa-plus mr-2"></i> Etiket Ekle
                             </button>
                         </div>
+                        <div class="form-group flex items-end">
+                            <button id="promoteAllTagsBtn" class="btn btn-secondary w-full">
+                                <i class="fas fa-arrow-up mr-2"></i> Tümünü Global Yap
+                            </button>
+                        </div>
                     </div>
                 </div>
 
@@ -2584,14 +2589,19 @@
         // Render categories list
         function renderCategoriesList() {
             categoriesList.innerHTML = categoriesData.map(category => `
-                <div class="card p-4 flex items-center justify-between">
+                <div class="card p-4 flex items-center justify-between category-card" data-id="${category.id}">
                     <div class="flex items-center">
                         <span class="w-4 h-4 rounded-full mr-3" style="background-color: ${category.color}"></span>
                         <span class="font-medium">${category.name}</span>
                     </div>
-                    <button class="text-red-500 hover:text-red-700 delete-category" data-id="${category.id}">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="flex items-center gap-3">
+                        <button class="text-blue-600 hover:text-blue-800 edit-category" data-id="${category.id}">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="text-red-500 hover:text-red-700 delete-category" data-id="${category.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             `).join('');
 
@@ -2602,27 +2612,246 @@
                     deleteCategory(id);
                 });
             });
+
+            // Add event listeners for edit buttons
+            document.querySelectorAll('.edit-category').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const id = parseInt(this.getAttribute('data-id'));
+                    startEditCategory(id);
+                });
+            });
         }
 
         // Render tags list
         function renderTagsList() {
             const tagsList = document.getElementById('tagsList');
-            tagsList.innerHTML = tagsData.map(tag => `
-                <div class="card p-4 flex items-center justify-between">
-                    <span class="font-medium">${tag.name}</span>
-                    <button class="text-red-500 hover:text-red-700 delete-tag" data-id="${tag.id}">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            `).join('');
+            if (!tagsList) return;
 
-            // Add event listeners for delete buttons
+            // Birleştirilmiş etiket kümesi: global tagsData + içeriklerdeki etiketler
+            const suggestionSet = new Set();
+
+            if (Array.isArray(tagsData) && tagsData.length > 0) {
+                tagsData.forEach(t => {
+                    if (t && typeof t.name === 'string' && t.name.trim() !== '') {
+                        suggestionSet.add(t.name.trim());
+                    }
+                });
+            }
+            if (Array.isArray(seriesData) && seriesData.length > 0) {
+                seriesData.forEach(s => {
+                    if (s && Array.isArray(s.tags)) {
+                        s.tags.forEach(tag => {
+                            if (typeof tag === 'string' && tag.trim() !== '') {
+                                suggestionSet.add(tag.trim());
+                            }
+                        });
+                    }
+                });
+            }
+            if (Array.isArray(moviesData) && moviesData.length > 0) {
+                moviesData.forEach(m => {
+                    if (m && Array.isArray(m.tags)) {
+                        m.tags.forEach(tag => {
+                            if (typeof tag === 'string' && tag.trim() !== '') {
+                                suggestionSet.add(tag.trim());
+                            }
+                        });
+                    }
+                });
+            }
+
+            tagsList.innerHTML = Array.from(suggestionSet)
+                .sort((a, b) => a.localeCompare(b, 'tr'))
+                .map(name => {
+                    const tagObj = tagsData.find(t => t && t.name === name);
+                    const idAttr = tagObj ? `data-id="${tagObj.id}"` : '';
+                    const deleteBtn = tagObj ? `
+                        <button class="text-red-500 hover:text-red-700 delete-tag" data-id="${tagObj.id}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    ` : '';
+                    return `
+                        <div class="card p-4 flex items-center justify-between">
+                            <span class="font-medium">${name}</span>
+                            <div class="flex items-center gap-3">
+                                <button class="text-blue-600 hover:text-blue-800 edit-tag" ${idAttr} data-name="${name}">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                ${deleteBtn}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+            // Edit ve delete eventleri
+            document.querySelectorAll('.edit-tag').forEach(btn => {
+                btn.addEventListener('click', function () {
+                    const oldName = this.getAttribute('data-name');
+                    const idVal = this.getAttribute('data-id');
+                    const newName = prompt('Yeni etiket adı:', oldName);
+                    if (newName === null) return;
+                    const trimmed = newName.trim();
+                    if (!trimmed) { alert('Etiket adı boş olamaz.'); return; }
+                    if (trimmed === oldName) return;
+
+                    if (idVal) {
+                        editTag(parseInt(idVal, 10), oldName, trimmed);
+                    } else {
+                        editTagByName(oldName, trimmed);
+                    }
+                });
+            });
+
             document.querySelectorAll('.delete-tag').forEach(btn => {
                 btn.addEventListener('click', function () {
                     const id = parseInt(this.getAttribute('data-id'));
                     deleteTag(id);
                 });
             });
+        }
+
+        // Etiket düzenle (ID ile)
+        function editTag(id, oldName, newName) {
+            const idx = tagsData.findIndex(t => t.id === id);
+            if (idx === -1) return;
+
+            const duplicate = tagsData.find(t => t.name === newName && t.id !== id);
+            if (duplicate) {
+                const proceed = confirm('Aynı isimde başka bir etiket var. Birleştirilsin mi?');
+                if (!proceed) return;
+                // Eski kayıt silinir, yeni isim zaten mevcut
+                tagsData.splice(idx, 1);
+            } else {
+                tagsData[idx].name = newName;
+            }
+
+            renameTagInCollections(oldName, newName);
+
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+            renderTagsList();
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            filterSeries();
+            filterMovies();
+        }
+
+        // Etiket düzenle (sadece isim ile - global liste yoksa)
+        function editTagByName(oldName, newName) {
+            const found = tagsData.find(t => t.name === oldName);
+            const duplicate = tagsData.find(t => t.name === newName);
+
+            if (found) {
+                if (!duplicate || duplicate.id === found.id) {
+                    found.name = newName;
+                } else {
+                    // Duplicate mevcutsa, eskiyi kaldır
+                    tagsData = tagsData.filter(t => t.id !== found.id);
+                }
+            } else {
+                if (!duplicate) {
+                    const newId = tagsData.length > 0 ? Math.max(...tagsData.map(t => t.id)) + 1 : 1;
+                    tagsData.push({ id: newId, name: newName });
+                }
+            }
+
+            renameTagInCollections(oldName, newName);
+
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+            renderTagsList();
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            filterSeries();
+            filterMovies();
+        }
+
+        // Koleksiyonlarda etiket adını değiştir
+        function renameTagInCollections(oldName, newName) {
+            seriesData.forEach(s => {
+                if (Array.isArray(s.tags)) {
+                    s.tags = s.tags.map(tag => tag === oldName ? newName : tag);
+                    s.tags = Array.from(new Set(s.tags));
+                }
+            });
+            moviesData.forEach(m => {
+                if (Array.isArray(m.tags)) {
+                    m.tags = m.tags.map(tag => tag === oldName ? newName : tag);
+                    m.tags = Array.from(new Set(m.tags));
+                }
+            });
+        }
+
+        // Tüm mevcut etiketleri global etiketlere dönüştür
+        function promoteAllTags() {
+            const namesSet = new Set();
+            // Global tags
+            if (Array.isArray(tagsData)) {
+                tagsData.forEach(t => {
+                    if (t && typeof t.name === 'string') {
+                        const n = t.name.trim();
+                        if (n) namesSet.add(n);
+                    }
+                });
+            }
+            // Series tags
+            if (Array.isArray(seriesData)) {
+                seriesData.forEach(s => {
+                    if (Array.isArray(s.tags)) {
+                        s.tags.forEach(tag => {
+                            if (typeof tag === 'string') {
+                                const n = tag.trim();
+                                if (n) namesSet.add(n);
+                            }
+                        });
+                    }
+                });
+            }
+            // Movies tags
+            if (Array.isArray(moviesData)) {
+                moviesData.forEach(m => {
+                    if (Array.isArray(m.tags)) {
+                        m.tags.forEach(tag => {
+                            if (typeof tag === 'string') {
+                                const n = tag.trim();
+                                if (n) namesSet.add(n);
+                            }
+                        });
+                    }
+                });
+            }
+
+            const existingNames = new Set(Array.isArray(tagsData) ? tagsData.map(t => t.name) : []);
+            let maxId = (Array.isArray(tagsData) && tagsData.length > 0) ? Math.max(...tagsData.map(t => t.id)) : 0;
+            let addedCount = 0;
+
+            Array.from(namesSet).sort((a, b) => a.localeCompare(b, 'tr')).forEach(name => {
+                if (!existingNames.has(name)) {
+                    maxId += 1;
+                    tagsData.push({ id: maxId, name });
+                    addedCount++;
+                }
+            });
+
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+            renderTagsList();
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            filterSeries();
+            filterMovies();
+
+            alert(addedCount > 0 ? ('Tüm etiketler global hale getirildi (' + addedCount + ' yeni).') : 'Tüm etiketler zaten global.');
         }
 
         // Update series category selector
@@ -3197,6 +3426,123 @@
             renderCategoryFilters();
         }
 
+        // Edit category (name and color)
+        function editCategory(id) {
+            const category = categoriesData.find(c => c.id === id);
+            if (!category) {
+                alert('Kategori bulunamadı.');
+                return;
+            }
+
+            const newName = prompt('Yeni kategori adını girin:', category.name);
+            if (newName === null) return; // Kullanıcı iptal etti
+            const trimmedName = newName.trim();
+            if (!trimmedName) {
+                alert('Kategori adı boş olamaz.');
+                return;
+            }
+
+            const newColor = prompt('Yeni kategori rengini girin (#RRGGBB):', category.color);
+            if (newColor === null) return; // Kullanıcı iptal etti
+            const colorTrimmed = newColor.trim();
+            const hexRegex = /^#([0-9A-Fa-f]{6})$/;
+            if (!hexRegex.test(colorTrimmed)) {
+                alert('Lütfen #RRGGBB formatında geçerli bir renk girin.');
+                return;
+            }
+
+            category.name = trimmedName;
+            category.color = colorTrimmed;
+
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+            // UI ve bağlı bileşenleri güncelle
+            renderCategoriesList();
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            renderCategoryFilters();
+            // İçerik kartlarındaki rozetleri güncellemek için listeleri yeniden çiz
+            if (typeof renderSeriesList === 'function') renderSeriesList();
+            if (typeof renderMoviesList === 'function') renderMoviesList();
+        }
+
+        // Inline edit: start and save functions
+        function startEditCategory(id) {
+            const category = categoriesData.find(c => c.id === id);
+            const card = document.querySelector(`#categoriesList .category-card[data-id="${id}"]`);
+            if (!category || !card) return;
+
+            card.innerHTML = `
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+                    <div class="form-group">
+                        <label for="editCategoryName_${id}">Kategori Adı</label>
+                        <input type="text" id="editCategoryName_${id}" class="form-control" value="${category.name}" placeholder="Kategori adı">
+                    </div>
+                    <div class="form-group">
+                        <label for="editCategoryColor_${id}">Renk</label>
+                        <input type="color" id="editCategoryColor_${id}" class="form-control color-picker" value="${category.color}">
+                    </div>
+                    <div class="form-group flex items-end gap-2">
+                        <button class="btn btn-primary save-category" data-id="${id}">
+                            <i class="fas fa-save mr-2"></i> Kaydet
+                        </button>
+                        <button class="btn btn-secondary cancel-category" data-id="${id}">İptal</button>
+                    </div>
+                </div>
+            `;
+
+            const saveBtn = card.querySelector('.save-category');
+            const cancelBtn = card.querySelector('.cancel-category');
+            if (saveBtn) {
+                saveBtn.addEventListener('click', function () {
+                    const id = parseInt(this.getAttribute('data-id'));
+                    saveCategoryEdit(id);
+                });
+            }
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', function () {
+                    renderCategoriesList();
+                });
+            }
+        }
+
+        function saveCategoryEdit(id) {
+            const nameInput = document.getElementById(`editCategoryName_${id}`);
+            const colorInput = document.getElementById(`editCategoryColor_${id}`);
+            const name = nameInput ? nameInput.value.trim() : '';
+            const color = colorInput ? colorInput.value : '';
+
+            if (!name) {
+                alert('Kategori adı boş olamaz.');
+                return;
+            }
+
+            const hexRegex = /^#([0-9A-Fa-f]{6})$/;
+            if (!hexRegex.test(color)) {
+                alert('Lütfen #RRGGBB formatında geçerli bir renk girin.');
+                return;
+            }
+
+            const category = categoriesData.find(c => c.id === id);
+            if (!category) {
+                alert('Kategori bulunamadı.');
+                return;
+            }
+
+            category.name = name;
+            category.color = color;
+
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+            // UI güncellemeleri
+            renderCategoriesList();
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            renderCategoryFilters();
+            if (typeof renderSeriesList === 'function') renderSeriesList();
+            if (typeof renderMoviesList === 'function') renderMoviesList();
+        }
+
         // Delete category
         function deleteCategory(id) {
             if (confirm('Bu kategoriyi silmek istediğinize emin misiniz? Bu kategoriye sahip tüm içeriklerden bu kategori kaldırılacak.')) {
@@ -3258,15 +3604,50 @@
             renderTagOptions('movieTagOptions', 'movieTagsContainer');
         }
 
-        // Delete tag
+        // Delete tag (remove from global and all series/movies)
         function deleteTag(id) {
-            if (confirm('Bu etiketi silmek istediğinize emin misiniz?')) {
-                tagsData = tagsData.filter(t => t.id !== id);
-                localStorage.setItem('tagsData', JSON.stringify(tagsData));
-                renderTagsList();
-                renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
-                renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            const tagObj = tagsData.find(t => t.id === id);
+            const tagName = tagObj ? tagObj.name : null;
+            if (!tagName) {
+                if (!confirm('Global listede bulunamadı. Yine de tüm içerikten silinsin mi?')) return;
+            } else {
+                if (!confirm('Bu etiket global listeden ve tüm dizi/film içeriklerinden silinecek. Emin misiniz?')) return;
             }
+
+            // Remove from global list
+            tagsData = tagsData.filter(t => t.id !== id);
+
+            // Remove from series and movies
+            if (tagName) {
+                if (Array.isArray(seriesData)) {
+                    seriesData.forEach(s => {
+                        if (Array.isArray(s.tags)) {
+                            s.tags = s.tags.filter(tag => tag !== tagName);
+                        }
+                    });
+                }
+                if (Array.isArray(moviesData)) {
+                    moviesData.forEach(m => {
+                        if (Array.isArray(m.tags)) {
+                            m.tags = m.tags.filter(tag => tag !== tagName);
+                        }
+                    });
+                }
+            }
+
+            // Persist
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+            // Refresh UI
+            renderTagsList();
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            filterSeries();
+            filterMovies();
         }
 
         // Initialize tag input
@@ -3555,7 +3936,8 @@
             const data = {
                 series: seriesData,
                 movies: moviesData,
-                categories: categoriesData
+                categories: categoriesData,
+                tags: tagsData
             };
 
             const dataStr = JSON.stringify(data);
@@ -3582,10 +3964,12 @@
                     if (data.series) seriesData = data.series;
                     if (data.movies) moviesData = data.movies;
                     if (data.categories) categoriesData = data.categories;
+                    if (data.tags) tagsData = data.tags;
 
                     localStorage.setItem('seriesData', JSON.stringify(seriesData));
                     localStorage.setItem('moviesData', JSON.stringify(moviesData));
                     localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+                    localStorage.setItem('tagsData', JSON.stringify(tagsData));
 
                     initApp();
                     alert('Veriler başarıyla yüklendi!');
@@ -3650,6 +4034,7 @@
         addMovieBtnEmpty.addEventListener('click', addMovie);
         addCategoryBtn.addEventListener('click', addCategory);
         document.getElementById('addTagBtn').addEventListener('click', addTag);
+        document.getElementById('promoteAllTagsBtn').addEventListener('click', promoteAllTags);
         
         // Fragman butonları için event listener (event delegation kullanarak)
         document.addEventListener('click', function(e) {
