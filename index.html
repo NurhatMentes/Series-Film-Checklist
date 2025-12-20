@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>İzleme Takip Uygulaması</title>
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio,line-clamp"></script>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography,aspect-ratio"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
@@ -1167,6 +1167,9 @@
             <button id="tagsTab" class="tab-button px-6 py-3 font-medium text-white border-none">
                 <i class="fas fa-tag mr-2"></i> Etiketler
             </button>
+            <button id="trailersTab" class="tab-button px-6 py-3 font-medium text-white border-none">
+                <i class="fas fa-play mr-2"></i> Fragmanlar
+            </button>
         </div>
 
         <!-- Series Tab Content -->
@@ -1536,6 +1539,78 @@
                 </div>
             </div>
         </div>
+
+        <div id="trailersContent" class="tab-content hidden">
+            <div class="card p-6 mb-6">
+                <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
+                    <h2 class="text-2xl font-bold flex items-center">
+                        <i class="fas fa-play mr-3 text-purple-400"></i>
+                        Fragmanlar
+                    </h2>
+                    <div class="text-sm text-gray-600 dark:text-gray-300">
+                        <i class="fas fa-video mr-1"></i>
+                        <span id="trailersCount">0</span> fragman
+                    </div>
+                </div>
+
+                <div class="bg-white/5 rounded-xl p-4 mb-6">
+                    <div class="flex flex-col lg:flex-row lg:items-center gap-3">
+                        <div class="flex-1">
+                            <div class="relative">
+                                <input type="text" id="trailersSearch" class="form-control pl-10" placeholder="Fragman ara...">
+                                <i class="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                            </div>
+                        </div>
+
+                        <div class="flex flex-wrap items-center gap-2">
+                            <button id="trailersFilterAll" class="filter-button btn btn-secondary btn-sm active" data-filter="all">
+                                <i class="fas fa-layer-group mr-1"></i> Tümü
+                            </button>
+                            <button id="trailersFilterSeries" class="filter-button btn btn-secondary btn-sm" data-filter="series">
+                                <i class="fas fa-tv mr-1"></i> Diziler
+                            </button>
+                            <button id="trailersFilterMovies" class="filter-button btn btn-secondary btn-sm" data-filter="movies">
+                                <i class="fas fa-film mr-1"></i> Filmler
+                            </button>
+                        </div>
+
+                        <div class="flex items-center gap-2">
+                            <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
+                            <select id="trailersSortSelect" class="form-control text-sm py-1 px-2 min-w-[160px]">
+                                <option value="alphabetical">A-Z</option>
+                                <option value="alphabetical-desc">Z-A</option>
+                                <option value="type-series-first">Önce Diziler</option>
+                                <option value="type-movies-first">Önce Filmler</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    <div class="lg:col-span-1 lg:sticky lg:top-6 self-start">
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <div class="aspect-video w-full rounded-lg overflow-hidden bg-black/30">
+                                <div id="trailersPreviewPlayer" class="w-full h-full"></div>
+                            </div>
+                            <div class="mt-3 text-sm text-gray-600 dark:text-gray-300" id="trailersPreviewInfo">
+                                Liste üstünde imleç (cursor) ile bir fragmanın üstüne gelince önizleme (preview) oynar. Üzerine tıklayınca tam açılır.
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="lg:col-span-2">
+                        <div class="bg-white/5 rounded-xl p-4">
+                            <div id="trailersList" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4"></div>
+                            <div id="trailersEmpty" class="text-center py-10 hidden">
+                                <div class="text-white/70 text-5xl mb-3"><i class="fab fa-youtube"></i></div>
+                                <h3 class="text-xl font-semibold text-white mb-1">Henüz fragman eklemediniz</h3>
+                                <p class="text-purple-100">Dizi/film eklerken "YouTube Fragman Linki" alanını doldurun</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- Series Edit Modal -->
@@ -1798,7 +1873,7 @@
 
                     <div class="form-group mt-4">
                         <label for="trailerTimeoutInput">Fragman başlangıç zaman aşımı (saniye)</label>
-                        <input type="number" id="trailerTimeoutInput" class="form-control" min="1" max="5" step="1">
+                        <input type="number" id="trailerTimeoutInput" class="form-control" min="1" max="30" step="1">
                         <small class="text-gray-400 mt-1">Fragmanın başlaması için beklenecek süre.</small>
                     </div>
 
@@ -2023,6 +2098,9 @@
         let currentMoviesFilter = 'all';
         let currentSeriesCategory = null;
         let currentMoviesCategory = null;
+        let currentTrailersFilter = 'all';
+        let currentTrailersSort = 'alphabetical';
+        let trailersSearchQuery = '';
         let seriesView = '3';
         // Görsel oranı: Tailwind aspect-ratio class
         let posterAspect = localStorage.getItem('posterAspect') || 'aspect-[2/3]';
@@ -2031,6 +2109,9 @@
         let trailerPlayer = null;
         let trailerStartTimeout = null;
         let trailerHasStarted = false;
+        let trailersPreviewPlayer = null;
+        let trailersPreviewVideoId = null;
+        let trailersPreviewStartTimer = null;
 
         // --- Sync helpers (P2P) ---
 
@@ -2095,6 +2176,16 @@
 
         // Image loading error handling
         function handleImageError(img) {
+            // YouTube thumbnail fallback strategy
+            if (img.src && img.src.includes('i.ytimg.com/vi/') && !img.hasAttribute('data-fallback-tried')) {
+                // If hqdefault fails (404), try mqdefault
+                if (img.src.includes('hqdefault.jpg')) {
+                    img.setAttribute('data-fallback-tried', 'true');
+                    img.src = img.src.replace('hqdefault.jpg', 'mqdefault.jpg');
+                    return;
+                }
+            }
+
             img.style.display = 'none';
             const placeholder = img.parentElement;
             if (placeholder) {
@@ -2141,16 +2232,27 @@
         const upcomingTab = document.getElementById('upcomingTab');
         const categoriesTab = document.getElementById('categoriesTab');
         const tagsTab = document.getElementById('tagsTab');
+        const trailersTab = document.getElementById('trailersTab');
         const seriesContent = document.getElementById('seriesContent');
         const moviesContent = document.getElementById('moviesContent');
         const upcomingContent = document.getElementById('upcomingContent');
         const categoriesContent = document.getElementById('categoriesContent');
         const tagsContent = document.getElementById('tagsContent');
+        const trailersContent = document.getElementById('trailersContent');
         const seriesList = document.getElementById('seriesList');
         const moviesList = document.getElementById('moviesList');
         const categoriesList = document.getElementById('categoriesList');
         const seriesEmpty = document.getElementById('seriesEmpty');
         const moviesEmpty = document.getElementById('moviesEmpty');
+        const trailersList = document.getElementById('trailersList');
+        const trailersEmpty = document.getElementById('trailersEmpty');
+        const trailersCount = document.getElementById('trailersCount');
+        const trailersPreviewInfo = document.getElementById('trailersPreviewInfo');
+        const trailersSearch = document.getElementById('trailersSearch');
+        const trailersFilterAll = document.getElementById('trailersFilterAll');
+        const trailersFilterSeries = document.getElementById('trailersFilterSeries');
+        const trailersFilterMovies = document.getElementById('trailersFilterMovies');
+        const trailersSortSelect = document.getElementById('trailersSortSelect');
         const totalStats = document.getElementById('totalStats');
         
         // Upcoming releases DOM elements
@@ -2590,6 +2692,193 @@
                     </div>
                 `;
             }).join('');
+        }
+
+        function getAllTrailerItems() {
+            const items = [];
+
+            const groupedSeries = groupSeriesByName(seriesData || []);
+            groupedSeries.forEach(series => {
+                const trailerUrl = series.trailerUrl;
+                if (!trailerUrl) return;
+                const videoId = extractYouTubeVideoId(trailerUrl);
+                if (!videoId) return;
+                items.push({
+                    type: 'series',
+                    name: series.name,
+                    platform: series.platform,
+                    imageUrl: series.imageUrl,
+                    trailerUrl,
+                    videoId
+                });
+            });
+
+            (moviesData || []).forEach(movie => {
+                const trailerUrl = movie.trailerUrl;
+                if (!trailerUrl) return;
+                const videoId = extractYouTubeVideoId(trailerUrl);
+                if (!videoId) return;
+                items.push({
+                    type: 'movie',
+                    name: movie.name,
+                    platform: null,
+                    imageUrl: movie.imageUrl,
+                    trailerUrl,
+                    videoId
+                });
+            });
+
+            return items;
+        }
+
+        function renderTrailersTab() {
+            if (!trailersList || !trailersEmpty) return;
+
+            let items = getAllTrailerItems();
+
+            if (currentTrailersFilter === 'series') {
+                items = items.filter(i => i.type === 'series');
+            } else if (currentTrailersFilter === 'movies') {
+                items = items.filter(i => i.type === 'movie');
+            }
+
+            const q = (trailersSearchQuery || '').trim().toLowerCase();
+            if (q) {
+                items = items.filter(i => (i.name || '').toLowerCase().includes(q));
+            }
+
+            if (currentTrailersSort === 'alphabetical') {
+                items.sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'tr'));
+            } else if (currentTrailersSort === 'alphabetical-desc') {
+                items.sort((a, b) => (b.name || '').localeCompare((a.name || ''), 'tr'));
+            } else if (currentTrailersSort === 'type-series-first') {
+                items.sort((a, b) => {
+                    const aKey = a.type === 'series' ? 0 : 1;
+                    const bKey = b.type === 'series' ? 0 : 1;
+                    if (aKey !== bKey) return aKey - bKey;
+                    return (a.name || '').localeCompare((b.name || ''), 'tr');
+                });
+            } else if (currentTrailersSort === 'type-movies-first') {
+                items.sort((a, b) => {
+                    const aKey = a.type === 'movie' ? 0 : 1;
+                    const bKey = b.type === 'movie' ? 0 : 1;
+                    if (aKey !== bKey) return aKey - bKey;
+                    return (a.name || '').localeCompare((b.name || ''), 'tr');
+                });
+            }
+
+            if (trailersCount) trailersCount.textContent = String(items.length);
+
+            if (trailersFilterAll && trailersFilterSeries && trailersFilterMovies) {
+                trailersFilterAll.classList.toggle('active', currentTrailersFilter === 'all');
+                trailersFilterSeries.classList.toggle('active', currentTrailersFilter === 'series');
+                trailersFilterMovies.classList.toggle('active', currentTrailersFilter === 'movies');
+            }
+
+            if (items.length === 0) {
+                trailersList.innerHTML = '';
+                trailersEmpty.classList.remove('hidden');
+                return;
+            }
+
+            trailersEmpty.classList.add('hidden');
+
+            trailersList.innerHTML = items.map(item => {
+                const typePill = item.type === 'series'
+                    ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                    : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+                const typeText = item.type === 'series' ? 'Dizi' : 'Film';
+                const thumbUrl = `https://i.ytimg.com/vi/${item.videoId}/hqdefault.jpg`;
+
+                return `
+                    <div class="bg-white/10 hover:bg-white/20 transition rounded-xl p-3 flex gap-3 items-center cursor-pointer outline-none focus:ring-2 focus:ring-white/30 trailer-preview-item"
+                         role="button"
+                         tabindex="0"
+                         data-trailer-url="${item.trailerUrl}"
+                         data-title="${item.name}"
+                         data-video-id="${item.videoId}">
+                        <div class="w-20 h-12 rounded-lg overflow-hidden bg-black/20 flex-shrink-0">
+                            <img src="${thumbUrl}" alt="${item.name}" class="w-full h-full object-cover" onerror="handleImageError(this)">
+                        </div>
+                        <div class="min-w-0 flex-1">
+                            <div class="flex items-center gap-2">
+                                <div class="font-semibold text-gray-900 dark:text-white truncate">${item.name}</div>
+                                <span class="px-2 py-0.5 text-xs font-medium rounded-full ${typePill}">${typeText}</span>
+                            </div>
+                            ${item.platform ? `<div class="text-xs text-gray-600 dark:text-gray-400 truncate"><i class="fas fa-tv mr-1"></i>${item.platform}</div>` : ''}
+                            <div class="text-xs text-gray-600 dark:text-gray-400 mt-1"><i class="fab fa-youtube mr-1"></i>Üstüne gel: oynat • Tıkla: tam aç</div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function stopTrailersPreview(resetInfoText) {
+            if (trailersPreviewStartTimer) {
+                clearTimeout(trailersPreviewStartTimer);
+                trailersPreviewStartTimer = null;
+            }
+            
+            // Iframe'i temizle
+            const container = document.getElementById('trailersPreviewPlayer');
+            if (container) {
+                container.innerHTML = '';
+            }
+            trailersPreviewPlayer = null;
+            
+            trailersPreviewVideoId = null;
+            if (resetInfoText && trailersPreviewInfo) {
+                trailersPreviewInfo.textContent = 'Liste üstünde imleç (cursor) ile bir fragmanın üstüne gelince önizleme (preview) oynar. Üzerine tıklayınca tam açılır.';
+            }
+        }
+
+        function playTrailersPreview(videoId, title) {
+            if (!videoId) return;
+            if (trailersPreviewVideoId === videoId) return;
+            trailersPreviewVideoId = videoId;
+            
+            const container = document.getElementById('trailersPreviewPlayer');
+            if (!container) return;
+
+            if (trailersPreviewInfo) {
+                trailersPreviewInfo.textContent = `"${title}" önizleme (preview) yükleniyor...`;
+            }
+
+            // Iframe oluştur
+            const iframe = document.createElement('iframe');
+            iframe.width = "100%";
+            iframe.height = "100%";
+            
+            // Embed URL (Preview için)
+            // autoplay=1: Otomatik başlat
+            // mute=1: Sessiz (autoplay politikası için)
+            // controls=0: Kontrolsüz
+            const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=1&controls=0&rel=0&modestbranding=1&playsinline=1`;
+            
+            iframe.src = embedUrl;
+            iframe.title = "YouTube video player";
+            iframe.frameBorder = "0";
+            iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+            iframe.referrerPolicy = "strict-origin-when-cross-origin";
+            iframe.allowFullscreen = true;
+            
+            container.innerHTML = '';
+            container.appendChild(iframe);
+            trailersPreviewPlayer = iframe;
+
+            if (trailersPreviewInfo) {
+                trailersPreviewInfo.textContent = `"${title}" önizleme (preview) oynuyor. Tam açmak için tıklayın.`;
+            }
+        }
+
+        function scheduleTrailersPreview(videoId, title) {
+            if (trailersPreviewStartTimer) {
+                clearTimeout(trailersPreviewStartTimer);
+                trailersPreviewStartTimer = null;
+            }
+            trailersPreviewStartTimer = setTimeout(() => {
+                playTrailersPreview(videoId, title);
+            }, 120);
         }
 
         function renderSeriesList() {
@@ -3478,41 +3767,33 @@
             } catch (_) {}
         }
 
+        function getYouTubePlayerErrorText(code) {
+            const c = Number(code);
+            if (!Number.isFinite(c)) return 'YouTube oynatıcı hata verdi.';
+            if (c === 2) return `Geçersiz video kimliği (invalid video id). (Hata ${c})`;
+            if (c === 5) return `HTML5 oynatıcı hatası (HTML5 player error). (Hata ${c})`;
+            if (c === 100) return `Video bulunamadı veya gizli (not found / private). (Hata ${c})`;
+            if (c === 101 || c === 150 || c === 153) return `Bu video gömülü oynatmaya izin vermiyor (embedding disabled). (Hata ${c})`;
+            return `YouTube oynatıcı hatası. (Hata ${c})`;
+        }
+
         function resetTrailerPlayerState() {
             trailerHasStarted = false;
             if (trailerStartTimeout) {
                 clearTimeout(trailerStartTimeout);
                 trailerStartTimeout = null;
             }
-            if (trailerPlayer && typeof trailerPlayer.destroy === 'function') {
-                try {
-                    trailerPlayer.destroy();
-                } catch (_) {}
+            
+            // Iframe'i temizle
+            const playerContainer = document.getElementById('trailerPlayer');
+            if (playerContainer) {
+                playerContainer.innerHTML = '';
             }
             trailerPlayer = null;
         }
 
-        function waitForYouTubeAPI(timeoutMs) {
-            return new Promise(resolve => {
-                if (window.YT && window.YT.Player) {
-                    resolve(true);
-                    return;
-                }
-                const start = Date.now();
-                const interval = setInterval(() => {
-                    if (window.YT && window.YT.Player) {
-                        clearInterval(interval);
-                        resolve(true);
-                    } else if (Date.now() - start >= timeoutMs) {
-                        clearInterval(interval);
-                        resolve(false);
-                    }
-                }, 100);
-            });
-        }
-        
         // YouTube fragman modal'ını göster
-        async function showTrailerModal(videoUrl, title) {
+        function showTrailerModal(videoUrl, title) {
             const videoId = extractYouTubeVideoId(videoUrl);
             if (!videoId) {
                 alert('Geçerli bir YouTube URL\'si veya video ID\'si giriniz.');
@@ -3522,7 +3803,10 @@
             resetTrailerPlayerState();
 
             const isFileProtocol = window.location.protocol === 'file:';
-            const watchUrl = 'https://www.youtube.com/watch?v=' + videoId;
+            const watchUrl = 'https://www.youtube.com/embed/' + videoId;
+            const iframeMarkup = `
+                <iframe width="560" height="315" src="${watchUrl}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe>
+            `;
 
             const modal = document.createElement('div');
             modal.className = 'modal trailer-modal active';
@@ -3567,57 +3851,38 @@
                 }
             });
 
-            const apiReady = await waitForYouTubeAPI(trailerStartTimeoutMs);
-            if (!apiReady || !window.YT || !window.YT.Player) {
-                if (infoEl && !isFileProtocol) {
-                    infoEl.textContent = 'YouTube oynatıcı yüklenemedi. Fragmanı YouTube\'da yeni sekmede açabilirsiniz.';
-                }
-                return;
-            }
-
             const playerContainer = modal.querySelector('#trailerPlayer');
             if (!playerContainer) {
                 return;
             }
 
-            trailerPlayer = new YT.Player(playerContainer, {
-                videoId: videoId,
-                playerVars: {
-                    autoplay: 1,
-                    rel: 0,
-                    modestbranding: 1
-                },
-                events: {
-                    onReady: function (event) {
-                        try {
-                            event.target.playVideo();
-                        } catch (_) {}
-                    },
-                    onStateChange: function (event) {
-                        if (event.data === YT.PlayerState.PLAYING || event.data === YT.PlayerState.BUFFERING) {
-                            trailerHasStarted = true;
-                            if (infoEl && !isFileProtocol) {
-                                infoEl.textContent = '';
-                            }
-                        }
-                    },
-                    onError: function () {
-                        if (infoEl) {
-                            infoEl.textContent = 'YouTube oynatıcı bu fragmanı yerleştiremedi. Fragmanı yeni sekmede açıyorum.';
-                        }
-                        openYouTubeInNewTab(watchUrl);
-                    }
-                }
-            });
+            // Iframe oluştur
+            const iframe = document.createElement('iframe');
+            iframe.width = "100%";
+            iframe.height = "100%";
+            
+            // Embed URL (Modal için)
+            // autoplay=1: Otomatik başlat
+            // mute=0: Sesli (Modal olduğu için kullanıcı sesi bekler)
+            // controls=1: Kontrollü
+            const embedUrl = `https://www.youtube.com/embed/${videoId}?autoplay=1&mute=0&controls=1&rel=0&modestbranding=1&playsinline=1`;
 
-            trailerStartTimeout = setTimeout(function () {
-                if (!trailerHasStarted) {
-                    if (infoEl) {
-                        infoEl.textContent = 'Video birkaç saniye içinde başlamadığı için fragmanı yeni sekmede açıyorum.';
-                    }
-                    openYouTubeInNewTab(watchUrl);
-                }
-            }, trailerStartTimeoutMs);
+            iframe.src = embedUrl;
+            iframe.title = "YouTube video player";
+            iframe.frameBorder = "0";
+            iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share";
+            iframe.referrerPolicy = "strict-origin-when-cross-origin";
+            iframe.allowFullscreen = true;
+            
+            playerContainer.appendChild(iframe);
+            trailerPlayer = iframe;
+
+            // Info text update (iframe yüklendi varsayımı ile)
+            if (infoEl && !isFileProtocol) {
+                setTimeout(() => {
+                    infoEl.textContent = '';
+                }, 3000);
+            }
         }
 
         // Filter series
@@ -4470,11 +4735,14 @@
             upcomingTab.classList.remove('active');
             categoriesTab.classList.remove('active');
             tagsTab.classList.remove('active');
+            trailersTab.classList.remove('active');
             seriesContent.classList.remove('hidden');
             moviesContent.classList.add('hidden');
             upcomingContent.classList.add('hidden');
             categoriesContent.classList.add('hidden');
             tagsContent.classList.add('hidden');
+            trailersContent.classList.add('hidden');
+            stopTrailersPreview(true);
         });
 
         moviesTab.addEventListener('click', function () {
@@ -4483,11 +4751,14 @@
             upcomingTab.classList.remove('active');
             categoriesTab.classList.remove('active');
             tagsTab.classList.remove('active');
+            trailersTab.classList.remove('active');
             moviesContent.classList.remove('hidden');
             seriesContent.classList.add('hidden');
             upcomingContent.classList.add('hidden');
             categoriesContent.classList.add('hidden');
             tagsContent.classList.add('hidden');
+            trailersContent.classList.add('hidden');
+            stopTrailersPreview(true);
         });
 
         upcomingTab.addEventListener('click', function () {
@@ -4496,12 +4767,15 @@
             moviesTab.classList.remove('active');
             categoriesTab.classList.remove('active');
             tagsTab.classList.remove('active');
+            trailersTab.classList.remove('active');
             upcomingContent.classList.remove('hidden');
             seriesContent.classList.add('hidden');
             moviesContent.classList.add('hidden');
             categoriesContent.classList.add('hidden');
             tagsContent.classList.add('hidden');
+            trailersContent.classList.add('hidden');
             renderUpcomingReleases();
+            stopTrailersPreview(true);
         });
 
         // Upcoming releases filter event listeners
@@ -4526,11 +4800,14 @@
             moviesTab.classList.remove('active');
             upcomingTab.classList.remove('active');
             tagsTab.classList.remove('active');
+            trailersTab.classList.remove('active');
             categoriesContent.classList.remove('hidden');
             seriesContent.classList.add('hidden');
             moviesContent.classList.add('hidden');
             upcomingContent.classList.add('hidden');
             tagsContent.classList.add('hidden');
+            trailersContent.classList.add('hidden');
+            stopTrailersPreview(true);
         });
 
         tagsTab.addEventListener('click', function () {
@@ -4539,12 +4816,94 @@
             moviesTab.classList.remove('active');
             upcomingTab.classList.remove('active');
             categoriesTab.classList.remove('active');
+            trailersTab.classList.remove('active');
             tagsContent.classList.remove('hidden');
             seriesContent.classList.add('hidden');
             moviesContent.classList.add('hidden');
             upcomingContent.classList.add('hidden');
             categoriesContent.classList.add('hidden');
+            trailersContent.classList.add('hidden');
+            stopTrailersPreview(true);
         });
+
+        trailersTab.addEventListener('click', function () {
+            trailersTab.classList.add('active');
+            seriesTab.classList.remove('active');
+            moviesTab.classList.remove('active');
+            upcomingTab.classList.remove('active');
+            categoriesTab.classList.remove('active');
+            tagsTab.classList.remove('active');
+            trailersContent.classList.remove('hidden');
+            seriesContent.classList.add('hidden');
+            moviesContent.classList.add('hidden');
+            upcomingContent.classList.add('hidden');
+            categoriesContent.classList.add('hidden');
+            tagsContent.classList.add('hidden');
+            stopTrailersPreview(true);
+            renderTrailersTab();
+        });
+
+        if (trailersList) {
+            trailersList.addEventListener('mouseover', function (e) {
+                const item = e.target.closest('.trailer-preview-item');
+                if (!item) return;
+                scheduleTrailersPreview(item.getAttribute('data-video-id'), item.getAttribute('data-title') || '');
+            }, { passive: true });
+
+            trailersList.addEventListener('focusin', function (e) {
+                const item = e.target.closest('.trailer-preview-item');
+                if (!item) return;
+                scheduleTrailersPreview(item.getAttribute('data-video-id'), item.getAttribute('data-title') || '');
+            }, { passive: true });
+
+            trailersList.addEventListener('mouseleave', function () {
+                stopTrailersPreview(false);
+            });
+
+            trailersList.addEventListener('click', function (e) {
+                const item = e.target.closest('.trailer-preview-item');
+                if (!item) return;
+                showTrailerModal(item.getAttribute('data-trailer-url'), item.getAttribute('data-title') || '');
+            });
+
+            trailersList.addEventListener('keydown', function (e) {
+                const item = e.target.closest('.trailer-preview-item');
+                if (!item) return;
+                if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    showTrailerModal(item.getAttribute('data-trailer-url'), item.getAttribute('data-title') || '');
+                }
+            });
+        }
+
+        if (trailersSearch) {
+            trailersSearch.addEventListener('input', function () {
+                trailersSearchQuery = (this.value || '');
+                renderTrailersTab();
+            });
+        }
+
+        if (trailersSortSelect) {
+            trailersSortSelect.addEventListener('change', function () {
+                currentTrailersSort = this.value || 'alphabetical';
+                renderTrailersTab();
+            });
+        }
+
+        function setTrailersFilter(filter) {
+            currentTrailersFilter = filter;
+            renderTrailersTab();
+        }
+
+        if (trailersFilterAll) {
+            trailersFilterAll.addEventListener('click', function () { setTrailersFilter('all'); });
+        }
+        if (trailersFilterSeries) {
+            trailersFilterSeries.addEventListener('click', function () { setTrailersFilter('series'); });
+        }
+        if (trailersFilterMovies) {
+            trailersFilterMovies.addEventListener('click', function () { setTrailersFilter('movies'); });
+        }
 
         addSeriesBtn.addEventListener('click', addSeries);
         addSeriesBtnEmpty.addEventListener('click', addSeries);
@@ -4560,7 +4919,6 @@
                 const btn = e.target.closest('.trailer-btn');
                 const trailerUrl = btn.getAttribute('data-trailer-url');
                 const title = btn.getAttribute('data-title');
-                console.log('Fragman butonu tıklandı:', trailerUrl, title);
                 showTrailerModal(trailerUrl, title);
             }
         });
@@ -5327,6 +5685,16 @@
             const totalEpisodesInput = document.querySelector('input[name="totalEpisodes"]');
             
             if (seasonNumberInput) seasonNumberInput.removeAttribute("required");
+            if (totalEpisodesInput) totalEpisodesInput.removeAttribute("required");
+        });
+
+
+        // Initialize the app
+        initApp();
+    </script>
+</body>
+
+</html>
             if (totalEpisodesInput) totalEpisodesInput.removeAttribute("required");
         });
 
