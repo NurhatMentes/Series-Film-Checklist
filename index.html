@@ -316,6 +316,85 @@
             opacity: 1;
         }
 
+        .bulk-select-control {
+            position: absolute;
+            top: 12px;
+            left: 12px;
+            z-index: 5;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 30px;
+            height: 30px;
+            border-radius: 9999px;
+            background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.78));
+            border: 1px solid rgba(99, 102, 241, 0.22);
+            backdrop-filter: blur(6px);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
+            transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+        }
+
+        .dark-theme .bulk-select-control {
+            background: radial-gradient(circle at 30% 25%, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.78));
+            border-color: rgba(99, 102, 241, 0.34);
+            box-shadow: 0 10px 24px rgba(2, 6, 23, 0.5);
+        }
+
+        .bulk-select-control:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+            border-color: rgba(99, 102, 241, 0.42);
+        }
+
+        .bulk-select-checkbox {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+            border-radius: 6px;
+            border: 2px solid rgba(99, 102, 241, 0.35);
+            background: rgba(255, 255, 255, 0.35);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
+            transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
+        }
+
+        .dark-theme .bulk-select-checkbox {
+            background: rgba(15, 23, 42, 0.25);
+            border-color: rgba(129, 140, 248, 0.45);
+            box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+        }
+
+        .bulk-select-checkbox:hover {
+            transform: scale(1.04);
+            border-color: rgba(99, 102, 241, 0.55);
+        }
+
+        .bulk-select-checkbox:focus-visible {
+            outline: none;
+            box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+        }
+
+        .bulk-select-checkbox:checked {
+            border-color: transparent;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(168, 85, 247, 0.95));
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.28);
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 20 20'%3E%3Cpath fill='white' d='M7.629 13.314 4.61 10.296a1 1 0 1 0-1.414 1.414l3.724 3.724a1 1 0 0 0 1.414 0l8.02-8.02A1 1 0 0 0 15.94 6l-8.31 7.314z'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: center;
+            background-size: 14px 14px;
+        }
+
+        .bulk-selected {
+            outline: 3px solid rgba(99, 102, 241, 0.45);
+            outline-offset: 2px;
+        }
+
+        .bulk-modal-content {
+            width: 90%;
+            max-width: 780px;
+        }
+
         .modal {
             position: fixed;
             top: 0;
@@ -1077,12 +1156,43 @@
         .sync-form .form-group { margin-bottom: 12px; }
         .sync-form textarea { min-height: 140px; resize: vertical; }
 
-        /* Uzun açıklamalar için line-clamp ile kısaltma (scroll yerine) */
         .description-text {
-            display: -webkit-box;
-            -webkit-line-clamp: 4;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
+            max-height: 7.25rem;
+            overflow: auto;
+            padding-right: 8px;
+            scrollbar-gutter: stable;
+            overscroll-behavior: contain;
+            scrollbar-width: thin;
+            scrollbar-color: rgba(99, 102, 241, 0.45) transparent;
+        }
+
+        .description-text::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .description-text::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        .description-text::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.35);
+            border-radius: 9999px;
+        }
+
+        .description-text:hover::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.55);
+        }
+
+        .dark-theme .description-text {
+            scrollbar-color: rgba(129, 140, 248, 0.55) transparent;
+        }
+
+        .dark-theme .description-text::-webkit-scrollbar-thumb {
+            background: rgba(129, 140, 248, 0.4);
+        }
+
+        .dark-theme .description-text:hover::-webkit-scrollbar-thumb {
+            background: rgba(129, 140, 248, 0.6);
         }
     </style>
 </head>
@@ -1216,6 +1326,10 @@
                                     <button id="layoutToggleMasonrySeries" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
                                 </div>
                             </div>
+                            <button id="openBulkEditFromSeries" class="btn btn-secondary bulk-edit-open">
+                                <i class="fas fa-layer-group mr-2"></i> Toplu Düzenle
+                                <span class="bulk-selected-count ml-2 text-xs px-2 py-1 rounded-full bg-indigo-600 text-white hidden">0</span>
+                            </button>
                             <button id="addSeriesBtn" class="btn btn-primary">
                                 <i class="fas fa-plus mr-2"></i> Yeni Dizi
                             </button>
@@ -1327,6 +1441,10 @@
                                     <button id="layoutToggleMasonryMovies" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
                                 </div>
                             </div>
+                            <button id="openBulkEditFromMovies" class="btn btn-secondary bulk-edit-open">
+                                <i class="fas fa-layer-group mr-2"></i> Toplu Düzenle
+                                <span class="bulk-selected-count ml-2 text-xs px-2 py-1 rounded-full bg-indigo-600 text-white hidden">0</span>
+                            </button>
                             <button id="addMovieBtn" class="btn btn-primary">
                                 <i class="fas fa-plus mr-2"></i> Yeni Film
                             </button>
@@ -1832,6 +1950,91 @@
         </div>
     </div>
 
+    <div id="bulkEditModal" class="modal">
+        <div class="modal-content bulk-modal-content">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-2xl font-bold">Toplu Düzenle</h2>
+                <button id="closeBulkEditModal" class="close-trailer-btn">&times;</button>
+            </div>
+            <div id="bulkSelectionSummary" class="text-sm text-gray-600 dark:text-gray-300 mb-4"></div>
+
+            <div class="card p-4 mb-4 bg-white/5">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label class="block mb-2 font-medium text-gray-700 dark:text-gray-200">Kategoriye göre seçim</label>
+                        <select id="bulkSelectCategoryId" class="form-control"></select>
+                        <div class="flex gap-2 mt-2">
+                            <button id="bulkReplaceSelectionByCategory" class="btn btn-secondary flex-1">Seçimi Değiştir</button>
+                            <button id="bulkAddSelectionByCategory" class="btn btn-primary flex-1">Seçime Ekle</button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block mb-2 font-medium text-gray-700 dark:text-gray-200">Etikete göre seçim</label>
+                        <select id="bulkSelectTagName" class="form-control"></select>
+                        <div class="flex gap-2 mt-2">
+                            <button id="bulkReplaceSelectionByTag" class="btn btn-secondary flex-1">Seçimi Değiştir</button>
+                            <button id="bulkAddSelectionByTag" class="btn btn-primary flex-1">Seçime Ekle</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="flex justify-end mt-3">
+                    <button id="bulkClearSelectionBtn" class="btn btn-warning">
+                        <i class="fas fa-eraser mr-2"></i> Seçimi Temizle
+                    </button>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Yeni Kategori</label>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <input type="text" id="bulkNewCategoryName" class="form-control md:col-span-2" placeholder="Yeni kategori adı">
+                    <input type="color" id="bulkNewCategoryColor" class="form-control p-2 h-[48px]" value="#6366f1">
+                </div>
+                <button id="bulkAddNewCategoryBtn" class="btn btn-secondary w-full mt-2">
+                    <i class="fas fa-plus mr-2"></i> Kategori Ekle
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="card p-4 bg-white/5">
+                    <div class="font-semibold mb-2">Eklenecek Kategoriler</div>
+                    <div id="bulkAddCategoriesList" class="space-y-2"></div>
+                </div>
+                <div class="card p-4 bg-white/5">
+                    <div class="font-semibold mb-2">Kaldırılacak Kategoriler</div>
+                    <div id="bulkRemoveCategoriesList" class="space-y-2"></div>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Yeni Etiket</label>
+                <div class="flex gap-2">
+                    <input type="text" id="bulkNewTagName" class="form-control" placeholder="Yeni etiket adı">
+                    <button id="bulkAddNewTagBtn" class="btn btn-secondary">
+                        <i class="fas fa-plus"></i>
+                    </button>
+                </div>
+                <small class="text-gray-500 dark:text-gray-400">Enter (giris) yerine + ile ekleyebilirsiniz.</small>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                <div class="card p-4 bg-white/5">
+                    <div class="font-semibold mb-2">Eklenecek Etiketler</div>
+                    <div id="bulkAddTagsList" class="flex flex-wrap gap-2"></div>
+                </div>
+                <div class="card p-4 bg-white/5">
+                    <div class="font-semibold mb-2">Kaldırılacak Etiketler</div>
+                    <div id="bulkRemoveTagsList" class="flex flex-wrap gap-2"></div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button type="button" id="cancelBulkEdit" class="btn btn-secondary flex-1">İptal</button>
+                <button type="button" id="applyBulkEdit" class="btn btn-primary flex-1">Değişiklikleri Uygula</button>
+            </div>
+        </div>
+    </div>
+
     <button id="openSyncModal" class="sync-btn"><i class="fas fa-sync-alt"></i> Senkronizasyon</button>
 
     <!-- Senkronizasyon Modal -->
@@ -2112,6 +2315,11 @@
         let trailersPreviewPlayer = null;
         let trailersPreviewVideoId = null;
         let trailersPreviewStartTimer = null;
+        let selectedBulkKeys = new Set();
+        let bulkAddCategoryIds = new Set();
+        let bulkRemoveCategoryIds = new Set();
+        let bulkAddTagNames = new Set();
+        let bulkRemoveTagNames = new Set();
 
         // --- Sync helpers (P2P) ---
 
@@ -2366,6 +2574,7 @@
 
             // Event delegation for edit and delete buttons
             setupEventDelegation();
+            setupBulkEditing();
         }
 
         // Event delegation setup
@@ -2419,6 +2628,457 @@
                     }
                 }
             });
+        }
+
+        function setupBulkEditing() {
+            if (setupBulkEditing.__done) return;
+            setupBulkEditing.__done = true;
+
+            const bulkModal = document.getElementById('bulkEditModal');
+            const closeBulkBtn = document.getElementById('closeBulkEditModal');
+            const cancelBulkBtn = document.getElementById('cancelBulkEdit');
+            const applyBulkBtn = document.getElementById('applyBulkEdit');
+            const summaryEl = document.getElementById('bulkSelectionSummary');
+            const openButtons = Array.from(document.querySelectorAll('.bulk-edit-open'));
+
+            const selectCategoryEl = document.getElementById('bulkSelectCategoryId');
+            const selectTagEl = document.getElementById('bulkSelectTagName');
+            const replaceByCategoryBtn = document.getElementById('bulkReplaceSelectionByCategory');
+            const addByCategoryBtn = document.getElementById('bulkAddSelectionByCategory');
+            const replaceByTagBtn = document.getElementById('bulkReplaceSelectionByTag');
+            const addByTagBtn = document.getElementById('bulkAddSelectionByTag');
+            const clearSelectionBtn = document.getElementById('bulkClearSelectionBtn');
+
+            const newCategoryNameEl = document.getElementById('bulkNewCategoryName');
+            const newCategoryColorEl = document.getElementById('bulkNewCategoryColor');
+            const addNewCategoryBtn = document.getElementById('bulkAddNewCategoryBtn');
+
+            const newTagNameEl = document.getElementById('bulkNewTagName');
+            const addNewTagBtn = document.getElementById('bulkAddNewTagBtn');
+
+            const addCategoriesListEl = document.getElementById('bulkAddCategoriesList');
+            const removeCategoriesListEl = document.getElementById('bulkRemoveCategoriesList');
+            const addTagsListEl = document.getElementById('bulkAddTagsList');
+            const removeTagsListEl = document.getElementById('bulkRemoveTagsList');
+
+            function normalizeTagName(name) {
+                if (typeof name !== 'string') return '';
+                return name.trim();
+            }
+
+            function ensureTagExists(name) {
+                const trimmed = normalizeTagName(name);
+                if (!trimmed) return null;
+                const exists = Array.isArray(tagsData) ? tagsData.find(t => t && t.name === trimmed) : null;
+                if (exists) return exists;
+                const maxId = (Array.isArray(tagsData) && tagsData.length > 0) ? Math.max(...tagsData.map(t => t.id || 0)) : 0;
+                const next = { id: maxId + 1, name: trimmed };
+                tagsData.push(next);
+                return next;
+            }
+
+            function getAllTagNames() {
+                const set = new Set();
+                if (Array.isArray(tagsData)) {
+                    tagsData.forEach(t => {
+                        if (t && typeof t.name === 'string') {
+                            const n = t.name.trim();
+                            if (n) set.add(n);
+                        }
+                    });
+                }
+                if (Array.isArray(seriesData)) {
+                    seriesData.forEach(s => {
+                        if (s && Array.isArray(s.tags)) {
+                            s.tags.forEach(tag => {
+                                const n = normalizeTagName(tag);
+                                if (n) set.add(n);
+                            });
+                        }
+                    });
+                }
+                if (Array.isArray(moviesData)) {
+                    moviesData.forEach(m => {
+                        if (m && Array.isArray(m.tags)) {
+                            m.tags.forEach(tag => {
+                                const n = normalizeTagName(tag);
+                                if (n) set.add(n);
+                            });
+                        }
+                    });
+                }
+                return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+            }
+
+            function renderSelectionCount() {
+                const count = selectedBulkKeys.size;
+                document.querySelectorAll('.bulk-selected-count').forEach(el => {
+                    el.textContent = String(count);
+                    el.classList.toggle('hidden', count === 0);
+                });
+            }
+
+            function updateCardSelectedState(cardEl, isSelected) {
+                if (!cardEl) return;
+                cardEl.classList.toggle('bulk-selected', isSelected);
+            }
+
+            function closeBulkModal() {
+                if (!bulkModal) return;
+                bulkModal.classList.remove('active');
+            }
+
+            function openBulkModal() {
+                if (!bulkModal) return;
+                bulkAddCategoryIds = new Set();
+                bulkRemoveCategoryIds = new Set();
+                bulkAddTagNames = new Set();
+                bulkRemoveTagNames = new Set();
+                refreshBulkModalUI();
+                bulkModal.classList.add('active');
+            }
+
+            function renderSelectOptions() {
+                if (selectCategoryEl) {
+                    const options = ['<option value=\"\">Kategori seçin...</option>']
+                        .concat(categoriesData.map(c => `<option value=\"${c.id}\">${c.name}</option>`));
+                    selectCategoryEl.innerHTML = options.join('');
+                }
+                if (selectTagEl) {
+                    const options = ['<option value=\"\">Etiket seçin...</option>']
+                        .concat(getAllTagNames().map(name => `<option value=\"${name}\">${name}</option>`));
+                    selectTagEl.innerHTML = options.join('');
+                }
+            }
+
+            function renderCategoryActionLists() {
+                if (!addCategoriesListEl || !removeCategoriesListEl) return;
+                const rows = categoriesData.map(cat => {
+                    const addActive = bulkAddCategoryIds.has(cat.id);
+                    const removeActive = bulkRemoveCategoryIds.has(cat.id);
+                    const addBtnClass = addActive ? 'btn btn-primary btn-sm' : 'btn btn-secondary btn-sm';
+                    const removeBtnClass = removeActive ? 'btn btn-warning btn-sm' : 'btn btn-secondary btn-sm';
+                    return `
+                        <div class="flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2">
+                                <span class="w-3 h-3 rounded-full" style="background-color: ${cat.color}"></span>
+                                <span>${cat.name}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <button type="button" class="${addBtnClass}" data-bulk-cat-add="${cat.id}">Ekle</button>
+                                <button type="button" class="${removeBtnClass}" data-bulk-cat-remove="${cat.id}">Kaldır</button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                addCategoriesListEl.innerHTML = rows;
+                removeCategoriesListEl.innerHTML = '';
+            }
+
+            function renderTagActionLists() {
+                if (!addTagsListEl || !removeTagsListEl) return;
+                const names = getAllTagNames();
+                const chips = names.map(name => {
+                    const addActive = bulkAddTagNames.has(name);
+                    const removeActive = bulkRemoveTagNames.has(name);
+                    const addCls = addActive ? 'tag bg-indigo-600 text-white border-transparent' : 'tag';
+                    const removeCls = removeActive ? 'tag bg-amber-500 text-white border-transparent' : 'tag';
+                    return `
+                        <button type="button" class="${addCls}" data-bulk-tag-add="${name}">${name}</button>
+                        <button type="button" class="${removeCls}" data-bulk-tag-remove="${name}">${name}</button>
+                    `;
+                }).join('');
+                addTagsListEl.innerHTML = chips;
+                removeTagsListEl.innerHTML = '';
+            }
+
+            function refreshBulkModalUI() {
+                renderSelectOptions();
+                renderCategoryActionLists();
+                renderTagActionLists();
+                if (summaryEl) {
+                    const count = selectedBulkKeys.size;
+                    summaryEl.textContent = count > 0 ? `${count} öğe seçili.` : 'Henüz öğe seçilmedi. Kartların sol üstündeki kutucuklarla seçim yapabilirsiniz.';
+                }
+            }
+
+            function getKeysForCategory(catId) {
+                const keys = new Set();
+                if (Number.isFinite(catId)) {
+                    const seriesNames = new Set();
+                    seriesData.forEach(s => {
+                        if (s && Array.isArray(s.categories) && s.categories.includes(catId) && s.name) {
+                            seriesNames.add(s.name);
+                        }
+                    });
+                    seriesNames.forEach(name => keys.add('series:' + name));
+                    moviesData.forEach(m => {
+                        if (m && Array.isArray(m.categories) && m.categories.includes(catId)) {
+                            keys.add('movie:' + String(m.id));
+                        }
+                    });
+                }
+                return keys;
+            }
+
+            function getKeysForTag(tagName) {
+                const keys = new Set();
+                const t = normalizeTagName(tagName);
+                if (!t) return keys;
+                const seriesNames = new Set();
+                seriesData.forEach(s => {
+                    if (s && Array.isArray(s.tags) && s.tags.includes(t) && s.name) {
+                        seriesNames.add(s.name);
+                    }
+                });
+                seriesNames.forEach(name => keys.add('series:' + name));
+                moviesData.forEach(m => {
+                    if (m && Array.isArray(m.tags) && m.tags.includes(t)) {
+                        keys.add('movie:' + String(m.id));
+                    }
+                });
+                return keys;
+            }
+
+            function applySelectionSet(newSet) {
+                selectedBulkKeys = new Set(newSet);
+                renderSelectionCount();
+                renderSeriesList();
+                renderMoviesList();
+                refreshBulkModalUI();
+            }
+
+            function mergeSelectionSet(extraSet) {
+                extraSet.forEach(k => selectedBulkKeys.add(k));
+                renderSelectionCount();
+                renderSeriesList();
+                renderMoviesList();
+                refreshBulkModalUI();
+            }
+
+            document.addEventListener('change', function (e) {
+                const cb = e.target;
+                if (!(cb instanceof HTMLInputElement)) return;
+                if (!cb.classList.contains('bulk-select-checkbox')) return;
+                e.stopPropagation();
+                const key = cb.getAttribute('data-select-key') || '';
+                if (!key) return;
+                if (cb.checked) selectedBulkKeys.add(key); else selectedBulkKeys.delete(key);
+                updateCardSelectedState(cb.closest('.series-card') || cb.closest('.movie-card'), cb.checked);
+                renderSelectionCount();
+                if (bulkModal && bulkModal.classList.contains('active')) refreshBulkModalUI();
+            }, true);
+
+            document.addEventListener('click', function (e) {
+                const t = e.target;
+                if (!(t instanceof Element)) return;
+
+                const catAddBtn = t.closest('[data-bulk-cat-add]');
+                if (catAddBtn) {
+                    const id = parseInt(catAddBtn.getAttribute('data-bulk-cat-add') || '', 10);
+                    if (Number.isFinite(id)) {
+                        if (bulkAddCategoryIds.has(id)) bulkAddCategoryIds.delete(id);
+                        else {
+                            bulkAddCategoryIds.add(id);
+                            bulkRemoveCategoryIds.delete(id);
+                        }
+                        refreshBulkModalUI();
+                    }
+                    return;
+                }
+                const catRemoveBtn = t.closest('[data-bulk-cat-remove]');
+                if (catRemoveBtn) {
+                    const id = parseInt(catRemoveBtn.getAttribute('data-bulk-cat-remove') || '', 10);
+                    if (Number.isFinite(id)) {
+                        if (bulkRemoveCategoryIds.has(id)) bulkRemoveCategoryIds.delete(id);
+                        else {
+                            bulkRemoveCategoryIds.add(id);
+                            bulkAddCategoryIds.delete(id);
+                        }
+                        refreshBulkModalUI();
+                    }
+                    return;
+                }
+
+                const tagAddBtn = t.closest('[data-bulk-tag-add]');
+                if (tagAddBtn) {
+                    const name = tagAddBtn.getAttribute('data-bulk-tag-add') || '';
+                    const n = normalizeTagName(name);
+                    if (n) {
+                        if (bulkAddTagNames.has(n)) bulkAddTagNames.delete(n);
+                        else {
+                            bulkAddTagNames.add(n);
+                            bulkRemoveTagNames.delete(n);
+                        }
+                        refreshBulkModalUI();
+                    }
+                    return;
+                }
+                const tagRemoveBtn = t.closest('[data-bulk-tag-remove]');
+                if (tagRemoveBtn) {
+                    const name = tagRemoveBtn.getAttribute('data-bulk-tag-remove') || '';
+                    const n = normalizeTagName(name);
+                    if (n) {
+                        if (bulkRemoveTagNames.has(n)) bulkRemoveTagNames.delete(n);
+                        else {
+                            bulkRemoveTagNames.add(n);
+                            bulkAddTagNames.delete(n);
+                        }
+                        refreshBulkModalUI();
+                    }
+                    return;
+                }
+            }, true);
+
+            if (closeBulkBtn) closeBulkBtn.addEventListener('click', closeBulkModal);
+            if (cancelBulkBtn) cancelBulkBtn.addEventListener('click', closeBulkModal);
+            openButtons.forEach(btn => btn.addEventListener('click', openBulkModal));
+
+            if (clearSelectionBtn) {
+                clearSelectionBtn.addEventListener('click', function () {
+                    applySelectionSet(new Set());
+                });
+            }
+
+            if (replaceByCategoryBtn) {
+                replaceByCategoryBtn.addEventListener('click', function () {
+                    const id = parseInt((selectCategoryEl && selectCategoryEl.value) ? selectCategoryEl.value : '', 10);
+                    if (!Number.isFinite(id)) return;
+                    applySelectionSet(getKeysForCategory(id));
+                });
+            }
+            if (addByCategoryBtn) {
+                addByCategoryBtn.addEventListener('click', function () {
+                    const id = parseInt((selectCategoryEl && selectCategoryEl.value) ? selectCategoryEl.value : '', 10);
+                    if (!Number.isFinite(id)) return;
+                    mergeSelectionSet(getKeysForCategory(id));
+                });
+            }
+            if (replaceByTagBtn) {
+                replaceByTagBtn.addEventListener('click', function () {
+                    const name = (selectTagEl && selectTagEl.value) ? selectTagEl.value : '';
+                    const keys = getKeysForTag(name);
+                    applySelectionSet(keys);
+                });
+            }
+            if (addByTagBtn) {
+                addByTagBtn.addEventListener('click', function () {
+                    const name = (selectTagEl && selectTagEl.value) ? selectTagEl.value : '';
+                    const keys = getKeysForTag(name);
+                    mergeSelectionSet(keys);
+                });
+            }
+
+            if (addNewCategoryBtn) {
+                addNewCategoryBtn.addEventListener('click', function () {
+                    const name = (newCategoryNameEl && newCategoryNameEl.value) ? newCategoryNameEl.value.trim() : '';
+                    const color = (newCategoryColorEl && newCategoryColorEl.value) ? newCategoryColorEl.value.trim() : '#6366f1';
+                    if (!name) { alert('Lütfen bir kategori adı girin.'); return; }
+                    const exists = categoriesData.find(c => c && c.name === name);
+                    if (exists) {
+                        bulkAddCategoryIds.add(exists.id);
+                        bulkRemoveCategoryIds.delete(exists.id);
+                        refreshBulkModalUI();
+                        return;
+                    }
+                    const maxId = categoriesData.length > 0 ? Math.max(...categoriesData.map(c => c.id || 0)) : 0;
+                    const next = { id: maxId + 1, name, color };
+                    categoriesData.push(next);
+                    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+                    updateSeriesCategorySelector();
+                    updateMovieCategorySelector();
+                    renderCategoryFilters();
+                    renderCategoriesList();
+                    bulkAddCategoryIds.add(next.id);
+                    refreshBulkModalUI();
+                    if (newCategoryNameEl) newCategoryNameEl.value = '';
+                });
+            }
+
+            if (addNewTagBtn) {
+                addNewTagBtn.addEventListener('click', function () {
+                    const name = (newTagNameEl && newTagNameEl.value) ? newTagNameEl.value : '';
+                    const trimmed = normalizeTagName(name);
+                    if (!trimmed) { alert('Lütfen bir etiket adı girin.'); return; }
+                    ensureTagExists(trimmed);
+                    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+                    bulkAddTagNames.add(trimmed);
+                    bulkRemoveTagNames.delete(trimmed);
+                    renderTagsList();
+                    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+                    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+                    updateSeriesTagCloud();
+                    updateMoviesTagCloud();
+                    refreshBulkModalUI();
+                    if (newTagNameEl) newTagNameEl.value = '';
+                });
+            }
+
+            function applyChangesToCategoriesAndTags(item) {
+                const currentCats = Array.isArray(item.categories) ? item.categories : [];
+                const currentTags = Array.isArray(item.tags) ? item.tags : [];
+
+                const catSet = new Set(currentCats);
+                bulkAddCategoryIds.forEach(id => catSet.add(id));
+                bulkRemoveCategoryIds.forEach(id => catSet.delete(id));
+                item.categories = Array.from(catSet);
+
+                const tagSet = new Set(currentTags.map(normalizeTagName).filter(Boolean));
+                bulkAddTagNames.forEach(name => {
+                    const n = normalizeTagName(name);
+                    if (n) tagSet.add(n);
+                });
+                bulkRemoveTagNames.forEach(name => {
+                    const n = normalizeTagName(name);
+                    if (n) tagSet.delete(n);
+                });
+                item.tags = Array.from(tagSet);
+                item.updatedAt = new Date().toISOString();
+            }
+
+            if (applyBulkBtn) {
+                applyBulkBtn.addEventListener('click', function () {
+                    if (selectedBulkKeys.size === 0) {
+                        alert('Önce en az bir öğe seçmelisiniz.');
+                        return;
+                    }
+
+                    bulkAddTagNames.forEach(n => ensureTagExists(n));
+
+                    selectedBulkKeys.forEach(key => {
+                        if (key.startsWith('movie:')) {
+                            const id = key.slice('movie:'.length);
+                            const movie = moviesData.find(m => String(m.id) === id);
+                            if (movie) applyChangesToCategoriesAndTags(movie);
+                            return;
+                        }
+                        if (key.startsWith('series:')) {
+                            const name = key.slice('series:'.length);
+                            seriesData.forEach(s => {
+                                if (s && s.name === name) applyChangesToCategoriesAndTags(s);
+                            });
+                        }
+                    });
+
+                    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+                    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+                    filterSeries();
+                    filterMovies();
+                    renderCategoryFilters();
+                    renderTagsList();
+                    updateSeriesTagCloud();
+                    updateMoviesTagCloud();
+                    renderSelectionCount();
+
+                    closeBulkModal();
+                    alert('Toplu düzenleme başarıyla uygulandı!');
+                });
+            }
+
+            renderSelectionCount();
         }
 
         // Render category chips with counts for series and movies
@@ -2899,6 +3559,10 @@
             : `grid gap-6 grid-${seriesView}-col`;
 
             seriesList.innerHTML = groupedSeries.map(series => {
+                const selectKey = 'series:' + (series.name || '');
+                const isSelected = selectedBulkKeys.has(selectKey);
+                const selectedClass = isSelected ? ' bulk-selected' : '';
+                const checkedAttr = isSelected ? 'checked' : '';
                 // Get overall status based on all seasons
                 const allSeasons = series.seasons;
                 const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
@@ -2968,7 +3632,10 @@
                 }).join('');
 
                 return `
-        <div class="series-card card p-6 relative masonry-item">
+        <div class="series-card card p-6 relative masonry-item${selectedClass}">
+                        <label class="bulk-select-control" aria-label="Seç">
+                            <input type="checkbox" class="bulk-select-checkbox" data-select-key="${selectKey}" ${checkedAttr}>
+                        </label>
         ${series.imageUrl ? `<div class="mb-4 ${posterAspect} poster-wrapper">
                             <span class="poster-badge status-badge ${status}">${getStatusText(status)}</span>
                             <img src="${series.imageUrl}" alt="${series.name}" class="w-full h-full object-cover" onerror="handleImageError(this)">
@@ -3194,6 +3861,10 @@
             : `grid gap-6 grid-${moviesView}-col`;
 
             moviesList.innerHTML = filteredMoviesData.map(movie => {
+                const selectKey = 'movie:' + String(movie.id);
+                const isSelected = selectedBulkKeys.has(selectKey);
+                const selectedClass = isSelected ? ' bulk-selected' : '';
+                const checkedAttr = isSelected ? 'checked' : '';
                 // Kategori badge'leri
                 const categoryBadges = movie.categories && movie.categories.length > 0
                     ? movie.categories.map(catId => {
@@ -3211,7 +3882,10 @@
                     : '';
 
                 return `
-        <div class="movie-card card p-6 relative masonry-item">
+        <div class="movie-card card p-6 relative masonry-item${selectedClass}">
+                        <label class="bulk-select-control" aria-label="Seç">
+                            <input type="checkbox" class="bulk-select-checkbox" data-select-key="${selectKey}" ${checkedAttr}>
+                        </label>
         ${movie.imageUrl ? `<div class="mb-4 ${posterAspect} poster-wrapper">
                             <span class="poster-badge status-badge ${movie.watched ? 'completed' : 'planning'}">${movie.watched ? 'İzlendi' : 'İzlenecek'}</span>
                             <img src="${movie.imageUrl}" alt="${movie.name}" class="w-full h-full object-cover" onerror="handleImageError(this)">
