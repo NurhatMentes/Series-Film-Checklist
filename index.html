@@ -2384,21 +2384,38 @@
 
         // Image loading error handling
         function handleImageError(img) {
-            // YouTube thumbnail fallback strategy
-            if (img.src && img.src.includes('i.ytimg.com/vi/') && !img.hasAttribute('data-fallback-tried')) {
-                // If hqdefault fails (404), try mqdefault
-                if (img.src.includes('hqdefault.jpg')) {
+            if (!img || img.hasAttribute('data-image-failed')) {
+                return;
+            }
+
+            // YouTube thumbnail fallback strategy (hqdefault -> mqdefault)
+            if (img.src && img.src.includes('i.ytimg.com/vi/')) {
+                if (!img.hasAttribute('data-fallback-tried') && img.src.includes('hqdefault.jpg')) {
                     img.setAttribute('data-fallback-tried', 'true');
                     img.src = img.src.replace('hqdefault.jpg', 'mqdefault.jpg');
                     return;
                 }
             }
 
+            // Tek seferlik retry (geçici ağ hatalarında görseli hemen kaybetmemek için)
+            if (!img.hasAttribute('data-retry-once')) {
+                img.setAttribute('data-retry-once', 'true');
+                const original = img.getAttribute('data-original-src') || img.src;
+                if (!img.hasAttribute('data-original-src')) {
+                    img.setAttribute('data-original-src', original);
+                }
+                const cacheBuster = (original.indexOf('?') === -1 ? '?' : '&') + 'retry=' + Date.now();
+                img.src = original + cacheBuster;
+                return;
+            }
+
+            img.setAttribute('data-image-failed', 'true');
             img.style.display = 'none';
-            const placeholder = img.parentElement;
-            if (placeholder) {
-                placeholder.innerHTML = `
-                    <div class="w-full h-48 bg-gray-200 dark:bg-gray-700 rounded-lg flex items-center justify-center">
+            const posterWrapper = img.closest('.poster-wrapper');
+            const placeholderHost = posterWrapper || img.parentElement;
+            if (placeholderHost) {
+                placeholderHost.innerHTML = `
+                    <div class="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
                         <i class="fas fa-image text-gray-400 text-4xl"></i>
                     </div>
                 `;
