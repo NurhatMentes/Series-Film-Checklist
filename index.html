@@ -2397,15 +2397,9 @@
                 }
             }
 
-            // Tek seferlik retry (geçici ağ hatalarında görseli hemen kaybetmemek için)
-            if (!img.hasAttribute('data-retry-once')) {
-                img.setAttribute('data-retry-once', 'true');
-                const original = img.getAttribute('data-original-src') || img.src;
-                if (!img.hasAttribute('data-original-src')) {
-                    img.setAttribute('data-original-src', original);
-                }
-                const cacheBuster = (original.indexOf('?') === -1 ? '?' : '&') + 'retry=' + Date.now();
-                img.src = original + cacheBuster;
+            if (img.src && img.src.indexOf('http://') === 0 && !img.hasAttribute('data-https-tried')) {
+                img.setAttribute('data-https-tried', 'true');
+                img.src = 'https://' + img.src.substring('http://'.length);
                 return;
             }
 
@@ -3208,8 +3202,32 @@
                         description: s.description,
                         imageUrl: s.imageUrl,
                         releaseDate: s.releaseDate,
+                        __metaUpdatedAt: s.updatedAt ? new Date(s.updatedAt).getTime() : 0,
                         seasons: []
                     };
+                } else {
+                    const g = grouped[s.name];
+                    const updatedAt = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
+                    const isNewer = updatedAt >= (g.__metaUpdatedAt || 0);
+
+                    if (s.imageUrl && (!g.imageUrl || isNewer)) {
+                        g.imageUrl = s.imageUrl;
+                    }
+                    if (s.description && (!g.description || isNewer)) {
+                        g.description = s.description;
+                    }
+                    if (s.trailerUrl && (!g.trailerUrl || isNewer)) {
+                        g.trailerUrl = s.trailerUrl;
+                    }
+                    if (s.imdbRating && (!g.imdbRating || isNewer)) {
+                        g.imdbRating = s.imdbRating;
+                    }
+                    if (s.releaseDate && (!g.releaseDate || isNewer)) {
+                        g.releaseDate = s.releaseDate;
+                    }
+                    if (isNewer) {
+                        g.__metaUpdatedAt = updatedAt;
+                    }
                 }
                 grouped[s.name].seasons.push({
                     id: s.id,
