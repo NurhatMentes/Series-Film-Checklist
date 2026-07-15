@@ -14,6 +14,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 📺 Dizi Takibi
 - Birden fazla sezon ekleyin
 - Her sezon için bölüm ilerlemesi takibi
+- **Son izlenen diziler** otomatik olarak üst sıraya taşınır
 - Platform bilgisi (Netflix, Disney+, Amazon Prime vb.)
 - **IMDB puanı ekleme** (1-10 arası)
 - **Dizi açıklaması** ve detaylı bilgiler
@@ -26,6 +27,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 🎬 Film Listesi
 - İzlenecek filmleri ekleyin
 - Film türüne göre sınıflandırın
+- **Son izlenen filmler** otomatik olarak üst sıraya taşınır
 - **IMDB puanı ekleme** (1-10 arası)
 - **Film açıklaması** ve detaylı bilgiler
 - **Resim linki** ile görsel zenginleştirme
@@ -44,6 +46,8 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 💾 Veri Yönetimi
 - **Yedekleme ve geri yükleme** - JSON dosya formatı
 - **Yerel depolama** - Veriler tarayıcıda saklanır
+- **Son izleme geçmişi** - `lastWatchedAt` bilgisiyle kalıcı sıralama
+- **P2P senkronizasyon** - Eşlenen cihazlarda izleme güncellemeleri anlık yansır
 - **Veri kaybı riski yok** - Manuel yedekleme ile güvence
 - **Veri aktarımı** - Farklı cihazlara kolayca taşıma
 
@@ -115,7 +119,21 @@ Rozetler, içeriğinizin durumunu bir bakışta anlamanızı sağlar ve hangi i�
 | ❌ | İnternet kesilirse | Etkilenmez, offline çalışır |
 | ❌ | Sunucu sorunu | Etkilenmez, yerel depolama kullanır |
 
-## Son Güncellemeler (v1.3.0)
+## Son Güncellemeler (v1.4.0)
+
+### 🆕 Yeni Özellikler
+- **Son İzlenen Diziler**: İzleme ilerlemesi güncellenen diziler otomatik olarak listenin üstünde gösterilir
+- **Son İzlenen Filmler**: Yeni izlenen filmler otomatik olarak listenin üstünde gösterilir
+- **İzleme Zamanı Sıralaması**: Son izleme zamanına göre azalan sıra uygulanır
+- **Canlı Sekme Güncellemesi**: Aynı tarayıcıdaki diğer sekmeler sıralama ve durum değişikliklerini anlık alır
+
+### 🔧 Teknik İyileştirmeler
+- Dizi sezon kayıtlarına ve film kayıtlarına `lastWatchedAt` alanı eklendi
+- Mevcut sıralama korunurken yalnızca izleme geçmişi olan içerikler üste alınacak şekilde önceliklendirme mantığı eklendi
+- Son izleme verisi mevcut P2P veri paketi ile birlikte eşlenen cihazlara aktarılır hale getirildi
+- `storage` olayı ile aynı kullanıcı oturumundaki açık sekmeler arasında canlı güncelleme sağlandı
+
+## Önceki Güncellemeler (v1.3.0)
 
 ### 🆕 Yeni Özellikler
 - **Çıkış Tarihi Rozetleri**: Dizi ve filmlerinize çıkış tarihi ekleyerek otomatik durum rozetleri görüntüleyin

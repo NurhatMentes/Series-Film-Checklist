@@ -1,5 +1,14 @@
 # Proje Kontrol Listesi (Checklist)
 
+## Son Izlenen Icerik Siralamasi (2026-07-15)
+
+- [x] Dizi sayfasinda son izlenen dizileri `lastWatchedAt` alanina gore listenin ustune tasima ozelligi eklendi.
+- [x] Film sayfasinda son izlenen filmleri `lastWatchedAt` alanina gore listenin ustune tasima ozelligi eklendi.
+- [x] Varsayilan siralama bozulmadan, yalnizca izleme gecmisi olan iceriklere oncelik verilmesi saglandi.
+- [x] Son izleme verisi localStorage ve mevcut P2P senkronizasyon akisi icine dahil edildi.
+- [x] Ayni tarayicidaki acik sekmeler arasinda `storage` olayi ile anlik guncelleme eklendi.
+- [x] Farkli ekran genisliklerinde ve canli guncelleme akisinda tarayici testi yapildi.
+
 ## Hata Düzeltmeleri ve İyileştirmeler (2025-12-20)
 
 - [x] **Tailwind CSS Uyarıları**: `line-clamp` plugin'i CDN URL'inden kaldırıldı (Tailwind v3.3+ ile varsayılan olarak geliyor).

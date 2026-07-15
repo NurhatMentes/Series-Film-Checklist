@@ -2334,6 +2334,127 @@
             };
         }
 
+        function getTimestamp(value) {
+            if (!value) return 0;
+            const timestamp = new Date(value).getTime();
+            return Number.isFinite(timestamp) ? timestamp : 0;
+        }
+
+        function getLastWatchedTimestamp(item) {
+            return getTimestamp(item && item.lastWatchedAt);
+        }
+
+        function prioritizeRecentlyWatchedItems(items, getItemTimestamp) {
+            if (!Array.isArray(items) || items.length === 0) {
+                return items;
+            }
+
+            const hasRecentItems = items.some(item => getItemTimestamp(item) > 0);
+            if (!hasRecentItems) {
+                return items;
+            }
+
+            items.sort((a, b) => {
+                const aTimestamp = getItemTimestamp(a);
+                const bTimestamp = getItemTimestamp(b);
+                const aIsRecent = aTimestamp > 0;
+                const bIsRecent = bTimestamp > 0;
+
+                if (aIsRecent && bIsRecent) {
+                    return bTimestamp - aTimestamp;
+                }
+
+                if (aIsRecent !== bIsRecent) {
+                    return aIsRecent ? -1 : 1;
+                }
+
+                return 0;
+            });
+
+            return items;
+        }
+
+        function getSeriesLastWatchedTimestamp(series) {
+            if (!series) return 0;
+
+            if (Array.isArray(series.seasons) && series.seasons.length > 0) {
+                return series.seasons.reduce((latestTimestamp, season) => {
+                    return Math.max(latestTimestamp, getLastWatchedTimestamp(season));
+                }, getLastWatchedTimestamp(series));
+            }
+
+            if (typeof series.name === 'string' && series.name) {
+                return seriesData.reduce((latestTimestamp, season) => {
+                    if (season.name !== series.name) {
+                        return latestTimestamp;
+                    }
+
+                    return Math.max(latestTimestamp, getLastWatchedTimestamp(season));
+                }, getLastWatchedTimestamp(series));
+            }
+
+            return getLastWatchedTimestamp(series);
+        }
+
+        function updateSeriesWatchProgress(id, delta) {
+            const series = seriesData.find(item => item.id == id);
+            if (!series) {
+                return false;
+            }
+
+            if (delta > 0) {
+                if (series.watchedEpisodes >= series.totalEpisodes) {
+                    return false;
+                }
+
+                series.watchedEpisodes += 1;
+                const now = new Date().toISOString();
+                series.updatedAt = now;
+                series.lastWatchedAt = now;
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                return true;
+            }
+
+            if (delta < 0) {
+                if (series.watchedEpisodes <= 0) {
+                    return false;
+                }
+
+                series.watchedEpisodes -= 1;
+                series.updatedAt = new Date().toISOString();
+                if (series.watchedEpisodes === 0) {
+                    series.lastWatchedAt = null;
+                }
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                return true;
+            }
+
+            return false;
+        }
+
+        function handleSharedStorageUpdate(key, nextValue) {
+            if (key === 'seriesData') {
+                seriesData = Array.isArray(nextValue) ? nextValue : [];
+            } else if (key === 'moviesData') {
+                moviesData = Array.isArray(nextValue) ? nextValue : [];
+            } else if (key === 'categoriesData') {
+                categoriesData = Array.isArray(nextValue) ? nextValue : categoriesData;
+            } else if (key === 'tagsData') {
+                tagsData = Array.isArray(nextValue) ? nextValue : [];
+            }
+
+            filterSeries();
+            filterMovies();
+            renderCategoriesList();
+            renderCategoryFilters();
+            renderTagsList();
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            updateTotalStats();
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+        }
+
         // Bulut push kaldırıldı
 
         function schedulePeerPush() {
@@ -2380,6 +2501,17 @@
                 schedulePeerPush();
             }
         };
+
+        window.addEventListener('storage', function(event) {
+            if (!event.key || !['seriesData', 'moviesData', 'categoriesData', 'tagsData'].includes(event.key)) {
+                return;
+            }
+
+            try {
+                const parsedValue = event.newValue ? JSON.parse(event.newValue) : null;
+                handleSharedStorageUpdate(event.key, parsedValue);
+            } catch (_) {}
+        });
         let moviesView = '3';
 
         // Image loading error handling
@@ -3202,13 +3334,16 @@
                         description: s.description,
                         imageUrl: s.imageUrl,
                         releaseDate: s.releaseDate,
+                        lastWatchedAt: s.lastWatchedAt || null,
                         __metaUpdatedAt: s.updatedAt ? new Date(s.updatedAt).getTime() : 0,
+                        __lastWatchedAt: getLastWatchedTimestamp(s),
                         seasons: []
                     };
                 } else {
                     const g = grouped[s.name];
                     const updatedAt = s.updatedAt ? new Date(s.updatedAt).getTime() : 0;
                     const isNewer = updatedAt >= (g.__metaUpdatedAt || 0);
+                    const lastWatchedAt = getLastWatchedTimestamp(s);
 
                     if (s.imageUrl && (!g.imageUrl || isNewer)) {
                         g.imageUrl = s.imageUrl;
@@ -3228,18 +3363,27 @@
                     if (isNewer) {
                         g.__metaUpdatedAt = updatedAt;
                     }
+                    if (lastWatchedAt >= (g.__lastWatchedAt || 0)) {
+                        g.lastWatchedAt = s.lastWatchedAt || null;
+                        g.__lastWatchedAt = lastWatchedAt;
+                    }
                 }
                 grouped[s.name].seasons.push({
                     id: s.id,
                     season: s.season,
                     totalEpisodes: s.totalEpisodes,
                     watchedEpisodes: s.watchedEpisodes,
-                    updatedAt: s.updatedAt
+                    updatedAt: s.updatedAt,
+                    lastWatchedAt: s.lastWatchedAt || null
                 });
                 // Sort seasons
                 grouped[s.name].seasons.sort((a, b) => a.season - b.season);
             });
-            return Object.values(grouped);
+            return Object.values(grouped).map(seriesItem => {
+                delete seriesItem.__metaUpdatedAt;
+                delete seriesItem.__lastWatchedAt;
+                return seriesItem;
+            });
         }
 
         // Upcoming releases functions
@@ -3586,7 +3730,10 @@
             seriesEmpty.classList.add('hidden');
 
             // Group series by name
-            const groupedSeries = groupSeriesByName(filteredSeriesData);
+            const groupedSeries = prioritizeRecentlyWatchedItems(
+                groupSeriesByName(filteredSeriesData),
+                getSeriesLastWatchedTimestamp
+            );
 
             // Update grid view
         seriesList.className = layoutMode === 'masonry'
@@ -3760,60 +3907,9 @@
                 btn.addEventListener('click', function (event) {
                     event.stopPropagation();
                     const id = this.getAttribute('data-id');
-                    const seasonItemData = seriesData.find(s => s.id == id);
-                    if (seasonItemData && seasonItemData.watchedEpisodes < seasonItemData.totalEpisodes) {
-                        seasonItemData.watchedEpisodes++;
-                        seasonItemData.updatedAt = new Date().toISOString();
-                        localStorage.setItem('seriesData', JSON.stringify(seriesData));
-
-                        // Update the DOM in-place so open sections/modal are not affected
-                        const seasonItem = this.closest('.season-item');
-                        if (seasonItem) {
-                            // Update header count (the second direct span child of .season-header)
-                            const headerCount = seasonItem.querySelector('.season-header > span');
-                            if (headerCount) headerCount.textContent = `${seasonItemData.watchedEpisodes}/${seasonItemData.totalEpisodes}`;
-
-                            // Update season percentage text inside content
-                            const percentText = seasonItem.querySelector('.content-inner .flex.justify-between span:last-child');
-                            const pct = seasonItemData.totalEpisodes > 0 ? Math.round((seasonItemData.watchedEpisodes / seasonItemData.totalEpisodes) * 100) : 0;
-                            if (percentText) percentText.textContent = `${pct}%`;
-
-                            // Update progress bar fill for this season
-                            const progressFill = seasonItem.querySelector('.progress-fill');
-                            if (progressFill) progressFill.style.width = `${pct}%`;
-
-                            // Update season status badge
-                            const seasonStatus = seasonItemData.totalEpisodes > 0 && seasonItemData.watchedEpisodes === seasonItemData.totalEpisodes ? 'completed'
-                                : seasonItemData.watchedEpisodes > 0 ? 'watching'
-                                    : 'planning';
-                            const statusBadge = seasonItem.querySelector('.status-badge');
-                            if (statusBadge) {
-                                statusBadge.className = `status-badge ${seasonStatus}`;
-                                statusBadge.textContent = getStatusText(seasonStatus);
-                            }
-                        }
-
-                        // Update overall series card totals and progress without full re-render
-                        const card = this.closest('.series-card');
-                        if (card) {
-                            const seriesNameEl = card.querySelector('h3');
-                            const seriesName = seriesNameEl ? seriesNameEl.textContent : null;
-                            if (seriesName) {
-                                const allSeasons = seriesData.filter(s => s.name === seriesName);
-                                const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
-                                const watchedEpisodes = allSeasons.reduce((sum, s) => sum + s.watchedEpisodes, 0);
-                                const overallPct = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
-
-                                const totalSpan = card.querySelector('.mb-4 .flex.justify-between span');
-                                if (totalSpan) totalSpan.textContent = `Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}`;
-
-                                const overallPctSpan = card.querySelector('.mb-4 .flex.justify-between span:last-child');
-                                if (overallPctSpan) overallPctSpan.textContent = `${overallPct}%`;
-
-                                const overallFill = card.querySelector('.progress-bar .progress-fill');
-                                if (overallFill) overallFill.style.width = `${overallPct}%`;
-                            }
-                        }
+                    if (updateSeriesWatchProgress(id, 1)) {
+                        filterSeries();
+                        updateTotalStats();
                     }
                 });
             });
@@ -3821,57 +3917,9 @@
                 btn.addEventListener('click', function (event) {
                     event.stopPropagation();
                     const id = this.getAttribute('data-id');
-                    const seasonItemData = seriesData.find(s => s.id == id);
-                    if (seasonItemData && seasonItemData.watchedEpisodes > 0) {
-                        seasonItemData.watchedEpisodes--;
-                        seasonItemData.updatedAt = new Date().toISOString();
-                        localStorage.setItem('seriesData', JSON.stringify(seriesData));
-
-                        // Update DOM in-place
-                        const seasonItem = this.closest('.season-item');
-                        if (seasonItem) {
-                            const headerCount = seasonItem.querySelector('.season-header > span');
-                            if (headerCount) headerCount.textContent = `${seasonItemData.watchedEpisodes}/${seasonItemData.totalEpisodes}`;
-
-                            const pct = seasonItemData.totalEpisodes > 0 ? Math.round((seasonItemData.watchedEpisodes / seasonItemData.totalEpisodes) * 100) : 0;
-                            const percentText = seasonItem.querySelector('.content-inner .flex.justify-between span:last-child');
-                            if (percentText) percentText.textContent = `${pct}%`;
-
-                            const progressFill = seasonItem.querySelector('.progress-fill');
-                            if (progressFill) progressFill.style.width = `${pct}%`;
-
-                            // Update season status badge
-                            const seasonStatus = seasonItemData.totalEpisodes > 0 && seasonItemData.watchedEpisodes === seasonItemData.totalEpisodes ? 'completed'
-                                : seasonItemData.watchedEpisodes > 0 ? 'watching'
-                                    : 'planning';
-                            const statusBadge = seasonItem.querySelector('.status-badge');
-                            if (statusBadge) {
-                                statusBadge.className = `status-badge ${seasonStatus}`;
-                                statusBadge.textContent = getStatusText(seasonStatus);
-                            }
-                        }
-
-                        // Update overall series card totals and progress
-                        const card = this.closest('.series-card');
-                        if (card) {
-                            const seriesNameEl = card.querySelector('h3');
-                            const seriesName = seriesNameEl ? seriesNameEl.textContent : null;
-                            if (seriesName) {
-                                const allSeasons = seriesData.filter(s => s.name === seriesName);
-                                const totalEpisodes = allSeasons.reduce((sum, s) => sum + s.totalEpisodes, 0);
-                                const watchedEpisodes = allSeasons.reduce((sum, s) => sum + s.watchedEpisodes, 0);
-                                const overallPct = totalEpisodes > 0 ? Math.round((watchedEpisodes / totalEpisodes) * 100) : 0;
-
-                                const totalSpan = card.querySelector('.mb-4 .flex.justify-between span');
-                                if (totalSpan) totalSpan.textContent = `Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}`;
-
-                                const overallPctSpan = card.querySelector('.mb-4 .flex.justify-between span:last-child');
-                                if (overallPctSpan) overallPctSpan.textContent = `${overallPct}%`;
-
-                                const overallFill = card.querySelector('.progress-bar .progress-fill');
-                                if (overallFill) overallFill.style.width = `${overallPct}%`;
-                            }
-                        }
+                    if (updateSeriesWatchProgress(id, -1)) {
+                        filterSeries();
+                        updateTotalStats();
                     }
                 });
             });
@@ -3895,7 +3943,12 @@
             ? `masonry masonry-${moviesView}-col`
             : `grid gap-6 grid-${moviesView}-col`;
 
-            moviesList.innerHTML = filteredMoviesData.map(movie => {
+            const prioritizedMovies = prioritizeRecentlyWatchedItems(
+                [...filteredMoviesData],
+                getLastWatchedTimestamp
+            );
+
+            moviesList.innerHTML = prioritizedMovies.map(movie => {
                 const selectKey = 'movie:' + String(movie.id);
                 const isSelected = selectedBulkKeys.has(selectKey);
                 const selectedClass = isSelected ? ' bulk-selected' : '';
@@ -4752,23 +4805,17 @@
 
         // Increase episode
         function increaseEpisode(id) {
-            const series = seriesData.find(s => s.id == id);
-            if (series && series.watchedEpisodes < series.totalEpisodes) {
-                series.watchedEpisodes++;
-                series.updatedAt = new Date().toISOString();
-                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            if (updateSeriesWatchProgress(id, 1)) {
                 filterSeries();
+                updateTotalStats();
             }
         }
 
         // Decrease episode
         function decreaseEpisode(id) {
-            const series = seriesData.find(s => s.id == id);
-            if (series && series.watchedEpisodes > 0) {
-                series.watchedEpisodes--;
-                series.updatedAt = new Date().toISOString();
-                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            if (updateSeriesWatchProgress(id, -1)) {
                 filterSeries();
+                updateTotalStats();
             }
         }
 
@@ -6037,6 +6084,7 @@
                     if (isNewSeason) {
                         // Yeni sezon ekle
                         const newSeasonId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
+                        const createdAt = new Date().toISOString();
                         seriesData.push({
                             id: newSeasonId,
                             name,
@@ -6051,15 +6099,23 @@
                             description,
                             imageUrl,
                             releaseDate: releaseDate || null,
-                            createdAt: new Date().toISOString(),
-                            updatedAt: new Date().toISOString()
+                            createdAt,
+                            updatedAt: createdAt,
+                            lastWatchedAt: watchedEpisodes > 0 ? createdAt : null
                         });
                     } else {
                         // Mevcut sezonu güncelle
                         const seasonIndex = seriesData.findIndex(s => s.id == selectedSeasonId);
                         if (seasonIndex !== -1) {
+                            const previousSeason = seriesData[seasonIndex];
+                            const now = new Date().toISOString();
+                            const nextLastWatchedAt = watchedEpisodes === 0
+                                ? null
+                                : watchedEpisodes > (previousSeason.watchedEpisodes || 0)
+                                    ? now
+                                    : previousSeason.lastWatchedAt || null;
                             seriesData[seasonIndex] = {
-                                ...seriesData[seasonIndex],
+                                ...previousSeason,
                                 name,
                                 platform,
                                 season: seasonNumber,
@@ -6072,7 +6128,8 @@
                                 description,
                                 imageUrl,
                                 releaseDate: releaseDate || null,
-                                updatedAt: new Date().toISOString()
+                                updatedAt: now,
+                                lastWatchedAt: nextLastWatchedAt
                             };
                         }
                     }
@@ -6090,6 +6147,7 @@
                 // Yeni dizi ekle - her sezon için ayrı kayıt
                 seasons.forEach(seasonData => {
                     const newId = seriesData.length > 0 ? Math.max(...seriesData.map(s => s.id)) + 1 : 1;
+                    const createdAt = new Date().toISOString();
                     seriesData.push({
                         id: newId,
                         name,
@@ -6104,8 +6162,9 @@
                         description,
                         imageUrl,
                         releaseDate: releaseDate || null,
-                        createdAt: new Date().toISOString(),
-                        updatedAt: new Date().toISOString()
+                        createdAt,
+                        updatedAt: createdAt,
+                        lastWatchedAt: seasonData.watchedEpisodes > 0 ? createdAt : null
                     });
                 });
             }
@@ -6136,8 +6195,15 @@
                 // Edit existing movie
                 const index = moviesData.findIndex(m => m.id == id);
                 if (index !== -1) {
+                    const previousMovie = moviesData[index];
+                    const now = new Date().toISOString();
+                    const nextLastWatchedAt = !watched
+                        ? null
+                        : !previousMovie.watched
+                            ? now
+                            : previousMovie.lastWatchedAt || now;
                     moviesData[index] = {
-                        ...moviesData[index],
+                        ...previousMovie,
                         name,
                         watched,
                         categories,
@@ -6147,12 +6213,14 @@
                         description,
                         imageUrl,
                         releaseDate: releaseDate || null,
-                        updatedAt: new Date().toISOString()
+                        updatedAt: now,
+                        lastWatchedAt: nextLastWatchedAt
                     };
                 }
             } else {
                 // Add new movie
                 const newId = moviesData.length > 0 ? Math.max(...moviesData.map(m => m.id)) + 1 : 1;
+                const createdAt = new Date().toISOString();
                 moviesData.push({
                     id: newId,
                     name,
@@ -6164,8 +6232,9 @@
                     description,
                     imageUrl,
                     releaseDate: releaseDate || null,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
+                    createdAt,
+                    updatedAt: createdAt,
+                    lastWatchedAt: watched ? createdAt : null
                 });
             }
 
@@ -6367,6 +6436,7 @@
                     filteredMoviesData.sort((a, b) => (a.imdbRating || 0) - (b.imdbRating || 0));
                     break;
             }
+            prioritizeRecentlyWatchedItems(filteredMoviesData, getLastWatchedTimestamp);
             renderMoviesList();
         }
 
