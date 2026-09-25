@@ -1,0 +1,14 @@
+{
+  "name": "İzleme Takip",
+  "short_name": "İzleme Takip",
+  "description": "Dizilerinizi ve filmlerinizi akıllıca takip edin",
+  "lang": "tr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#4f46e5",
+  "theme_color": "#6366f1",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

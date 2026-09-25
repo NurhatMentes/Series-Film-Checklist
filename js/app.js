@@ -1,0 +1,4952 @@
+// --- P2P Sync State ---
+let pushDebounceTimer = null;
+let peerPushDebounceTimer = null;
+let connectTimeoutTimer = null;
+// --- Genel yardımcılar ---
+const DATA_KEYS = ['seriesData', 'moviesData', 'categoriesData', 'tagsData', 'deletedItems'];
+const DEFAULT_CATEGORIES = [
+    { id: 1, name: 'Aksiyon', color: '#ef4444' },
+    { id: 2, name: 'Komedi', color: '#f59e0b' },
+    { id: 3, name: 'Dram', color: '#10b981' },
+    { id: 4, name: 'Bilim Kurgu', color: '#6366f1' },
+    { id: 5, name: 'Fantastik', color: '#8b5cf6' }
+];
+
+function safeParse(key, fallback) {
+    try {
+        const raw = localStorage.getItem(key);
+        if (!raw) return fallback;
+        const value = JSON.parse(raw);
+        return value == null ? fallback : value;
+    } catch (_) {
+        return fallback;
+    }
+}
+
+// HTML içine yazılan kullanıcı verisini kaçışla (XSS önlemi)
+function esc(value) {
+    return String(value == null ? '' : value).replace(/[&<>"']/g, c => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+}
+
+function safeUrl(url) {
+    const trimmed = String(url || '').trim();
+    return /^https?:\/\//i.test(trimmed) ? trimmed : '';
+}
+
+function safeColor(color) {
+    return /^#[0-9a-f]{3,8}$/i.test(color || '') ? color : '#6366f1';
+}
+
+// Türkçe harflere duyarlı küçük harfe çevirme (İ/I sorunu)
+function trLower(value) {
+    return String(value || '').toLocaleLowerCase('tr');
+}
+
+// Cihazlar arası çakışmayan sayısal ID üretimi
+let lastGeneratedId = 0;
+function newId() {
+    const candidate = Date.now() * 1000 + Math.floor(Math.random() * 1000);
+    lastGeneratedId = Math.max(candidate, lastGeneratedId + 1);
+    return lastGeneratedId;
+}
+
+function getTimestamp(value) {
+    if (!value) return 0;
+    const timestamp = new Date(value).getTime();
+    return Number.isFinite(timestamp) ? timestamp : 0;
+}
+
+function toInt(value, fallback = 0) {
+    const n = parseInt(value, 10);
+    return Number.isFinite(n) ? n : fallback;
+}
+
+function parseRatingInput(inputId) {
+    const raw = document.getElementById(inputId).value;
+    if (raw === '') return null;
+    const value = parseFloat(raw);
+    return Number.isFinite(value) ? Math.min(10, Math.max(0, value)) : null;
+}
+
+function isEmptyValue(value) {
+    return value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0);
+}
+
+function normalizeIdList(list) {
+    if (!Array.isArray(list)) return [];
+    return Array.from(new Set(list.map(v => Number(v)).filter(Number.isFinite)));
+}
+
+function normalizeTagList(list) {
+    if (!Array.isArray(list)) return [];
+    return Array.from(new Set(list.filter(t => typeof t === 'string').map(t => t.trim()).filter(Boolean)));
+}
+
+function normalizeSeason(season) {
+    const totalEpisodes = Math.max(0, toInt(season.totalEpisodes));
+    const watchedEpisodes = Math.min(Math.max(0, toInt(season.watchedEpisodes)), totalEpisodes || Infinity);
+    return {
+        id: season.id != null ? season.id : newId(),
+        season: Math.max(0, toInt(season.season)),
+        totalEpisodes,
+        watchedEpisodes,
+        releaseDate: season.releaseDate || null,
+        updatedAt: season.updatedAt || null,
+        lastWatchedAt: watchedEpisodes > 0 ? (season.lastWatchedAt || null) : null
+    };
+}
+
+function normalizeSeriesItem(item) {
+    const seasons = (Array.isArray(item.seasons) ? item.seasons : [])
+        .filter(s => s && typeof s === 'object')
+        .map(normalizeSeason)
+        .sort((a, b) => a.season - b.season);
+    const lastWatched = seasons.reduce((max, s) => Math.max(max, getTimestamp(s.lastWatchedAt)), 0);
+    return {
+        ...item,
+        id: item.id != null ? item.id : newId(),
+        name: String(item.name || '').trim(),
+        platform: item.platform || 'Diğer',
+        categories: normalizeIdList(item.categories),
+        tags: normalizeTagList(item.tags),
+        trailerUrl: item.trailerUrl || '',
+        imdbRating: item.imdbRating != null && item.imdbRating !== '' ? Number(item.imdbRating) : null,
+        myRating: item.myRating != null && item.myRating !== '' ? Number(item.myRating) : null,
+        notes: item.notes || '',
+        userStatus: item.userStatus === 'paused' || item.userStatus === 'dropped' ? item.userStatus : null,
+        description: item.description || '',
+        imageUrl: item.imageUrl || '',
+        releaseDate: item.releaseDate || null,
+        createdAt: item.createdAt || item.updatedAt || null,
+        updatedAt: item.updatedAt || item.createdAt || null,
+        lastWatchedAt: lastWatched > 0 ? new Date(lastWatched).toISOString() : null,
+        seasons
+    };
+}
+
+// Eski format: her sezon ayrı bir kayıt (aynı isimle). Bunları tek diziye birleştir.
+function mergeLegacySeriesRows(name, rows) {
+    const byNewest = [...rows].sort((a, b) => getTimestamp(b.updatedAt) - getTimestamp(a.updatedAt));
+    const pick = field => {
+        const row = byNewest.find(r => !isEmptyValue(r[field]));
+        return row ? row[field] : undefined;
+    };
+    const created = rows.map(r => getTimestamp(r.createdAt)).filter(Boolean);
+    const updated = rows.map(r => getTimestamp(r.updatedAt)).filter(Boolean);
+    return normalizeSeriesItem({
+        id: rows[0].id,
+        name,
+        platform: pick('platform'),
+        categories: pick('categories'),
+        tags: pick('tags'),
+        trailerUrl: pick('trailerUrl'),
+        imdbRating: pick('imdbRating'),
+        description: pick('description'),
+        imageUrl: pick('imageUrl'),
+        releaseDate: pick('releaseDate'),
+        createdAt: created.length ? new Date(Math.min(...created)).toISOString() : (updated.length ? new Date(Math.min(...updated)).toISOString() : null),
+        updatedAt: updated.length ? new Date(Math.max(...updated)).toISOString() : null,
+        seasons: rows.map(r => ({
+            id: r.id,
+            season: r.season,
+            totalEpisodes: r.totalEpisodes,
+            watchedEpisodes: r.watchedEpisodes,
+            releaseDate: r.releaseDate || null,
+            updatedAt: r.updatedAt || null,
+            lastWatchedAt: r.lastWatchedAt || null
+        }))
+    });
+}
+
+function hasLegacySeries(list) {
+    return Array.isArray(list) && list.some(item => item && !Array.isArray(item.seasons));
+}
+
+function normalizeSeriesList(list) {
+    if (!Array.isArray(list)) return [];
+    const result = [];
+    const legacyGroups = new Map();
+    list.forEach(item => {
+        if (!item || typeof item !== 'object') return;
+        if (Array.isArray(item.seasons)) {
+            result.push(normalizeSeriesItem(item));
+            return;
+        }
+        const key = String(item.name || '').trim();
+        if (!legacyGroups.has(key)) {
+            legacyGroups.set(key, []);
+            result.push({ __legacyKey: key });
+        }
+        legacyGroups.get(key).push(item);
+    });
+    return result.map(entry => entry.__legacyKey !== undefined
+        ? mergeLegacySeriesRows(entry.__legacyKey, legacyGroups.get(entry.__legacyKey))
+        : entry);
+}
+
+function normalizeMovie(movie) {
+    return {
+        ...movie,
+        id: movie.id != null ? movie.id : newId(),
+        name: String(movie.name || '').trim(),
+        watched: !!movie.watched,
+        categories: normalizeIdList(movie.categories),
+        tags: normalizeTagList(movie.tags),
+        trailerUrl: movie.trailerUrl || '',
+        imdbRating: movie.imdbRating != null && movie.imdbRating !== '' ? Number(movie.imdbRating) : null,
+        myRating: movie.myRating != null && movie.myRating !== '' ? Number(movie.myRating) : null,
+        notes: movie.notes || '',
+        description: movie.description || '',
+        imageUrl: movie.imageUrl || '',
+        releaseDate: movie.releaseDate || null,
+        createdAt: movie.createdAt || movie.updatedAt || null,
+        updatedAt: movie.updatedAt || movie.createdAt || null,
+        lastWatchedAt: movie.watched ? (movie.lastWatchedAt || null) : null
+    };
+}
+
+function normalizeMoviesList(list) {
+    return Array.isArray(list) ? list.filter(m => m && typeof m === 'object').map(normalizeMovie) : [];
+}
+
+function normalizeCategoriesList(list) {
+    if (!Array.isArray(list)) return null;
+    return list
+        .filter(c => c && typeof c === 'object' && c.id != null && String(c.name || '').trim())
+        .map(c => ({ ...c, id: Number(c.id), name: String(c.name).trim(), color: safeColor(c.color) }));
+}
+
+function normalizeTagsData(list) {
+    if (!Array.isArray(list)) return [];
+    const seen = new Set();
+    return list
+        .filter(t => t && typeof t === 'object' && typeof t.name === 'string' && t.name.trim())
+        .map(t => ({ ...t, id: t.id != null ? Number(t.id) : newId(), name: t.name.trim() }))
+        .filter(t => {
+            if (seen.has(t.name)) return false;
+            seen.add(t.name);
+            return true;
+        });
+}
+
+function normalizeDeleted(value) {
+    const base = { series: {}, movies: {}, categories: {}, tags: {} };
+    if (!value || typeof value !== 'object') return base;
+    Object.keys(base).forEach(k => {
+        if (value[k] && typeof value[k] === 'object') base[k] = { ...value[k] };
+    });
+    return base;
+}
+
+// Data storage
+const rawSeriesData = safeParse('seriesData', []);
+if (hasLegacySeries(rawSeriesData) && !localStorage.getItem('seriesData_v1_backup')) {
+    // Geçişten önce eski veriyi bir kez yedekle
+    try { localStorage.setItem('seriesData_v1_backup', JSON.stringify(rawSeriesData)); } catch (_) {}
+}
+let seriesData = normalizeSeriesList(rawSeriesData);
+let moviesData = normalizeMoviesList(safeParse('moviesData', []));
+let categoriesData = normalizeCategoriesList(safeParse('categoriesData', null)) || DEFAULT_CATEGORIES.map(c => ({ ...c }));
+let tagsData = normalizeTagsData(safeParse('tagsData', []));
+let deletedItems = normalizeDeleted(safeParse('deletedItems', null));
+try {
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+} catch (_) {}
+
+function markDeleted(kind, id) {
+    if (!deletedItems[kind]) deletedItems[kind] = {};
+    deletedItems[kind][String(id)] = Date.now();
+    localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+}
+
+let filteredSeriesData = [...seriesData];
+let filteredMoviesData = [...moviesData];
+let currentSeriesFilter = 'all';
+let currentMoviesFilter = 'all';
+let currentSeriesCategory = null;
+let currentMoviesCategory = null;
+let currentTrailersFilter = 'all';
+let currentTrailersSort = 'alphabetical';
+let trailersSearchQuery = '';
+let seriesView = '3';
+// Görsel oranı: Tailwind aspect-ratio class
+let posterAspect = localStorage.getItem('posterAspect') || 'original';
+// Eski sürümde oran ayarı hiç uygulanmıyordu; kullanıcının alıştığı görünümü korumak için bir kez "Orijinal"e çek
+if (!localStorage.getItem('posterAspectFixed')) {
+    posterAspect = 'original';
+    try {
+        localStorage.setItem('posterAspect', posterAspect);
+        localStorage.setItem('posterAspectFixed', '1');
+    } catch (_) {}
+}
+// Kart yerleşimi modu: 'grid' veya 'masonry'
+let layoutMode = localStorage.getItem('layoutMode') || 'masonry';
+let trailerPlayer = null;
+let trailerStartTimeout = null;
+let trailerHasStarted = false;
+let trailersPreviewPlayer = null;
+let trailersPreviewVideoId = null;
+let trailersPreviewStartTimer = null;
+let selectedBulkKeys = new Set();
+let bulkAddCategoryIds = new Set();
+let bulkRemoveCategoryIds = new Set();
+let bulkAddTagNames = new Set();
+let bulkRemoveTagNames = new Set();
+
+// --- Sync helpers (P2P) ---
+
+function getAllDataPayload() {
+    return {
+        series: seriesData,
+        movies: moviesData,
+        categories: categoriesData,
+        tags: tagsData,
+        deleted: deletedItems,
+        dataVersion: 2,
+        updatedAt: Date.now(),
+        origin: window.location.origin
+    };
+}
+
+function getLastWatchedTimestamp(item) {
+    return getTimestamp(item && item.lastWatchedAt);
+}
+
+function getSeriesLastWatchedTimestamp(series) {
+    if (!series) return 0;
+    const seasons = Array.isArray(series.seasons) ? series.seasons : [];
+    return seasons.reduce((latest, season) => Math.max(latest, getLastWatchedTimestamp(season)), getLastWatchedTimestamp(series));
+}
+
+function findSeries(id) {
+    return seriesData.find(item => String(item.id) === String(id));
+}
+
+function refreshSeriesLastWatched(series) {
+    const latest = series.seasons.reduce((max, s) => Math.max(max, getLastWatchedTimestamp(s)), 0);
+    series.lastWatchedAt = latest > 0 ? new Date(latest).toISOString() : null;
+}
+
+function updateSeriesWatchProgress(seriesId, seasonId, delta) {
+    const series = findSeries(seriesId);
+    if (!series) return false;
+    const season = series.seasons.find(s => String(s.id) === String(seasonId));
+    if (!season) return false;
+
+    const now = new Date().toISOString();
+    if (delta > 0) {
+        if (season.watchedEpisodes >= season.totalEpisodes) return false;
+        season.watchedEpisodes += 1;
+        season.lastWatchedAt = now;
+    } else if (delta < 0) {
+        if (season.watchedEpisodes <= 0) return false;
+        season.watchedEpisodes -= 1;
+        if (season.watchedEpisodes === 0) season.lastWatchedAt = null;
+    } else {
+        return false;
+    }
+    season.updatedAt = now;
+    series.updatedAt = now;
+    refreshSeriesLastWatched(series);
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    return true;
+}
+
+function handleSharedStorageUpdate(key, nextValue) {
+    if (key === 'seriesData') {
+        seriesData = normalizeSeriesList(nextValue);
+    } else if (key === 'moviesData') {
+        moviesData = normalizeMoviesList(nextValue);
+    } else if (key === 'categoriesData') {
+        categoriesData = normalizeCategoriesList(nextValue) || categoriesData;
+    } else if (key === 'tagsData') {
+        tagsData = normalizeTagsData(nextValue);
+    } else if (key === 'deletedItems') {
+        deletedItems = normalizeDeleted(nextValue);
+    }
+    refreshAll();
+}
+
+function schedulePeerPush() {
+    if (!rtcChannel || rtcChannel.readyState !== 'open') return;
+    clearTimeout(peerPushDebounceTimer);
+    peerPushDebounceTimer = setTimeout(() => {
+        try {
+            const payload = getAllDataPayload();
+            rtcChannel.send(JSON.stringify({ type: 'syncData', payload }));
+            updatePairingStatus('Bağlı - veriler gönderildi (' + new Date(payload.updatedAt).toLocaleTimeString('tr-TR') + ')', 'success');
+        } catch (_) {}
+    }, 600);
+}
+
+// İki listeyi ID bazında birleştir: daha yeni updatedAt kazanır, silinenler (tombstone) elenir
+function mergeById(localList, remoteList, localDeleted, remoteDeleted) {
+    const map = new Map();
+    const put = item => {
+        if (!item || item.id == null) return;
+        const key = String(item.id);
+        const existing = map.get(key);
+        if (!existing || getTimestamp(item.updatedAt) > getTimestamp(existing.updatedAt)) {
+            map.set(key, item);
+        }
+    };
+    (localList || []).forEach(put);
+    (remoteList || []).forEach(put);
+
+    const deleted = { ...(localDeleted || {}) };
+    Object.entries(remoteDeleted || {}).forEach(([key, ts]) => {
+        if (!deleted[key] || ts > deleted[key]) deleted[key] = ts;
+    });
+
+    const items = Array.from(map.values()).filter(item => {
+        const ts = deleted[String(item.id)];
+        return !ts || getTimestamp(item.updatedAt) > ts;
+    });
+    return { items, deleted };
+}
+
+function applyRemoteData(data) {
+    if (!data || typeof data !== 'object') return;
+    const remoteDeleted = normalizeDeleted(data.deleted);
+
+    const series = mergeById(seriesData, normalizeSeriesList(data.series), deletedItems.series, remoteDeleted.series);
+    const movies = mergeById(moviesData, normalizeMoviesList(data.movies), deletedItems.movies, remoteDeleted.movies);
+    const categories = mergeById(categoriesData, normalizeCategoriesList(data.categories) || [], deletedItems.categories, remoteDeleted.categories);
+    const tags = mergeById(tagsData, normalizeTagsData(data.tags), deletedItems.tags, remoteDeleted.tags);
+
+    seriesData = series.items;
+    moviesData = movies.items;
+    categoriesData = categories.items;
+    tagsData = normalizeTagsData(tags.items);
+    deletedItems = {
+        series: series.deleted,
+        movies: movies.deleted,
+        categories: categories.deleted,
+        tags: tags.deleted
+    };
+
+    // Uzak veriyi kaydederken geri gönderme (sonsuz döngüyü engeller)
+    __origSetItem('seriesData', JSON.stringify(seriesData));
+    __origSetItem('moviesData', JSON.stringify(moviesData));
+    __origSetItem('categoriesData', JSON.stringify(categoriesData));
+    __origSetItem('tagsData', JSON.stringify(tagsData));
+    __origSetItem('deletedItems', JSON.stringify(deletedItems));
+
+    refreshAll();
+    updatePairingStatus('Bağlı - veriler birleştirildi (' + new Date().toLocaleTimeString('tr-TR') + ')', 'success');
+}
+
+// Patch localStorage.setItem to auto-push
+const __origSetItem = localStorage.setItem.bind(localStorage);
+localStorage.setItem = function(key, value) {
+    try {
+        __origSetItem(key, value);
+    } catch (err) {
+        alert('Veriler kaydedilemedi (tarayıcı depolama alanı dolu olabilir): ' + err.message);
+        return;
+    }
+    if (DATA_KEYS.includes(key)) {
+        schedulePeerPush();
+    }
+};
+
+window.addEventListener('storage', function(event) {
+    if (!event.key || !DATA_KEYS.includes(event.key)) {
+        return;
+    }
+
+    try {
+        const parsedValue = event.newValue ? JSON.parse(event.newValue) : null;
+        handleSharedStorageUpdate(event.key, parsedValue);
+    } catch (_) {}
+});
+let moviesView = '3';
+
+// Image loading error handling
+function handleImageError(img) {
+    if (!img || img.hasAttribute('data-image-failed')) {
+        return;
+    }
+
+    // YouTube thumbnail fallback strategy (hqdefault -> mqdefault)
+    if (img.src && img.src.includes('i.ytimg.com/vi/')) {
+        if (!img.hasAttribute('data-fallback-tried') && img.src.includes('hqdefault.jpg')) {
+            img.setAttribute('data-fallback-tried', 'true');
+            img.src = img.src.replace('hqdefault.jpg', 'mqdefault.jpg');
+            return;
+        }
+    }
+
+    if (img.src && img.src.indexOf('http://') === 0 && !img.hasAttribute('data-https-tried')) {
+        img.setAttribute('data-https-tried', 'true');
+        img.src = 'https://' + img.src.substring('http://'.length);
+        return;
+    }
+
+    img.setAttribute('data-image-failed', 'true');
+    img.style.display = 'none';
+    const posterWrapper = img.closest('.poster-wrapper');
+    const placeholderHost = posterWrapper || img.parentElement;
+    if (placeholderHost) {
+        placeholderHost.innerHTML = `
+            <div class="w-full h-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center">
+                <i class="fas fa-image text-gray-400 text-4xl"></i>
+            </div>
+        `;
+    }
+}
+
+function setupImageErrorHandling() {
+    // Setup error handling for all images
+    document.querySelectorAll('img').forEach(img => {
+        if (!img.hasAttribute('data-error-handled')) {
+            img.setAttribute('data-error-handled', 'true');
+            img.addEventListener('error', function() {
+                handleImageError(this);
+            });
+        }
+    });
+}
+
+// Check for saved theme
+const savedTheme = localStorage.getItem('theme') || 'light';
+if (savedTheme === 'dark') {
+    document.body.classList.add('dark-theme');
+    document.querySelector('#themeToggle i').className = 'fas fa-sun text-white text-xl';
+}
+
+// Theme toggle
+document.getElementById('themeToggle').addEventListener('click', function () {
+    document.body.classList.toggle('dark-theme');
+    const isDark = document.body.classList.contains('dark-theme');
+    document.documentElement.classList.toggle('dark', isDark);
+    localStorage.setItem('theme', isDark ? 'dark' : 'light');
+
+    const icon = this.querySelector('i');
+    icon.className = isDark ? 'fas fa-sun text-white text-xl' : 'fas fa-moon text-white text-xl';
+});
+
+// DOM Elements
+const seriesTab = document.getElementById('seriesTab');
+const moviesTab = document.getElementById('moviesTab');
+const upcomingTab = document.getElementById('upcomingTab');
+const categoriesTab = document.getElementById('categoriesTab');
+const tagsTab = document.getElementById('tagsTab');
+const trailersTab = document.getElementById('trailersTab');
+const seriesContent = document.getElementById('seriesContent');
+const moviesContent = document.getElementById('moviesContent');
+const upcomingContent = document.getElementById('upcomingContent');
+const categoriesContent = document.getElementById('categoriesContent');
+const tagsContent = document.getElementById('tagsContent');
+const trailersContent = document.getElementById('trailersContent');
+const seriesList = document.getElementById('seriesList');
+const moviesList = document.getElementById('moviesList');
+const categoriesList = document.getElementById('categoriesList');
+const seriesEmpty = document.getElementById('seriesEmpty');
+const moviesEmpty = document.getElementById('moviesEmpty');
+const trailersList = document.getElementById('trailersList');
+const trailersEmpty = document.getElementById('trailersEmpty');
+const trailersCount = document.getElementById('trailersCount');
+const trailersPreviewInfo = document.getElementById('trailersPreviewInfo');
+const trailersSearch = document.getElementById('trailersSearch');
+const trailersFilterAll = document.getElementById('trailersFilterAll');
+const trailersFilterSeries = document.getElementById('trailersFilterSeries');
+const trailersFilterMovies = document.getElementById('trailersFilterMovies');
+const trailersSortSelect = document.getElementById('trailersSortSelect');
+const totalStats = document.getElementById('totalStats');
+
+// Upcoming releases DOM elements
+const upcomingList = document.getElementById('upcomingList');
+const upcomingCount = document.getElementById('upcomingCount');
+const upcomingEmpty = document.getElementById('upcomingEmpty');
+const upcomingFilterAll = document.getElementById('upcomingFilterAll');
+const upcomingFilterSeries = document.getElementById('upcomingFilterSeries');
+const upcomingFilterMovies = document.getElementById('upcomingFilterMovies');
+const thisWeekCount = document.getElementById('thisWeekCount');
+const thisMonthCount = document.getElementById('thisMonthCount');
+const futureCount = document.getElementById('futureCount');
+// Sync UI elements
+const openSyncModalBtn = document.getElementById('openSyncModal');
+const syncModalEl = document.getElementById('syncModal');
+const closeSyncModalBtn = document.getElementById('closeSyncModal');
+const firebaseConfigInput = document.getElementById('firebaseConfigInput');
+const connectSyncBtn = document.getElementById('connectSyncBtn');
+const syncNowBtn = document.getElementById('syncNowBtn');
+const disconnectSyncBtn = document.getElementById('disconnectSyncBtn');
+const syncStatusEl = document.getElementById('syncStatus');
+// Basitleştirilmiş WebRTC pairing elements
+const pairingCode = document.getElementById('pairingCode');
+const generateCodeBtn = document.getElementById('generateCodeBtn');
+const showQrBtn = document.getElementById('showQrBtn');
+const scanQrBtn = document.getElementById('scanQrBtn');
+const connectBtn = document.getElementById('connectBtn');
+const pairingStatus = document.getElementById('pairingStatus');
+const pairingInstructions = document.getElementById('pairingInstructions');
+const codeLabel = document.getElementById('codeLabel');
+const qrContainer = document.getElementById('qrContainer');
+const connectTimeoutInput = document.getElementById('connectTimeoutInput');
+const seriesStats = document.getElementById('seriesStats');
+const moviesStats = document.getElementById('moviesStats');
+const moviesStatusSummary = document.getElementById('moviesStatusSummary');
+const seriesStatusSummary = document.getElementById('seriesStatusSummary');
+const addSeriesBtn = document.getElementById('addSeriesBtn');
+const addSeriesBtnEmpty = document.getElementById('addSeriesBtnEmpty');
+const addMovieBtn = document.getElementById('addMovieBtn');
+const addMovieBtnEmpty = document.getElementById('addMovieBtnEmpty');
+const addCategoryBtn = document.getElementById('addCategoryBtn');
+const seriesModal = document.getElementById('seriesModal');
+const movieModal = document.getElementById('movieModal');
+const searchSeries = document.getElementById('searchSeries');
+const searchMovies = document.getElementById('searchMovies');
+const seriesTagCloud = document.getElementById('seriesTagCloud');
+const moviesTagCloud = document.getElementById('moviesTagCloud');
+
+let connectTimeoutMs = parseInt(localStorage.getItem('connectTimeoutMs') || '12000', 10);
+if (connectTimeoutInput) {
+    let seconds = Math.round(connectTimeoutMs / 1000);
+    if (!Number.isFinite(seconds) || seconds <= 0) seconds = 12;
+    if (seconds < 5) seconds = 5;
+    if (seconds > 60) seconds = 60;
+    connectTimeoutMs = seconds * 1000;
+    connectTimeoutInput.value = seconds;
+    connectTimeoutInput.addEventListener('change', function () {
+        let value = parseInt(this.value, 10);
+        if (!Number.isFinite(value) || value <= 0) value = 12;
+        if (value < 5) value = 5;
+        if (value > 60) value = 60;
+        this.value = value;
+        connectTimeoutMs = value * 1000;
+        localStorage.setItem('connectTimeoutMs', String(connectTimeoutMs));
+    });
+}
+
+// Initialize the app
+function initApp() {
+    // Initialize tag inputs
+    initTagInput('seriesTagsInput', 'seriesTagsContainer');
+    initTagInput('movieTagsInput', 'movieTagsContainer');
+
+    // Event delegation for edit and delete buttons
+    setupEventDelegation();
+    setupBulkEditing();
+    setupModalClosing();
+
+    refreshAll();
+}
+
+// Tüm görünümleri mevcut veriye göre yeniden çiz (tekrar tekrar çağrılabilir)
+function refreshAll() {
+    filterSeries();
+    filterMovies();
+    renderCategoriesList();
+    renderCategoryFilters();
+    renderTagsList();
+    updateSeriesCategorySelector();
+    updateMovieCategorySelector();
+    updateTotalStats();
+    updateSeriesTagCloud();
+    updateMoviesTagCloud();
+    if (upcomingContent && !upcomingContent.classList.contains('hidden')) renderUpcomingReleases();
+    if (trailersContent && !trailersContent.classList.contains('hidden')) renderTrailersTab();
+    const statsContent = document.getElementById('statsContent');
+    if (statsContent && !statsContent.classList.contains('hidden')) renderStats();
+}
+
+// --- Bildirim (toast) ---
+function showToast(message, options = {}) {
+    const container = document.getElementById('toastContainer');
+    if (!container) return;
+    const toast = document.createElement('div');
+    toast.className = 'toast';
+    const text = document.createElement('span');
+    text.textContent = message;
+    toast.appendChild(text);
+    let timer = null;
+    const dismiss = () => {
+        clearTimeout(timer);
+        toast.remove();
+    };
+    if (options.actionLabel && options.onAction) {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = options.actionLabel;
+        btn.addEventListener('click', () => {
+            dismiss();
+            options.onAction();
+        });
+        toast.appendChild(btn);
+    }
+    container.appendChild(toast);
+    timer = setTimeout(dismiss, options.duration || 4000);
+}
+
+// Silinen kaydı geri getir
+function restoreDeleted(kind, item, index) {
+    const list = kind === 'series' ? seriesData : moviesData;
+    if (list.some(x => String(x.id) === String(item.id))) return;
+    item.updatedAt = new Date().toISOString();
+    list.splice(Math.min(index, list.length), 0, item);
+    if (deletedItems[kind]) delete deletedItems[kind][String(item.id)];
+    localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+    localStorage.setItem(kind === 'series' ? 'seriesData' : 'moviesData', JSON.stringify(list));
+    refreshAll();
+    showToast(`"${item.name}" geri getirildi.`);
+}
+
+function removeSeries(id) {
+    const index = seriesData.findIndex(s => String(s.id) === String(id));
+    if (index === -1) return;
+    const series = seriesData[index];
+    seriesData = seriesData.filter(s => String(s.id) !== String(id));
+    selectedBulkKeys.delete('series:' + id);
+    markDeleted('series', id);
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    refreshAll();
+    showToast(`"${series.name}" silindi.`, {
+        actionLabel: 'Geri Al',
+        onAction: () => restoreDeleted('series', series, index),
+        duration: 8000
+    });
+}
+
+function removeMovie(id) {
+    const index = moviesData.findIndex(m => String(m.id) === String(id));
+    if (index === -1) return;
+    const movie = moviesData[index];
+    moviesData = moviesData.filter(m => String(m.id) !== String(id));
+    selectedBulkKeys.delete('movie:' + id);
+    markDeleted('movies', id);
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    refreshAll();
+    showToast(`"${movie.name}" silindi.`, {
+        actionLabel: 'Geri Al',
+        onAction: () => restoreDeleted('movies', movie, index),
+        duration: 8000
+    });
+}
+
+// Event delegation setup (initApp içinde yalnızca bir kez çağrılır)
+function setupEventDelegation() {
+    if (setupEventDelegation.__done) return;
+    setupEventDelegation.__done = true;
+
+    document.addEventListener('click', function(e) {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const seriesCard = target.closest('.series-card');
+        const movieCard = target.closest('.movie-card');
+
+        const editBtn = target.closest('.edit-icon');
+        if (editBtn && seriesCard) { editSeries(editBtn.getAttribute('data-id')); return; }
+        if (editBtn && movieCard) { editMovie(editBtn.getAttribute('data-id')); return; }
+
+        const deleteBtn = target.closest('.delete-icon');
+        if (deleteBtn && seriesCard) { removeSeries(deleteBtn.getAttribute('data-id')); return; }
+        if (deleteBtn && movieCard) { removeMovie(deleteBtn.getAttribute('data-id')); return; }
+
+        const episodeBtn = target.closest('.increase-episode, .decrease-episode');
+        if (episodeBtn && seriesCard) {
+            e.stopPropagation();
+            const delta = episodeBtn.classList.contains('increase-episode') ? 1 : -1;
+            const seasonId = episodeBtn.getAttribute('data-season-id');
+            if (updateSeriesWatchProgress(episodeBtn.getAttribute('data-series-id'), seasonId, delta)) {
+                if (episodeBtn.closest('.season-item')) openSeasonIds.add(String(seasonId));
+                filterSeries();
+                updateTotalStats();
+            }
+            return;
+        }
+
+        const seasonHeader = target.closest('.season-header');
+        if (seasonHeader && seriesCard) {
+            const item = seasonHeader.closest('.season-item');
+            const content = item.querySelector('.season-content');
+            const toggle = seasonHeader.querySelector('.season-toggle');
+            const isOpen = content.classList.toggle('show');
+            toggle.classList.toggle('rotate', isOpen);
+            const seasonId = String(item.getAttribute('data-season-id'));
+            if (isOpen) openSeasonIds.add(seasonId); else openSeasonIds.delete(seasonId);
+        }
+    });
+}
+
+// Açık sezon panellerini yeniden çizimden sonra da açık tut
+const openSeasonIds = new Set();
+
+function closeModal(modal) {
+    if (!modal) return;
+    if (modal.classList.contains('trailer-modal')) {
+        resetTrailerPlayerState();
+        modal.remove();
+        return;
+    }
+    modal.classList.remove('active');
+    if (modal.id === 'syncModal' && typeof stopQrScanner === 'function') stopQrScanner();
+}
+
+// Esc tuşu ve modal dışına tıklama ile kapatma
+function setupModalClosing() {
+    if (setupModalClosing.__done) return;
+    setupModalClosing.__done = true;
+
+    document.addEventListener('keydown', function (e) {
+        if (e.key !== 'Escape') return;
+        const openModals = Array.from(document.querySelectorAll('.modal.active'));
+        const top = openModals[openModals.length - 1];
+        if (top) closeModal(top);
+    });
+
+    // Formlarda yanlışlıkla veri kaybını önlemek için sadece basılı tutup bırakılan tıklamalar
+    let downTarget = null;
+    document.addEventListener('mousedown', e => { downTarget = e.target; });
+    document.addEventListener('click', function (e) {
+        const target = e.target;
+        if (!(target instanceof Element) || !target.classList.contains('modal')) return;
+        if (downTarget !== target) return;
+        if (target.id === 'seriesModal' || target.id === 'movieModal') return;
+        closeModal(target);
+    });
+}
+
+function setupBulkEditing() {
+    if (setupBulkEditing.__done) return;
+    setupBulkEditing.__done = true;
+
+    const bulkModal = document.getElementById('bulkEditModal');
+    const closeBulkBtn = document.getElementById('closeBulkEditModal');
+    const cancelBulkBtn = document.getElementById('cancelBulkEdit');
+    const applyBulkBtn = document.getElementById('applyBulkEdit');
+    const summaryEl = document.getElementById('bulkSelectionSummary');
+    const openButtons = Array.from(document.querySelectorAll('.bulk-edit-open'));
+
+    const selectCategoryEl = document.getElementById('bulkSelectCategoryId');
+    const selectTagEl = document.getElementById('bulkSelectTagName');
+    const replaceByCategoryBtn = document.getElementById('bulkReplaceSelectionByCategory');
+    const addByCategoryBtn = document.getElementById('bulkAddSelectionByCategory');
+    const replaceByTagBtn = document.getElementById('bulkReplaceSelectionByTag');
+    const addByTagBtn = document.getElementById('bulkAddSelectionByTag');
+    const clearSelectionBtn = document.getElementById('bulkClearSelectionBtn');
+
+    const newCategoryNameEl = document.getElementById('bulkNewCategoryName');
+    const newCategoryColorEl = document.getElementById('bulkNewCategoryColor');
+    const addNewCategoryBtn = document.getElementById('bulkAddNewCategoryBtn');
+
+    const newTagNameEl = document.getElementById('bulkNewTagName');
+    const addNewTagBtn = document.getElementById('bulkAddNewTagBtn');
+
+    const addCategoriesListEl = document.getElementById('bulkAddCategoriesList');
+    const removeCategoriesListEl = document.getElementById('bulkRemoveCategoriesList');
+    const addTagsListEl = document.getElementById('bulkAddTagsList');
+    const removeTagsListEl = document.getElementById('bulkRemoveTagsList');
+
+    function normalizeTagName(name) {
+        if (typeof name !== 'string') return '';
+        return name.trim();
+    }
+
+    function ensureTagExists(name) {
+        const trimmed = normalizeTagName(name);
+        if (!trimmed) return null;
+        const exists = Array.isArray(tagsData) ? tagsData.find(t => t && t.name === trimmed) : null;
+        if (exists) return exists;
+        const next = { id: newId(), name: trimmed };
+        tagsData.push(next);
+        return next;
+    }
+
+    function getAllTagNames() {
+        const set = new Set();
+        if (Array.isArray(tagsData)) {
+            tagsData.forEach(t => {
+                if (t && typeof t.name === 'string') {
+                    const n = t.name.trim();
+                    if (n) set.add(n);
+                }
+            });
+        }
+        if (Array.isArray(seriesData)) {
+            seriesData.forEach(s => {
+                if (s && Array.isArray(s.tags)) {
+                    s.tags.forEach(tag => {
+                        const n = normalizeTagName(tag);
+                        if (n) set.add(n);
+                    });
+                }
+            });
+        }
+        if (Array.isArray(moviesData)) {
+            moviesData.forEach(m => {
+                if (m && Array.isArray(m.tags)) {
+                    m.tags.forEach(tag => {
+                        const n = normalizeTagName(tag);
+                        if (n) set.add(n);
+                    });
+                }
+            });
+        }
+        return Array.from(set).sort((a, b) => a.localeCompare(b, 'tr'));
+    }
+
+    function renderSelectionCount() {
+        const count = selectedBulkKeys.size;
+        document.querySelectorAll('.bulk-selected-count').forEach(el => {
+            el.textContent = String(count);
+            el.classList.toggle('hidden', count === 0);
+        });
+    }
+
+    function updateCardSelectedState(cardEl, isSelected) {
+        if (!cardEl) return;
+        cardEl.classList.toggle('bulk-selected', isSelected);
+    }
+
+    function closeBulkModal() {
+        if (!bulkModal) return;
+        bulkModal.classList.remove('active');
+    }
+
+    function openBulkModal() {
+        if (!bulkModal) return;
+        bulkAddCategoryIds = new Set();
+        bulkRemoveCategoryIds = new Set();
+        bulkAddTagNames = new Set();
+        bulkRemoveTagNames = new Set();
+        refreshBulkModalUI();
+        bulkModal.classList.add('active');
+    }
+
+    function renderSelectOptions() {
+        if (selectCategoryEl) {
+            const options = ['<option value="">Kategori seçin...</option>']
+                .concat(categoriesData.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`));
+            selectCategoryEl.innerHTML = options.join('');
+        }
+        if (selectTagEl) {
+            const options = ['<option value="">Etiket seçin...</option>']
+                .concat(getAllTagNames().map(name => `<option value="${esc(name)}">${esc(name)}</option>`));
+            selectTagEl.innerHTML = options.join('');
+        }
+    }
+
+    function renderCategoryActionLists() {
+        if (!addCategoriesListEl || !removeCategoriesListEl) return;
+        const row = (cat, active, attr, activeClass) => `
+            <button type="button" class="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${active ? activeClass : 'border-transparent hover:bg-black/5'}" ${attr}="${esc(cat.id)}">
+                <span class="flex items-center gap-2">
+                    <span class="w-3 h-3 rounded-full" style="background-color: ${safeColor(cat.color)}"></span>
+                    <span>${esc(cat.name)}</span>
+                </span>
+                <i class="fas ${active ? 'fa-check-circle' : 'fa-circle'} ${active ? '' : 'opacity-20'}"></i>
+            </button>
+        `;
+        addCategoriesListEl.innerHTML = categoriesData
+            .map(cat => row(cat, bulkAddCategoryIds.has(cat.id), 'data-bulk-cat-add', 'border-indigo-500 bg-indigo-500/10'))
+            .join('');
+        removeCategoriesListEl.innerHTML = categoriesData
+            .map(cat => row(cat, bulkRemoveCategoryIds.has(cat.id), 'data-bulk-cat-remove', 'border-amber-500 bg-amber-500/10'))
+            .join('');
+    }
+
+    function renderTagActionLists() {
+        if (!addTagsListEl || !removeTagsListEl) return;
+        const names = getAllTagNames();
+        addTagsListEl.innerHTML = names.map(name => {
+            const cls = bulkAddTagNames.has(name) ? 'tag !bg-indigo-600 !text-white border-transparent' : 'tag';
+            return `<button type="button" class="${cls}" data-bulk-tag-add="${esc(name)}">${esc(name)}</button>`;
+        }).join('');
+        removeTagsListEl.innerHTML = names.map(name => {
+            const cls = bulkRemoveTagNames.has(name) ? 'tag !bg-amber-500 !text-white border-transparent' : 'tag';
+            return `<button type="button" class="${cls}" data-bulk-tag-remove="${esc(name)}">${esc(name)}</button>`;
+        }).join('');
+    }
+
+    function refreshBulkModalUI() {
+        renderSelectOptions();
+        renderCategoryActionLists();
+        renderTagActionLists();
+        if (summaryEl) {
+            const count = selectedBulkKeys.size;
+            summaryEl.textContent = count > 0 ? `${count} öğe seçili.` : 'Henüz öğe seçilmedi. Kartların sol üstündeki kutucuklarla seçim yapabilirsiniz.';
+        }
+    }
+
+    function getKeysForCategory(catId) {
+        const keys = new Set();
+        if (Number.isFinite(catId)) {
+            seriesData.forEach(s => {
+                if (s && Array.isArray(s.categories) && s.categories.includes(catId)) {
+                    keys.add('series:' + String(s.id));
+                }
+            });
+            moviesData.forEach(m => {
+                if (m && Array.isArray(m.categories) && m.categories.includes(catId)) {
+                    keys.add('movie:' + String(m.id));
+                }
+            });
+        }
+        return keys;
+    }
+
+    function getKeysForTag(tagName) {
+        const keys = new Set();
+        const t = normalizeTagName(tagName);
+        if (!t) return keys;
+        seriesData.forEach(s => {
+            if (s && Array.isArray(s.tags) && s.tags.includes(t)) {
+                keys.add('series:' + String(s.id));
+            }
+        });
+        moviesData.forEach(m => {
+            if (m && Array.isArray(m.tags) && m.tags.includes(t)) {
+                keys.add('movie:' + String(m.id));
+            }
+        });
+        return keys;
+    }
+
+    function applySelectionSet(newSet) {
+        selectedBulkKeys = new Set(newSet);
+        renderSelectionCount();
+        renderSeriesList();
+        renderMoviesList();
+        refreshBulkModalUI();
+    }
+
+    function mergeSelectionSet(extraSet) {
+        extraSet.forEach(k => selectedBulkKeys.add(k));
+        renderSelectionCount();
+        renderSeriesList();
+        renderMoviesList();
+        refreshBulkModalUI();
+    }
+
+    document.addEventListener('change', function (e) {
+        const cb = e.target;
+        if (!(cb instanceof HTMLInputElement)) return;
+        if (!cb.classList.contains('bulk-select-checkbox')) return;
+        e.stopPropagation();
+        const key = cb.getAttribute('data-select-key') || '';
+        if (!key) return;
+        if (cb.checked) selectedBulkKeys.add(key); else selectedBulkKeys.delete(key);
+        updateCardSelectedState(cb.closest('.series-card') || cb.closest('.movie-card'), cb.checked);
+        renderSelectionCount();
+        if (bulkModal && bulkModal.classList.contains('active')) refreshBulkModalUI();
+    }, true);
+
+    document.addEventListener('click', function (e) {
+        const t = e.target;
+        if (!(t instanceof Element)) return;
+
+        const catAddBtn = t.closest('[data-bulk-cat-add]');
+        if (catAddBtn) {
+            const id = parseInt(catAddBtn.getAttribute('data-bulk-cat-add') || '', 10);
+            if (Number.isFinite(id)) {
+                if (bulkAddCategoryIds.has(id)) bulkAddCategoryIds.delete(id);
+                else {
+                    bulkAddCategoryIds.add(id);
+                    bulkRemoveCategoryIds.delete(id);
+                }
+                refreshBulkModalUI();
+            }
+            return;
+        }
+        const catRemoveBtn = t.closest('[data-bulk-cat-remove]');
+        if (catRemoveBtn) {
+            const id = parseInt(catRemoveBtn.getAttribute('data-bulk-cat-remove') || '', 10);
+            if (Number.isFinite(id)) {
+                if (bulkRemoveCategoryIds.has(id)) bulkRemoveCategoryIds.delete(id);
+                else {
+                    bulkRemoveCategoryIds.add(id);
+                    bulkAddCategoryIds.delete(id);
+                }
+                refreshBulkModalUI();
+            }
+            return;
+        }
+
+        const tagAddBtn = t.closest('[data-bulk-tag-add]');
+        if (tagAddBtn) {
+            const name = tagAddBtn.getAttribute('data-bulk-tag-add') || '';
+            const n = normalizeTagName(name);
+            if (n) {
+                if (bulkAddTagNames.has(n)) bulkAddTagNames.delete(n);
+                else {
+                    bulkAddTagNames.add(n);
+                    bulkRemoveTagNames.delete(n);
+                }
+                refreshBulkModalUI();
+            }
+            return;
+        }
+        const tagRemoveBtn = t.closest('[data-bulk-tag-remove]');
+        if (tagRemoveBtn) {
+            const name = tagRemoveBtn.getAttribute('data-bulk-tag-remove') || '';
+            const n = normalizeTagName(name);
+            if (n) {
+                if (bulkRemoveTagNames.has(n)) bulkRemoveTagNames.delete(n);
+                else {
+                    bulkRemoveTagNames.add(n);
+                    bulkAddTagNames.delete(n);
+                }
+                refreshBulkModalUI();
+            }
+            return;
+        }
+    }, true);
+
+    if (closeBulkBtn) closeBulkBtn.addEventListener('click', closeBulkModal);
+    if (cancelBulkBtn) cancelBulkBtn.addEventListener('click', closeBulkModal);
+    openButtons.forEach(btn => btn.addEventListener('click', openBulkModal));
+
+    if (clearSelectionBtn) {
+        clearSelectionBtn.addEventListener('click', function () {
+            applySelectionSet(new Set());
+        });
+    }
+
+    if (replaceByCategoryBtn) {
+        replaceByCategoryBtn.addEventListener('click', function () {
+            const id = parseInt((selectCategoryEl && selectCategoryEl.value) ? selectCategoryEl.value : '', 10);
+            if (!Number.isFinite(id)) return;
+            applySelectionSet(getKeysForCategory(id));
+        });
+    }
+    if (addByCategoryBtn) {
+        addByCategoryBtn.addEventListener('click', function () {
+            const id = parseInt((selectCategoryEl && selectCategoryEl.value) ? selectCategoryEl.value : '', 10);
+            if (!Number.isFinite(id)) return;
+            mergeSelectionSet(getKeysForCategory(id));
+        });
+    }
+    if (replaceByTagBtn) {
+        replaceByTagBtn.addEventListener('click', function () {
+            const name = (selectTagEl && selectTagEl.value) ? selectTagEl.value : '';
+            const keys = getKeysForTag(name);
+            applySelectionSet(keys);
+        });
+    }
+    if (addByTagBtn) {
+        addByTagBtn.addEventListener('click', function () {
+            const name = (selectTagEl && selectTagEl.value) ? selectTagEl.value : '';
+            const keys = getKeysForTag(name);
+            mergeSelectionSet(keys);
+        });
+    }
+
+    if (addNewCategoryBtn) {
+        addNewCategoryBtn.addEventListener('click', function () {
+            const name = (newCategoryNameEl && newCategoryNameEl.value) ? newCategoryNameEl.value.trim() : '';
+            const color = (newCategoryColorEl && newCategoryColorEl.value) ? newCategoryColorEl.value.trim() : '#6366f1';
+            if (!name) { alert('Lütfen bir kategori adı girin.'); return; }
+            const exists = categoriesData.find(c => c && c.name === name);
+            if (exists) {
+                bulkAddCategoryIds.add(exists.id);
+                bulkRemoveCategoryIds.delete(exists.id);
+                refreshBulkModalUI();
+                return;
+            }
+            const next = { id: newId(), name, color: safeColor(color) };
+            categoriesData.push(next);
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+            updateSeriesCategorySelector();
+            updateMovieCategorySelector();
+            renderCategoryFilters();
+            renderCategoriesList();
+            bulkAddCategoryIds.add(next.id);
+            refreshBulkModalUI();
+            if (newCategoryNameEl) newCategoryNameEl.value = '';
+        });
+    }
+
+    if (addNewTagBtn) {
+        addNewTagBtn.addEventListener('click', function () {
+            const name = (newTagNameEl && newTagNameEl.value) ? newTagNameEl.value : '';
+            const trimmed = normalizeTagName(name);
+            if (!trimmed) { alert('Lütfen bir etiket adı girin.'); return; }
+            ensureTagExists(trimmed);
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+            bulkAddTagNames.add(trimmed);
+            bulkRemoveTagNames.delete(trimmed);
+            renderTagsList();
+            renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+            renderTagOptions('movieTagOptions', 'movieTagsContainer');
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            refreshBulkModalUI();
+            if (newTagNameEl) newTagNameEl.value = '';
+        });
+    }
+
+    function applyChangesToCategoriesAndTags(item) {
+        const currentCats = Array.isArray(item.categories) ? item.categories : [];
+        const currentTags = Array.isArray(item.tags) ? item.tags : [];
+
+        const catSet = new Set(currentCats);
+        bulkAddCategoryIds.forEach(id => catSet.add(id));
+        bulkRemoveCategoryIds.forEach(id => catSet.delete(id));
+        item.categories = Array.from(catSet);
+
+        const tagSet = new Set(currentTags.map(normalizeTagName).filter(Boolean));
+        bulkAddTagNames.forEach(name => {
+            const n = normalizeTagName(name);
+            if (n) tagSet.add(n);
+        });
+        bulkRemoveTagNames.forEach(name => {
+            const n = normalizeTagName(name);
+            if (n) tagSet.delete(n);
+        });
+        item.tags = Array.from(tagSet);
+        item.updatedAt = new Date().toISOString();
+    }
+
+    if (applyBulkBtn) {
+        applyBulkBtn.addEventListener('click', function () {
+            if (selectedBulkKeys.size === 0) {
+                alert('Önce en az bir öğe seçmelisiniz.');
+                return;
+            }
+
+            bulkAddTagNames.forEach(n => ensureTagExists(n));
+
+            selectedBulkKeys.forEach(key => {
+                if (key.startsWith('movie:')) {
+                    const id = key.slice('movie:'.length);
+                    const movie = moviesData.find(m => String(m.id) === id);
+                    if (movie) applyChangesToCategoriesAndTags(movie);
+                    return;
+                }
+                if (key.startsWith('series:')) {
+                    const series = findSeries(key.slice('series:'.length));
+                    if (series) applyChangesToCategoriesAndTags(series);
+                }
+            });
+
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+            localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+            localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+            filterSeries();
+            filterMovies();
+            renderCategoryFilters();
+            renderTagsList();
+            updateSeriesTagCloud();
+            updateMoviesTagCloud();
+            renderSelectionCount();
+
+            closeBulkModal();
+            alert('Toplu düzenleme başarıyla uygulandı!');
+        });
+    }
+
+    renderSelectionCount();
+}
+
+// Render category chips with counts for series and movies
+function renderCategoryFilters() {
+    const seriesContainer = document.getElementById('seriesCategoryFilters');
+    const moviesContainer = document.getElementById('moviesCategoryFilters');
+    if (!seriesContainer || !moviesContainer) return;
+
+    // Silinmiş kategori seçili kaldıysa filtreyi sıfırla
+    if (currentSeriesCategory && !categoriesData.some(c => c.id === currentSeriesCategory)) currentSeriesCategory = null;
+    if (currentMoviesCategory && !categoriesData.some(c => c.id === currentMoviesCategory)) currentMoviesCategory = null;
+
+    const buildChip = (cat, count, isSelected, onClick) => {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'category-option' + (isSelected ? ' selected' : '');
+        chip.style.setProperty('--cat', safeColor(cat.color));
+        chip.setAttribute('data-id', cat.id);
+        chip.innerHTML = `${esc(cat.name)} <span>(${count})</span>`;
+        chip.addEventListener('click', function (e) {
+            e.stopPropagation();
+            onClick(cat.id);
+        });
+        return chip;
+    };
+
+    seriesContainer.innerHTML = '';
+    moviesContainer.innerHTML = '';
+
+    categoriesData.forEach(cat => {
+        const seriesCount = seriesData.filter(s => s.categories && s.categories.includes(cat.id)).length;
+        const movieCount = moviesData.filter(m => m.categories && m.categories.includes(cat.id)).length;
+
+        seriesContainer.appendChild(buildChip(cat, seriesCount, currentSeriesCategory === cat.id, id => {
+            currentSeriesCategory = currentSeriesCategory === id ? null : id;
+            renderCategoryFilters();
+            filterSeries();
+        }));
+        moviesContainer.appendChild(buildChip(cat, movieCount, currentMoviesCategory === cat.id, id => {
+            currentMoviesCategory = currentMoviesCategory === id ? null : id;
+            renderCategoryFilters();
+            filterMovies();
+        }));
+    });
+}
+
+// Dizinin toplam bölüm/izlenen/durum bilgisi (tüm sezonlar)
+function getSeriesTotals(series) {
+    const seasons = Array.isArray(series.seasons) ? series.seasons : [];
+    const total = seasons.reduce((sum, s) => sum + (s.totalEpisodes || 0), 0);
+    const watched = seasons.reduce((sum, s) => sum + (s.watchedEpisodes || 0), 0);
+    let status = total > 0 && watched >= total ? 'completed' : watched > 0 ? 'watching' : 'planning';
+    if ((series.userStatus === 'paused' || series.userStatus === 'dropped') && status !== 'completed') status = series.userStatus;
+    const next = seasons.find(s => s.watchedEpisodes < s.totalEpisodes) || null;
+    return { total, watched, status, progress: total > 0 ? (watched / total) * 100 : 0, next };
+}
+
+// Update total stats
+function updateTotalStats() {
+    const seriesCount = seriesData.length;
+    const moviesCount = moviesData.length;
+
+    seriesStats.textContent = seriesCount;
+    moviesStats.textContent = moviesCount;
+    totalStats.textContent = seriesCount + moviesCount;
+
+    const watchedMovies = moviesData.filter(m => m.watched).length;
+    if (moviesStatusSummary) {
+        moviesStatusSummary.textContent = `İzlenen ${watchedMovies} / İzlenmeyen ${moviesCount - watchedMovies}`;
+    }
+
+    const counts = { completed: 0, watching: 0, planning: 0, paused: 0, dropped: 0 };
+    seriesData.forEach(series => { counts[getSeriesTotals(series).status]++; });
+    if (seriesStatusSummary) {
+        const extra = (counts.paused ? ` / Duraklatılan ${counts.paused}` : '') + (counts.dropped ? ` / Bırakılan ${counts.dropped}` : '');
+        seriesStatusSummary.textContent = `Tamamlanan ${counts.completed} / İzlenen ${counts.watching} / Planlanan ${counts.planning}${extra}`;
+    }
+}
+
+// Upcoming releases functions
+let currentUpcomingFilter = 'all';
+
+function parseLocalDate(dateString) {
+    if (!dateString) return null;
+    const match = /^(\d{4})-(\d{2})-(\d{2})/.exec(dateString);
+    const date = match ? new Date(+match[1], +match[2] - 1, +match[3]) : new Date(dateString);
+    if (isNaN(date.getTime())) return null;
+    date.setHours(0, 0, 0, 0);
+    return date;
+}
+
+function getUpcomingContent() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcomingItems = [];
+
+    // Diziler: dizinin ve sezonlarının en yakın gelecek tarihi
+    seriesData.forEach(series => {
+        const candidates = [
+            { date: series.releaseDate, label: null },
+            ...series.seasons.map(s => ({ date: s.releaseDate, label: `Sezon ${s.season}` }))
+        ];
+        let best = null;
+        candidates.forEach(c => {
+            const d = parseLocalDate(c.date);
+            if (d && d >= today && (!best || d < best.parsed)) best = { ...c, parsed: d };
+        });
+        if (best) {
+            upcomingItems.push({
+                ...series,
+                releaseDate: best.date,
+                releaseLabel: best.label,
+                type: 'series',
+                daysUntil: getDaysUntilRelease(best.date)
+            });
+        }
+    });
+
+    moviesData.forEach(movie => {
+        const d = parseLocalDate(movie.releaseDate);
+        if (d && d >= today) {
+            upcomingItems.push({
+                ...movie,
+                type: 'movie',
+                daysUntil: getDaysUntilRelease(movie.releaseDate)
+            });
+        }
+    });
+
+    upcomingItems.sort((a, b) => a.daysUntil - b.daysUntil);
+    return upcomingItems;
+}
+
+function filterUpcomingContent(filter) {
+    currentUpcomingFilter = filter;
+    const allUpcoming = getUpcomingContent();
+    if (filter === 'series') return allUpcoming.filter(item => item.type === 'series');
+    if (filter === 'movies') return allUpcoming.filter(item => item.type === 'movie');
+    return allUpcoming;
+}
+
+function getUpcomingTimeline() {
+    const allUpcoming = getUpcomingContent();
+    return {
+        thisWeek: allUpcoming.filter(item => item.daysUntil <= 7).length,
+        thisMonth: allUpcoming.filter(item => item.daysUntil > 7 && item.daysUntil <= 30).length,
+        future: allUpcoming.filter(item => item.daysUntil > 30).length
+    };
+}
+
+function renderUpcomingReleases() {
+    const upcomingItems = filterUpcomingContent(currentUpcomingFilter);
+    const timeline = getUpcomingTimeline();
+
+    if (upcomingCount) upcomingCount.textContent = `${upcomingItems.length}`;
+    if (thisWeekCount) thisWeekCount.textContent = timeline.thisWeek;
+    if (thisMonthCount) thisMonthCount.textContent = timeline.thisMonth;
+    if (futureCount) futureCount.textContent = timeline.future;
+
+    upcomingFilterAll.classList.toggle('active', currentUpcomingFilter === 'all');
+    upcomingFilterSeries.classList.toggle('active', currentUpcomingFilter === 'series');
+    upcomingFilterMovies.classList.toggle('active', currentUpcomingFilter === 'movies');
+
+    if (upcomingItems.length === 0) {
+        if (upcomingList) upcomingList.classList.add('hidden');
+        if (upcomingEmpty) upcomingEmpty.classList.remove('hidden');
+        return;
+    }
+
+    if (upcomingList) upcomingList.classList.remove('hidden');
+    if (upcomingEmpty) upcomingEmpty.classList.add('hidden');
+
+    upcomingList.innerHTML = upcomingItems.map(item => {
+        const badgeInfo = getReleaseBadgeInfo(item.releaseDate);
+        const chips = (item.categories || [])
+            .map(catId => categoriesData.find(c => c.id === catId))
+            .filter(Boolean)
+            .map(c => `<span class="meta-chip">${esc(c.name)}</span>`)
+            .join('');
+        const imageUrl = safeUrl(item.imageUrl);
+
+        return `
+            <div class="upcoming-card">
+                <div class="upcoming-thumb">
+                    ${imageUrl ? `<img src="${esc(imageUrl)}" alt="${esc(item.name)}" loading="lazy" onerror="handleImageError(this)">` : `<div class="w-full h-full flex items-center justify-center text-[11px] text-white/50">Poster yok</div>`}
+                    ${badgeInfo ? `<span class="badge-overlay"><span class="release-badge ${badgeInfo.class}" title="${esc(badgeInfo.fullText)}"><i class="fas fa-calendar-alt"></i> ${esc(badgeInfo.text)}</span></span>` : ''}
+                </div>
+                <div class="min-w-0">
+                    <div class="flex items-center gap-2 mb-1">
+                        <h3 class="text-base sm:text-lg font-semibold text-gray-900 dark:text-white truncate">${esc(item.name)}</h3>
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full ${item.type === 'series' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'}">${item.type === 'series' ? 'Dizi' : 'Film'}</span>
+                    </div>
+                    ${item.releaseLabel ? `<div class="text-sm text-gray-600 dark:text-gray-400"><i class="fas fa-layer-group mr-1"></i>${esc(item.releaseLabel)}</div>` : ''}
+                    ${item.platform ? `<div class="text-sm text-gray-600 dark:text-gray-400"><i class="fas fa-tv mr-1"></i>${esc(item.platform)}</div>` : ''}
+                    ${chips ? `<div class="meta-row">${chips}</div>` : ''}
+                    ${item.description ? `<p class="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">${esc(item.description)}</p>` : ''}
+                </div>
+                <div class="upcoming-footer">
+                    <div class="date"><i class="fas fa-calendar-alt"></i> ${esc(formatReleaseDate(item.releaseDate))}</div>
+                    <div class="flex items-center gap-2">
+                        ${item.imdbRating ? `<span class="pill-imdb"><i class="fas fa-star"></i>${esc(item.imdbRating)}</span>` : ''}
+                        ${item.trailerUrl ? `<button class="trailer-btn" data-trailer-url="${esc(item.trailerUrl)}" data-title="${esc(item.name)}" title="Fragmanı İzle"><i class="fab fa-youtube mr-1"></i> İzle</button>` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function getAllTrailerItems() {
+    const items = [];
+    const add = (type, item) => {
+        const videoId = extractYouTubeVideoId(item.trailerUrl);
+        if (!videoId) return;
+        items.push({
+            type,
+            name: item.name,
+            platform: type === 'series' ? item.platform : null,
+            imageUrl: item.imageUrl,
+            trailerUrl: item.trailerUrl,
+            videoId
+        });
+    };
+    (seriesData || []).forEach(series => add('series', series));
+    (moviesData || []).forEach(movie => add('movie', movie));
+    return items;
+}
+
+function renderTrailersTab() {
+    if (!trailersList || !trailersEmpty) return;
+
+    let items = getAllTrailerItems();
+
+    if (currentTrailersFilter === 'series') {
+        items = items.filter(i => i.type === 'series');
+    } else if (currentTrailersFilter === 'movies') {
+        items = items.filter(i => i.type === 'movie');
+    }
+
+    const q = trLower(trailersSearchQuery).trim();
+    if (q) {
+        items = items.filter(i => trLower(i.name).includes(q));
+    }
+
+    const byName = (a, b) => (a.name || '').localeCompare((b.name || ''), 'tr');
+    if (currentTrailersSort === 'alphabetical') {
+        items.sort(byName);
+    } else if (currentTrailersSort === 'alphabetical-desc') {
+        items.sort((a, b) => byName(b, a));
+    } else if (currentTrailersSort === 'type-series-first' || currentTrailersSort === 'type-movies-first') {
+        const first = currentTrailersSort === 'type-series-first' ? 'series' : 'movie';
+        items.sort((a, b) => {
+            const aKey = a.type === first ? 0 : 1;
+            const bKey = b.type === first ? 0 : 1;
+            return aKey !== bKey ? aKey - bKey : byName(a, b);
+        });
+    }
+
+    if (trailersCount) trailersCount.textContent = String(items.length);
+
+    if (trailersFilterAll && trailersFilterSeries && trailersFilterMovies) {
+        trailersFilterAll.classList.toggle('active', currentTrailersFilter === 'all');
+        trailersFilterSeries.classList.toggle('active', currentTrailersFilter === 'series');
+        trailersFilterMovies.classList.toggle('active', currentTrailersFilter === 'movies');
+    }
+
+    if (items.length === 0) {
+        trailersList.innerHTML = '';
+        trailersEmpty.classList.remove('hidden');
+        return;
+    }
+
+    trailersEmpty.classList.add('hidden');
+
+    trailersList.innerHTML = items.map(item => {
+        const typePill = item.type === 'series'
+            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+            : 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
+        const typeText = item.type === 'series' ? 'Dizi' : 'Film';
+        const thumbUrl = `https://i.ytimg.com/vi/${encodeURIComponent(item.videoId)}/hqdefault.jpg`;
+
+        return `
+            <div class="bg-white/10 hover:bg-white/20 transition rounded-xl p-3 flex gap-3 items-center cursor-pointer outline-none focus:ring-2 focus:ring-white/30 trailer-preview-item"
+                 role="button"
+                 tabindex="0"
+                 data-trailer-url="${esc(item.trailerUrl)}"
+                 data-title="${esc(item.name)}"
+                 data-video-id="${esc(item.videoId)}">
+                <div class="w-20 h-12 rounded-lg overflow-hidden bg-black/20 flex-shrink-0">
+                    <img src="${thumbUrl}" alt="${esc(item.name)}" class="w-full h-full object-cover" loading="lazy" onerror="handleImageError(this)">
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="flex items-center gap-2">
+                        <div class="font-semibold text-gray-900 dark:text-white truncate">${esc(item.name)}</div>
+                        <span class="px-2 py-0.5 text-xs font-medium rounded-full ${typePill}">${typeText}</span>
+                    </div>
+                    ${item.platform ? `<div class="text-xs text-gray-600 dark:text-gray-400 truncate"><i class="fas fa-tv mr-1"></i>${esc(item.platform)}</div>` : ''}
+                    <div class="text-xs text-gray-600 dark:text-gray-400 mt-1"><i class="fab fa-youtube mr-1"></i>Üstüne gel: oynat • Tıkla: tam aç</div>
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+function stopTrailersPreview(resetInfoText) {
+    if (trailersPreviewStartTimer) {
+        clearTimeout(trailersPreviewStartTimer);
+        trailersPreviewStartTimer = null;
+    }
+    
+    // Iframe'i temizle
+    const container = document.getElementById('trailersPreviewPlayer');
+    if (container) {
+        container.innerHTML = '';
+    }
+    trailersPreviewPlayer = null;
+    
+    trailersPreviewVideoId = null;
+    if (resetInfoText && trailersPreviewInfo) {
+        trailersPreviewInfo.textContent = 'Liste üstünde imleç (cursor) ile bir fragmanın üstüne gelince önizleme (preview) oynar. Üzerine tıklayınca tam açılır.';
+    }
+}
+
+function playTrailersPreview(videoId, title) {
+    if (!videoId) return;
+    if (trailersPreviewVideoId === videoId) return;
+    trailersPreviewVideoId = videoId;
+    
+    const container = document.getElementById('trailersPreviewPlayer');
+    if (!container) return;
+
+    if (trailersPreviewInfo) {
+        trailersPreviewInfo.textContent = `"${title}" önizleme (preview) yükleniyor...`;
+    }
+
+    trailersPreviewPlayer = createYouTubeEmbed(container, videoId, {
+        title,
+        autoplay: true,
+        mute: true,
+        controls: false,
+        onFallback: () => {
+            if (trailersPreviewInfo) trailersPreviewInfo.textContent = `"${title}" burada oynatılamıyor; tıklayınca YouTube'da açabilirsiniz.`;
+        }
+    });
+
+    if (trailersPreviewInfo && trailersPreviewPlayer) {
+        trailersPreviewInfo.textContent = `"${title}" önizleme (preview) oynuyor. Tam açmak için tıklayın.`;
+    }
+}
+
+function scheduleTrailersPreview(videoId, title) {
+    if (trailersPreviewStartTimer) {
+        clearTimeout(trailersPreviewStartTimer);
+        trailersPreviewStartTimer = null;
+    }
+    trailersPreviewStartTimer = setTimeout(() => {
+        playTrailersPreview(videoId, title);
+    }, 120);
+}
+
+function renderCategoryBadges(categoryIds) {
+    return (categoryIds || [])
+        .map(catId => categoriesData.find(c => c.id === catId))
+        .filter(Boolean)
+        .map(c => `<span class="category-badge" style="--cat: ${safeColor(c.color)}">${esc(c.name)}</span>`)
+        .join('');
+}
+
+function renderTagBadges(tags) {
+    return (tags || []).map(tag => `<span class="tag">${esc(tag)}</span>`).join('');
+}
+
+function renderReleaseBadge(releaseDate) {
+    const badgeInfo = getReleaseBadgeInfo(releaseDate);
+    if (!badgeInfo) return '';
+    return `<div class="mb-3">
+        <div class="release-badge ${badgeInfo.class}" title="${esc(badgeInfo.fullText)}">
+            <i class="fas fa-calendar-alt"></i>
+            ${esc(badgeInfo.text)}
+        </div>
+    </div>`;
+}
+
+function renderPoster(item, badgeClass, badgeText) {
+    const imageUrl = safeUrl(item.imageUrl);
+    if (!imageUrl) {
+        return `<div class="mb-4 ${posterAspect === 'original' ? 'aspect-[2/3]' : posterAspect} poster-wrapper flex items-center justify-center bg-slate-200 dark:bg-slate-700"><i class="fa-solid fa-image text-slate-500 dark:text-slate-300 text-3xl"></i></div>`;
+    }
+    const aspectClass = posterAspect === 'original' ? 'poster-original' : posterAspect;
+    return `<div class="mb-4 ${aspectClass} poster-wrapper">
+        <span class="poster-badge status-badge ${badgeClass}">${esc(badgeText)}</span>
+        <img src="${esc(imageUrl)}" alt="${esc(item.name)}" class="w-full h-full object-cover" loading="lazy" onerror="handleImageError(this)">
+        <div class="poster-overlay"></div>
+        <div class="poster-info"><span class="title">${esc(item.name)}</span>${item.imdbRating ? `<span class="meta"><i class="fas fa-star text-yellow-400"></i> ${esc(item.imdbRating)}</span>` : ''}</div>
+    </div>`;
+}
+
+function renderSeriesList() {
+    if (filteredSeriesData.length === 0) {
+        seriesList.innerHTML = '';
+        seriesEmpty.classList.remove('hidden');
+        const emptyTitle = seriesEmpty.querySelector('h3');
+        if (emptyTitle) emptyTitle.textContent = seriesData.length === 0 ? 'Henüz dizi eklemediniz' : 'Filtreye uyan dizi bulunamadı';
+        return;
+    }
+
+    seriesEmpty.classList.add('hidden');
+
+    seriesList.className = layoutMode === 'masonry'
+        ? `masonry masonry-${seriesView}-col`
+        : `grid gap-6 grid-${seriesView}-col`;
+
+    seriesList.innerHTML = filteredSeriesData.map(series => {
+        const selectKey = 'series:' + String(series.id);
+        const isSelected = selectedBulkKeys.has(selectKey);
+        const { total: totalEpisodes, watched: watchedEpisodes, progress, status } = getSeriesTotals(series);
+
+        const seasonsHtml = series.seasons.map(season => {
+            const seasonProgress = season.totalEpisodes > 0 ? (season.watchedEpisodes / season.totalEpisodes) * 100 : 0;
+            const seasonStatus = season.totalEpisodes > 0 && season.watchedEpisodes >= season.totalEpisodes ? 'completed'
+                : season.watchedEpisodes > 0 ? 'watching'
+                    : 'planning';
+            const isOpen = openSeasonIds.has(String(season.id));
+
+            return `
+                <div class="season-item p-4 mb-2 rounded-lg" data-season-id="${esc(season.id)}">
+                    <div class="flex justify-between items-center cursor-pointer season-header">
+                        <div class="flex items-center gap-2">
+                            <i class="fas fa-chevron-down season-toggle${isOpen ? ' rotate' : ''}"></i>
+                            <span class="font-medium">Sezon ${esc(season.season)}</span>
+                            <span class="status-badge ${seasonStatus}">${getStatusText(seasonStatus)}</span>
+                        </div>
+                        <span>${season.watchedEpisodes}/${season.totalEpisodes}</span>
+                    </div>
+                    <div class="season-content${isOpen ? ' show' : ''}">
+                        <div class="content-inner">
+                            <div class="mb-2">
+                                <div class="flex justify-between text-sm mb-1">
+                                    <span>İzlenen Bölüm</span>
+                                    <span>${Math.round(seasonProgress)}%</span>
+                                </div>
+                                <div class="progress-bar">
+                                    <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${seasonProgress}%"></div>
+                                </div>
+                            </div>
+                            <div class="flex justify-end space-x-2 mt-4">
+                                <button class="btn btn-secondary btn-sm decrease-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(season.id)}" title="Bir bölüm geri al">
+                                    <i class="fas fa-minus"></i>
+                                </button>
+                                <button class="btn btn-primary btn-sm increase-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(season.id)}" title="Bir bölüm izledim">
+                                    <i class="fas fa-plus"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const categoryBadges = renderCategoryBadges(series.categories);
+        const tags = renderTagBadges(series.tags);
+        const next = getSeriesTotals(series).next;
+        const nextEpisodeHtml = next && status !== 'dropped' ? `
+            <div class="next-episode">
+                <span><i class="fas fa-forward mr-1 text-indigo-500"></i>Sıradaki: <strong>S${esc(next.season)} · B${next.watchedEpisodes + 1}</strong></span>
+                <button class="btn btn-primary btn-sm increase-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(next.id)}" title="Bu bölümü izledim">
+                    <i class="fas fa-check mr-1"></i> İzledim
+                </button>
+            </div>` : '';
+
+        return `
+            <div class="series-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}">
+                <label class="bulk-select-control" aria-label="Seç">
+                    <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
+                </label>
+                ${renderPoster(series, status, getStatusText(status))}
+                <div class="mb-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-xl card-title">${esc(series.name)}</h3>
+                            ${series.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(series.trailerUrl)}" data-title="${esc(series.name)}">
+                                <i class="fab fa-youtube"></i> Fragman
+                            </button>` : ''}
+                        </div>
+                        <div class="flex space-x-1 ml-2">
+                            <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(series.id)}" title="Düzenle">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-icon text-red-500 hover:text-red-700" data-id="${esc(series.id)}" title="Sil">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-gray-600 dark:text-gray-300 mb-2">
+                        <span class="status-badge ${status}">${getStatusText(status)}</span>
+                        ${series.platform ? `<span class="ml-2">${esc(series.platform)}</span>` : ''}
+                        ${series.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(series.imdbRating)}</span>` : ''}
+                        ${series.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(series.myRating)}</span>` : ''}
+                    </div>
+                    ${series.notes ? `<p class="my-note">${esc(series.notes)}</p>` : ''}
+                    ${series.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${esc(series.description)}</p>` : ''}
+                </div>
+                ${nextEpisodeHtml}
+
+                ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
+                ${tags ? `<div class="mb-3">${tags}</div>` : ''}
+                ${series.releaseDate ? renderReleaseBadge(series.releaseDate) : ''}
+
+                <div class="mb-4">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Toplam Bölüm: ${watchedEpisodes}/${totalEpisodes}</span>
+                        <span>${Math.round(progress)}%</span>
+                    </div>
+                    <div class="progress-bar">
+                        <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${progress}%"></div>
+                    </div>
+                </div>
+
+                <div class="seasons-container">
+                    ${seasonsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
+
+// Render movies list
+function renderMoviesList() {
+    if (filteredMoviesData.length === 0) {
+        moviesList.innerHTML = '';
+        moviesEmpty.classList.remove('hidden');
+        const emptyTitle = moviesEmpty.querySelector('h3');
+        if (emptyTitle) emptyTitle.textContent = moviesData.length === 0 ? 'Henüz film eklemediniz' : 'Filtreye uyan film bulunamadı';
+        return;
+    }
+
+    moviesEmpty.classList.add('hidden');
+
+    moviesList.className = layoutMode === 'masonry'
+        ? `masonry masonry-${moviesView}-col`
+        : `grid gap-6 grid-${moviesView}-col`;
+
+    moviesList.innerHTML = filteredMoviesData.map(movie => {
+        const selectKey = 'movie:' + String(movie.id);
+        const isSelected = selectedBulkKeys.has(selectKey);
+        const categoryBadges = renderCategoryBadges(movie.categories);
+        const tags = renderTagBadges(movie.tags);
+        const statusClass = movie.watched ? 'completed' : 'planning';
+        const statusText = movie.watched ? 'İzlendi' : 'İzlenecek';
+
+        return `
+            <div class="movie-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}">
+                <label class="bulk-select-control" aria-label="Seç">
+                    <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
+                </label>
+                ${renderPoster(movie, statusClass, statusText)}
+                <div class="mb-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-xl card-title">${esc(movie.name)}</h3>
+                            ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(movie.trailerUrl)}" data-title="${esc(movie.name)}">
+                                <i class="fab fa-youtube"></i> Fragman
+                            </button>` : ''}
+                        </div>
+                        <div class="flex space-x-1 ml-2">
+                            <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(movie.id)}" title="Düzenle">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-icon text-red-500 hover:text-red-700" data-id="${esc(movie.id)}" title="Sil">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-gray-600 dark:text-gray-300 mb-2">
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                        ${movie.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(movie.imdbRating)}</span>` : ''}
+                        ${movie.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(movie.myRating)}</span>` : ''}
+                    </div>
+                    ${movie.notes ? `<p class="my-note">${esc(movie.notes)}</p>` : ''}
+                    ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${esc(movie.description)}</p>` : ''}
+                </div>
+
+                ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
+                ${tags ? `<div class="mb-3">${tags}</div>` : ''}
+                ${movie.releaseDate ? renderReleaseBadge(movie.releaseDate) : ''}
+
+                <div class="flex items-center mb-4">
+                    <span class="watched-indicator ${movie.watched ? 'watched' : 'unwatched'}"></span>
+                    <span class="text-sm">${movie.watched ? 'İzlendi' : 'Henüz izlenmedi'}</span>
+                </div>
+
+                ${movie.updatedAt ? `<div class="text-sm text-gray-600 dark:text-gray-300">
+                    <i class="fas fa-clock mr-1"></i> ${esc(formatDate(movie.updatedAt))}
+                </div>` : ''}
+            </div>
+        `;
+    }).join('');
+}
+
+// Render categories list
+function renderCategoriesList() {
+    categoriesList.innerHTML = categoriesData.map(category => `
+        <div class="card p-4 flex items-center justify-between category-card" data-id="${esc(category.id)}">
+            <div class="flex items-center">
+                <span class="w-4 h-4 rounded-full mr-3" style="background-color: ${safeColor(category.color)}"></span>
+                <span class="font-medium">${esc(category.name)}</span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button class="text-blue-600 hover:text-blue-800 edit-category" data-id="${esc(category.id)}" title="Düzenle">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button class="text-red-500 hover:text-red-700 delete-category" data-id="${esc(category.id)}" title="Sil">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `).join('');
+
+    document.querySelectorAll('.delete-category').forEach(btn => {
+        btn.addEventListener('click', function () {
+            deleteCategory(Number(this.getAttribute('data-id')));
+        });
+    });
+
+    document.querySelectorAll('.edit-category').forEach(btn => {
+        btn.addEventListener('click', function () {
+            startEditCategory(Number(this.getAttribute('data-id')));
+        });
+    });
+}
+
+// Render tags list
+function renderTagsList() {
+    const tagsList = document.getElementById('tagsList');
+    if (!tagsList) return;
+
+    // Birleştirilmiş etiket kümesi: global tagsData + içeriklerdeki etiketler
+    const suggestionSet = new Set();
+
+    if (Array.isArray(tagsData) && tagsData.length > 0) {
+        tagsData.forEach(t => {
+            if (t && typeof t.name === 'string' && t.name.trim() !== '') {
+                suggestionSet.add(t.name.trim());
+            }
+        });
+    }
+    if (Array.isArray(seriesData) && seriesData.length > 0) {
+        seriesData.forEach(s => {
+            if (s && Array.isArray(s.tags)) {
+                s.tags.forEach(tag => {
+                    if (typeof tag === 'string' && tag.trim() !== '') {
+                        suggestionSet.add(tag.trim());
+                    }
+                });
+            }
+        });
+    }
+    if (Array.isArray(moviesData) && moviesData.length > 0) {
+        moviesData.forEach(m => {
+            if (m && Array.isArray(m.tags)) {
+                m.tags.forEach(tag => {
+                    if (typeof tag === 'string' && tag.trim() !== '') {
+                        suggestionSet.add(tag.trim());
+                    }
+                });
+            }
+        });
+    }
+
+    tagsList.innerHTML = Array.from(suggestionSet)
+        .sort((a, b) => a.localeCompare(b, 'tr'))
+        .map(name => {
+            const tagObj = tagsData.find(t => t && t.name === name);
+            const idAttr = tagObj ? `data-id="${esc(tagObj.id)}"` : '';
+            const deleteBtn = tagObj ? `
+                <button class="text-red-500 hover:text-red-700 delete-tag" data-id="${esc(tagObj.id)}" title="Sil">
+                    <i class="fas fa-trash"></i>
+                </button>
+            ` : '';
+            return `
+                <div class="card p-4 flex items-center justify-between">
+                    <span class="font-medium">${esc(name)}</span>
+                    <div class="flex items-center gap-3">
+                        <button class="text-blue-600 hover:text-blue-800 edit-tag" ${idAttr} data-name="${esc(name)}" title="Düzenle">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        ${deleteBtn}
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+    // Edit ve delete eventleri
+    document.querySelectorAll('.edit-tag').forEach(btn => {
+        btn.addEventListener('click', function () {
+            const oldName = this.getAttribute('data-name');
+            const idVal = this.getAttribute('data-id');
+            const newName = prompt('Yeni etiket adı:', oldName);
+            if (newName === null) return;
+            const trimmed = newName.trim();
+            if (!trimmed) { alert('Etiket adı boş olamaz.'); return; }
+            if (trimmed === oldName) return;
+
+            if (idVal) {
+                editTag(Number(idVal), oldName, trimmed);
+            } else {
+                editTagByName(oldName, trimmed);
+            }
+        });
+    });
+
+    document.querySelectorAll('.delete-tag').forEach(btn => {
+        btn.addEventListener('click', function () {
+            deleteTag(Number(this.getAttribute('data-id')));
+        });
+    });
+}
+
+// Etiket düzenle (ID ile)
+function editTag(id, oldName, newName) {
+    const idx = tagsData.findIndex(t => t.id === id);
+    if (idx === -1) return;
+
+    const duplicate = tagsData.find(t => t.name === newName && t.id !== id);
+    if (duplicate) {
+        const proceed = confirm('Aynı isimde başka bir etiket var. Birleştirilsin mi?');
+        if (!proceed) return;
+        // Eski kayıt silinir, yeni isim zaten mevcut
+        tagsData.splice(idx, 1);
+    } else {
+        tagsData[idx].name = newName;
+    }
+
+    renameTagInCollections(oldName, newName);
+
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+    renderTagsList();
+    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+    updateSeriesTagCloud();
+    updateMoviesTagCloud();
+    filterSeries();
+    filterMovies();
+}
+
+// Etiket düzenle (sadece isim ile - global liste yoksa)
+function editTagByName(oldName, newName) {
+    const found = tagsData.find(t => t.name === oldName);
+    const duplicate = tagsData.find(t => t.name === newName);
+
+    if (found) {
+        if (!duplicate || duplicate.id === found.id) {
+            found.name = newName;
+        } else {
+            // Duplicate mevcutsa, eskiyi kaldır
+            tagsData = tagsData.filter(t => t.id !== found.id);
+        }
+    } else {
+        if (!duplicate) {
+            tagsData.push({ id: newId(), name: newName });
+        }
+    }
+
+    renameTagInCollections(oldName, newName);
+
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+    renderTagsList();
+    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+    updateSeriesTagCloud();
+    updateMoviesTagCloud();
+    filterSeries();
+    filterMovies();
+}
+
+// Koleksiyonlarda etiket adını değiştir
+function renameTagInCollections(oldName, newName) {
+    seriesData.forEach(s => {
+        if (Array.isArray(s.tags)) {
+            s.tags = s.tags.map(tag => tag === oldName ? newName : tag);
+            s.tags = Array.from(new Set(s.tags));
+        }
+    });
+    moviesData.forEach(m => {
+        if (Array.isArray(m.tags)) {
+            m.tags = m.tags.map(tag => tag === oldName ? newName : tag);
+            m.tags = Array.from(new Set(m.tags));
+        }
+    });
+}
+
+// Tüm mevcut etiketleri global etiketlere dönüştür
+function promoteAllTags() {
+    const namesSet = new Set();
+    // Global tags
+    if (Array.isArray(tagsData)) {
+        tagsData.forEach(t => {
+            if (t && typeof t.name === 'string') {
+                const n = t.name.trim();
+                if (n) namesSet.add(n);
+            }
+        });
+    }
+    // Series tags
+    if (Array.isArray(seriesData)) {
+        seriesData.forEach(s => {
+            if (Array.isArray(s.tags)) {
+                s.tags.forEach(tag => {
+                    if (typeof tag === 'string') {
+                        const n = tag.trim();
+                        if (n) namesSet.add(n);
+                    }
+                });
+            }
+        });
+    }
+    // Movies tags
+    if (Array.isArray(moviesData)) {
+        moviesData.forEach(m => {
+            if (Array.isArray(m.tags)) {
+                m.tags.forEach(tag => {
+                    if (typeof tag === 'string') {
+                        const n = tag.trim();
+                        if (n) namesSet.add(n);
+                    }
+                });
+            }
+        });
+    }
+
+    const existingNames = new Set(Array.isArray(tagsData) ? tagsData.map(t => t.name) : []);
+    let addedCount = 0;
+
+    Array.from(namesSet).sort((a, b) => a.localeCompare(b, 'tr')).forEach(name => {
+        if (!existingNames.has(name)) {
+            tagsData.push({ id: newId(), name });
+            addedCount++;
+        }
+    });
+
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+    renderTagsList();
+    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+    updateSeriesTagCloud();
+    updateMoviesTagCloud();
+    filterSeries();
+    filterMovies();
+
+    alert(addedCount > 0 ? ('Tüm etiketler global hale getirildi (' + addedCount + ' yeni).') : 'Tüm etiketler zaten global.');
+}
+
+// Update series category selector
+function updateSeriesCategorySelector() {
+    const selector = document.getElementById('seriesCategorySelector');
+    selector.innerHTML = categoriesData.map(category => `
+        <div class="category-option" data-id="${esc(category.id)}" style="--cat: ${safeColor(category.color)}">
+            ${esc(category.name)}
+        </div>
+    `).join('');
+
+    // Add event listeners
+    document.querySelectorAll('#seriesCategorySelector .category-option').forEach(option => {
+        option.addEventListener('click', function () {
+            this.classList.toggle('selected');
+        });
+    });
+}
+
+// Update movie category selector
+function updateMovieCategorySelector() {
+    const selector = document.getElementById('movieCategorySelector');
+    selector.innerHTML = categoriesData.map(category => `
+        <div class="category-option" data-id="${esc(category.id)}" style="--cat: ${safeColor(category.color)}">
+            ${esc(category.name)}
+        </div>
+    `).join('');
+
+    // Add event listeners
+    document.querySelectorAll('#movieCategorySelector .category-option').forEach(option => {
+        option.addEventListener('click', function () {
+            this.classList.toggle('selected');
+        });
+    });
+}
+
+// Update series tag cloud
+function updateSeriesTagCloud() {
+    const allTags = new Set();
+    seriesData.forEach(series => {
+        if (series.tags && series.tags.length > 0) {
+            series.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+
+    if (allTags.size > 0) {
+        seriesTagCloud.classList.remove('hidden'); // Ensure visibility
+        seriesTagCloud.style.display = 'flex'; // Explicitly set display
+        seriesTagCloud.innerHTML = Array.from(allTags).map(tag =>
+            `<span class="tag cursor-pointer" data-tag="${esc(tag)}">${esc(tag)}</span>`
+        ).join('');
+
+        // Add event listeners
+        document.querySelectorAll('#seriesTagCloud .tag').forEach(tagEl => {
+            tagEl.addEventListener('click', function () {
+                const tag = this.getAttribute('data-tag');
+                searchSeries.value = tag;
+                filterSeries();
+            });
+        });
+    } else {
+        seriesTagCloud.classList.add('hidden');
+        seriesTagCloud.style.display = 'none'; // Ensure hidden state
+    }
+}
+
+// Update movies tag cloud
+function updateMoviesTagCloud() {
+    const allTags = new Set();
+    moviesData.forEach(movie => {
+        if (movie.tags && movie.tags.length > 0) {
+            movie.tags.forEach(tag => allTags.add(tag));
+        }
+    });
+
+    if (allTags.size > 0) {
+        moviesTagCloud.classList.remove('hidden'); // Ensure visibility
+        moviesTagCloud.style.display = 'flex'; // Explicitly set display
+        moviesTagCloud.innerHTML = Array.from(allTags).map(tag =>
+            `<span class="tag cursor-pointer" data-tag="${esc(tag)}">${esc(tag)}</span>`
+        ).join('');
+
+        // Add event listeners
+        document.querySelectorAll('#moviesTagCloud .tag').forEach(tagEl => {
+            tagEl.addEventListener('click', function () {
+                const tag = this.getAttribute('data-tag');
+                searchMovies.value = tag;
+                filterMovies();
+            });
+        });
+    } else {
+        moviesTagCloud.classList.add('hidden');
+        moviesTagCloud.style.display = 'none'; // Ensure hidden state
+    }
+}
+
+// Get series status (tüm sezonlara göre)
+function getSeriesStatus(series) {
+    return getSeriesTotals(series).status;
+}
+
+// Get status text
+function getStatusText(status) {
+    switch (status) {
+        case 'completed': return 'Tamamlandı';
+        case 'watching': return 'İzleniyor';
+        case 'planning': return 'Planlanıyor';
+        case 'paused': return 'Duraklatıldı';
+        case 'dropped': return 'Bırakıldı';
+        default: return '';
+    }
+}
+
+// Format date
+function formatDate(dateString) {
+    const date = new Date(dateString);
+    if (!dateString || isNaN(date.getTime())) return '';
+    return date.toLocaleDateString('tr-TR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+    });
+}
+
+// Release date utility functions
+function formatReleaseDate(dateString) {
+    const date = parseLocalDate(dateString);
+    if (!date) return '';
+    const months = [
+        'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+        'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+    ];
+    return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function getDaysUntilRelease(dateString) {
+    if (!dateString) return null;
+    const releaseDate = parseLocalDate(dateString);
+    if (!releaseDate) return null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.round((releaseDate - today) / (1000 * 60 * 60 * 24));
+}
+
+function getReleaseBadgeInfo(releaseDate) {
+    if (!releaseDate) return null;
+    
+    const daysUntil = getDaysUntilRelease(releaseDate);
+    const formattedDate = formatReleaseDate(releaseDate);
+    if (daysUntil === null) return null;
+    
+    if (daysUntil < 0) {
+        return {
+            text: 'Yayında',
+            class: 'release-badge-live',
+            fullText: formattedDate
+        };
+    } else if (daysUntil === 0) {
+        return {
+            text: 'Bugün Çıkıyor',
+            class: 'release-badge-today',
+            fullText: formattedDate
+        };
+    } else if (daysUntil === 1) {
+        return {
+            text: '1 gün kaldı',
+            class: 'release-badge-soon',
+            fullText: formattedDate
+        };
+    } else if (daysUntil <= 7) {
+        return {
+            text: `${daysUntil} gün kaldı`,
+            class: 'release-badge-soon',
+            fullText: formattedDate
+        };
+    } else if (daysUntil <= 30) {
+        return {
+            text: `${daysUntil} gün kaldı`,
+            class: 'release-badge-upcoming',
+            fullText: formattedDate
+        };
+    } else {
+        return {
+            text: formattedDate,
+            class: 'release-badge-far',
+            fullText: `${daysUntil} gün kaldı`
+        };
+    }
+}
+
+
+
+// YouTube URL'den video ID'sini çıkar (tek tanım)
+function extractYouTubeVideoId(url) {
+    if (!url || typeof url !== 'string') return null;
+    url = url.trim();
+    if (url.length === 11 && /^[a-zA-Z0-9_-]+$/.test(url)) {
+        return url;
+    }
+    const patterns = [
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?.*[&?]v=([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/v\/([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtube-nocookie\.com\/embed\/([a-zA-Z0-9_-]{11})/
+    ];
+    for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+            return match[1];
+        }
+    }
+    return null;
+}
+
+function openYouTubeInNewTab(url) {
+    if (!url) return;
+    try {
+        window.open(url, '_blank', 'noopener');
+    } catch (_) {}
+}
+
+function getYouTubePlayerErrorText(code) {
+    const c = Number(code);
+    if (!Number.isFinite(c)) return 'YouTube oynatıcı hata verdi.';
+    if (c === 2) return `Geçersiz video kimliği (invalid video id). (Hata ${c})`;
+    if (c === 5) return `HTML5 oynatıcı hatası (HTML5 player error). (Hata ${c})`;
+    if (c === 100) return `Video bulunamadı veya gizli (not found / private). (Hata ${c})`;
+    if (c === 101 || c === 150) return `Video sahibi başka sitelerde oynatılmasına izin vermiyor. (Hata ${c})`;
+    if (c === 152 || c === 153) return `YouTube bu sayfadan oynatmayı kabul etmedi (sayfa adresi iletilemedi). (Hata ${c})`;
+    return `YouTube oynatıcı hatası. (Hata ${c})`;
+}
+
+function resetTrailerPlayerState() {
+    trailerHasStarted = false;
+    if (trailerStartTimeout) {
+        clearTimeout(trailerStartTimeout);
+        trailerStartTimeout = null;
+    }
+    
+    // Iframe'i temizle
+    const playerContainer = document.getElementById('trailerPlayer');
+    if (playerContainer) {
+        playerContainer.innerHTML = '';
+    }
+    trailerPlayer = null;
+}
+
+// YouTube fragman modal'ını göster
+function showTrailerModal(videoUrl, title) {
+    const videoId = extractYouTubeVideoId(videoUrl);
+    if (!videoId) {
+        alert('Geçerli bir YouTube URL\'si veya video ID\'si giriniz.');
+        return;
+    }
+
+    resetTrailerPlayerState();
+
+    const isFileProtocol = window.location.protocol === 'file:';
+    const watchUrl = 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoId);
+
+    const modal = document.createElement('div');
+    modal.className = 'modal trailer-modal active';
+    modal.style.display = 'flex';
+
+    const initialInfoText = isFileProtocol
+        ? 'Bu sayfa tarayıcıda dosya (file://) olarak açılıyor. Bazı tarayıcılarda YouTube oynatıcı burada çalışmayabilir. Video başlamazsa veya hata alırsanız aşağıdaki buton ile fragmanı YouTube\'da açabilirsiniz.'
+        : 'Video birkaç saniye içinde başlamazsa aşağıdaki buton ile fragmanı YouTube\'da açabilirsiniz.';
+
+    modal.innerHTML = `
+        <div class="trailer-modal-content">
+            <div class="modal-header">
+                <h3>${esc(title)} - Fragman</h3>
+                <div class="flex items-center gap-2">
+                    <a href="${watchUrl}" target="_blank" rel="noopener" class="trailer-btn" style="text-decoration: none;">
+                        <i class="fab fa-youtube mr-1"></i> YouTube'da aç
+                    </a>
+                    <button class="close-trailer-btn">&times;</button>
+                </div>
+            </div>
+            <div class="trailer-container">
+                <div id="trailerPlayer"></div>
+            </div>
+            <div class="trailer-info">${initialInfoText}</div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    const infoEl = modal.querySelector('.trailer-info');
+
+    const closeBtn = modal.querySelector('.close-trailer-btn');
+    closeBtn.addEventListener('click', () => closeModal(modal));
+
+    const playerContainer = modal.querySelector('#trailerPlayer');
+    if (!playerContainer) {
+        return;
+    }
+
+    trailerPlayer = createYouTubeEmbed(playerContainer, videoId, {
+        title,
+        autoplay: true,
+        mute: false,
+        controls: true,
+        onFallback: code => {
+            if (infoEl) infoEl.textContent = code ? getYouTubePlayerErrorText(code) : initialInfoText;
+        }
+    });
+
+    // Bilgi metnini birkaç saniye sonra temizle (hata olursa yedek görünüm kendi mesajını yazar)
+    if (infoEl && !isFileProtocol) {
+        setTimeout(() => {
+            if (!playerContainer.querySelector('.yt-fallback')) infoEl.textContent = '';
+        }, 3000);
+    }
+}
+
+// --- YouTube gömme yardımcıları ---
+// Hata 153: YouTube, oynatıcıyı hangi sitenin açtığını (Referer) öğrenemediğinde verir.
+// Bu yüzden origin/widget_referrer gönderiyoruz; file:// sayfalarında gömme hiç çalışmadığı için
+// doğrudan kapak görseli + "YouTube'da izle" gösteriyoruz.
+function canEmbedYouTube() {
+    return window.location.protocol === 'https:' || window.location.protocol === 'http:';
+}
+
+function buildYouTubeEmbedUrl(videoId, { autoplay, mute, controls }) {
+    const params = new URLSearchParams({
+        autoplay: autoplay ? '1' : '0',
+        mute: mute ? '1' : '0',
+        controls: controls ? '1' : '0',
+        rel: '0',
+        modestbranding: '1',
+        playsinline: '1',
+        enablejsapi: '1',
+        origin: window.location.origin,
+        widget_referrer: window.location.href
+    });
+    return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
+}
+
+function renderYouTubeFallback(container, videoId, title, code) {
+    const watchUrl = 'https://www.youtube.com/watch?v=' + encodeURIComponent(videoId);
+    const message = code
+        ? getYouTubePlayerErrorText(code)
+        : 'Sayfa dosya (file://) olarak açıldığı için video burada oynatılamıyor.';
+    container.innerHTML = `
+        <a class="yt-fallback" href="${esc(watchUrl)}" target="_blank" rel="noopener" title="YouTube'da izle">
+            <img src="https://i.ytimg.com/vi/${encodeURIComponent(videoId)}/hqdefault.jpg" alt="${esc(title || '')}" onerror="handleImageError(this)">
+            <span class="yt-fallback-overlay">
+                <span class="yt-fallback-play"><i class="fab fa-youtube"></i></span>
+                <span class="yt-fallback-text">YouTube'da izle</span>
+                <span class="yt-fallback-note">${esc(message)}</span>
+            </span>
+        </a>
+    `;
+}
+
+function createYouTubeEmbed(container, videoId, { title, autoplay, mute, controls, onFallback }) {
+    container.innerHTML = '';
+    if (!canEmbedYouTube()) {
+        renderYouTubeFallback(container, videoId, title, null);
+        if (onFallback) onFallback(null);
+        return null;
+    }
+
+    const iframe = document.createElement('iframe');
+    iframe.width = '100%';
+    iframe.height = '100%';
+    iframe.src = buildYouTubeEmbedUrl(videoId, { autoplay, mute, controls });
+    iframe.title = title ? `${title} - YouTube` : 'YouTube video player';
+    iframe.frameBorder = '0';
+    iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
+    iframe.referrerPolicy = 'strict-origin-when-cross-origin';
+    iframe.allowFullscreen = true;
+    iframe.__ytFallback = code => {
+        if (!iframe.isConnected) return;
+        renderYouTubeFallback(container, videoId, title, code);
+        if (onFallback) onFallback(code);
+    };
+    // Oynatıcıdan olay (hata) mesajları almak için dinlemeye başla
+    iframe.addEventListener('load', () => {
+        try {
+            iframe.contentWindow.postMessage(JSON.stringify({ event: 'listening', id: videoId, channel: 'widget' }), 'https://www.youtube.com');
+        } catch (_) {}
+    });
+    container.appendChild(iframe);
+    return iframe;
+}
+
+// YouTube oynatıcısı hata verirse (ör. 101/150/153) siyah ekran yerine yedek görünüme geç
+window.addEventListener('message', event => {
+    if (!/^https:\/\/www\.youtube(-nocookie)?\.com$/.test(event.origin)) return;
+    let data = event.data;
+    if (typeof data === 'string') {
+        try { data = JSON.parse(data); } catch (_) { return; }
+    }
+    if (!data || data.event !== 'onError') return;
+    document.querySelectorAll('iframe').forEach(frame => {
+        if (frame.contentWindow === event.source && typeof frame.__ytFallback === 'function') {
+            frame.__ytFallback(data.info);
+        }
+    });
+});
+
+function matchesSearchTerm(item, term) {
+    if (!term) return true;
+    if (trLower(item.name).includes(term)) return true;
+    if (trLower(item.description).includes(term)) return true;
+    if (item.platform && trLower(item.platform).includes(term)) return true;
+    if ((item.tags || []).some(tag => trLower(tag).includes(term))) return true;
+    return (item.categories || []).some(catId => {
+        const cat = categoriesData.find(c => c.id === catId);
+        return cat && trLower(cat.name).includes(term);
+    });
+}
+
+// Filter series
+function filterSeries() {
+    const searchTerm = trLower(searchSeries.value).trim();
+
+    filteredSeriesData = seriesData.filter(series => {
+        if (!matchesSearchTerm(series, searchTerm)) return false;
+        if (currentSeriesFilter !== 'all' && getSeriesStatus(series) !== currentSeriesFilter) return false;
+        if (currentSeriesCategory && !(series.categories || []).includes(currentSeriesCategory)) return false;
+        return true;
+    });
+
+    const seriesSortSelect = document.getElementById('seriesSortSelect');
+    sortSeries(seriesSortSelect ? seriesSortSelect.value : 'recent');
+}
+
+// Filter movies
+function filterMovies() {
+    const searchTerm = trLower(searchMovies.value).trim();
+
+    filteredMoviesData = moviesData.filter(movie => {
+        if (!matchesSearchTerm(movie, searchTerm)) return false;
+        if (currentMoviesFilter === 'watched' && !movie.watched) return false;
+        if (currentMoviesFilter === 'not-watched' && movie.watched) return false;
+        if (currentMoviesCategory && !(movie.categories || []).includes(currentMoviesCategory)) return false;
+        return true;
+    });
+
+    const moviesSortSelect = document.getElementById('moviesSortSelect');
+    sortMovies(moviesSortSelect ? moviesSortSelect.value : 'recent');
+}
+
+function setTagsInContainer(containerId, inputId, tags) {
+    const tagsContainer = document.getElementById(containerId);
+    tagsContainer.innerHTML = '';
+    (tags || []).forEach(tag => tagsContainer.appendChild(createTagElement(tag, tagsContainer, true)));
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.id = inputId;
+    input.className = 'tag-input';
+    input.placeholder = 'Etiket ekle ve Enter\'a bas';
+    tagsContainer.appendChild(input);
+    initTagInput(inputId, containerId);
+}
+
+function setSelectedCategories(selectorId, categoryIds) {
+    document.querySelectorAll(`#${selectorId} .category-option`).forEach(option => {
+        const catId = Number(option.getAttribute('data-id'));
+        option.classList.toggle('selected', (categoryIds || []).includes(catId));
+    });
+}
+
+function setPlatformValue(selectId, platform) {
+    const select = document.getElementById(selectId);
+    if (!select) return;
+    const value = platform || 'Netflix';
+    if (!Array.from(select.options).some(o => o.value === value)) {
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = value;
+        select.appendChild(option);
+    }
+    select.value = value;
+}
+
+function openModal(modal) {
+    modal.classList.add('active');
+    const first = modal.querySelector('input[type="text"]:not([type="hidden"])');
+    if (first) setTimeout(() => first.focus(), 50);
+}
+
+// Add new series
+function addSeries(prefillName) {
+    document.getElementById('seriesForm').reset();
+    document.getElementById('seriesModalTitle').textContent = 'Dizi Ekle';
+    document.getElementById('seriesId').value = '';
+    document.getElementById('seriesName').value = typeof prefillName === 'string' ? prefillName : '';
+    setPlatformValue('seriesPlatform', 'Netflix');
+    setSelectedCategories('seriesCategorySelector', []);
+    setTagsInContainer('seriesTagsContainer', 'seriesTagsInput', []);
+    renderSeasonForms([{ season: 1, totalEpisodes: '', watchedEpisodes: 0 }]);
+    if (typeof resetAutoFill === 'function') resetAutoFill('series');
+    openModal(seriesModal);
+}
+
+// Edit series
+function editSeries(id) {
+    const series = findSeries(id);
+    if (!series) return;
+
+    document.getElementById('seriesForm').reset();
+    document.getElementById('seriesModalTitle').textContent = 'Diziyi Düzenle';
+    document.getElementById('seriesId').value = series.id;
+    document.getElementById('seriesName').value = series.name;
+    setPlatformValue('seriesPlatform', series.platform);
+    document.getElementById('seriesTrailerUrl').value = series.trailerUrl || '';
+    document.getElementById('seriesImdbRating').value = series.imdbRating != null ? series.imdbRating : '';
+    document.getElementById('seriesDescription').value = series.description || '';
+    document.getElementById('seriesImageUrl').value = series.imageUrl || '';
+    document.getElementById('seriesReleaseDate').value = series.releaseDate || '';
+    document.getElementById('seriesMyRating').value = series.myRating != null ? series.myRating : '';
+    document.getElementById('seriesNotes').value = series.notes || '';
+    document.getElementById('seriesUserStatus').value = series.userStatus || '';
+    setSelectedCategories('seriesCategorySelector', series.categories);
+    setTagsInContainer('seriesTagsContainer', 'seriesTagsInput', series.tags);
+    renderSeasonForms(series.seasons);
+    if (typeof resetAutoFill === 'function') resetAutoFill('series');
+    openModal(seriesModal);
+}
+
+// Add new movie
+function addMovie(prefillName) {
+    document.getElementById('movieForm').reset();
+    document.getElementById('movieModalTitle').textContent = 'Film Ekle';
+    document.getElementById('movieId').value = '';
+    document.getElementById('movieName').value = typeof prefillName === 'string' ? prefillName : '';
+    setSelectedCategories('movieCategorySelector', []);
+    setTagsInContainer('movieTagsContainer', 'movieTagsInput', []);
+    if (typeof resetAutoFill === 'function') resetAutoFill('movie');
+    openModal(movieModal);
+}
+
+// Edit movie
+function editMovie(id) {
+    const movie = moviesData.find(m => String(m.id) === String(id));
+    if (!movie) return;
+
+    document.getElementById('movieForm').reset();
+    document.getElementById('movieModalTitle').textContent = 'Filmi Düzenle';
+    document.getElementById('movieId').value = movie.id;
+    document.getElementById('movieName').value = movie.name;
+    document.getElementById('movieWatched').checked = !!movie.watched;
+    document.getElementById('movieTrailerUrl').value = movie.trailerUrl || '';
+    document.getElementById('movieImdbRating').value = movie.imdbRating != null ? movie.imdbRating : '';
+    document.getElementById('movieDescription').value = movie.description || '';
+    document.getElementById('movieImageUrl').value = movie.imageUrl || '';
+    document.getElementById('movieReleaseDate').value = movie.releaseDate || '';
+    document.getElementById('movieMyRating').value = movie.myRating != null ? movie.myRating : '';
+    document.getElementById('movieNotes').value = movie.notes || '';
+    setSelectedCategories('movieCategorySelector', movie.categories);
+    setTagsInContainer('movieTagsContainer', 'movieTagsInput', movie.tags);
+    if (typeof resetAutoFill === 'function') resetAutoFill('movie');
+    openModal(movieModal);
+}
+
+// Add new category
+function addCategory() {
+    const name = document.getElementById('newCategoryName').value.trim();
+    const color = document.getElementById('newCategoryColor').value;
+
+    if (!name) {
+        alert('Lütfen bir kategori adı girin.');
+        return;
+    }
+    if (categoriesData.some(c => trLower(c.name) === trLower(name))) {
+        alert('Bu isimde bir kategori zaten var.');
+        return;
+    }
+
+    categoriesData.push({
+        id: newId(),
+        name: name,
+        color: safeColor(color)
+    });
+
+    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+    // Reset form
+    document.getElementById('newCategoryName').value = '';
+    document.getElementById('newCategoryColor').value = '#6366f1';
+
+    // Update UI
+    renderCategoriesList();
+    updateSeriesCategorySelector();
+    updateMovieCategorySelector();
+    renderCategoryFilters();
+}
+
+// Edit category (name and color)
+function editCategory(id) {
+    const category = categoriesData.find(c => c.id === id);
+    if (!category) {
+        alert('Kategori bulunamadı.');
+        return;
+    }
+
+    const newName = prompt('Yeni kategori adını girin:', category.name);
+    if (newName === null) return; // Kullanıcı iptal etti
+    const trimmedName = newName.trim();
+    if (!trimmedName) {
+        alert('Kategori adı boş olamaz.');
+        return;
+    }
+
+    const newColor = prompt('Yeni kategori rengini girin (#RRGGBB):', category.color);
+    if (newColor === null) return; // Kullanıcı iptal etti
+    const colorTrimmed = newColor.trim();
+    const hexRegex = /^#([0-9A-Fa-f]{6})$/;
+    if (!hexRegex.test(colorTrimmed)) {
+        alert('Lütfen #RRGGBB formatında geçerli bir renk girin.');
+        return;
+    }
+
+    category.name = trimmedName;
+    category.color = colorTrimmed;
+
+    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+    // UI ve bağlı bileşenleri güncelle
+    renderCategoriesList();
+    updateSeriesCategorySelector();
+    updateMovieCategorySelector();
+    renderCategoryFilters();
+    // İçerik kartlarındaki rozetleri güncellemek için listeleri yeniden çiz
+    if (typeof renderSeriesList === 'function') renderSeriesList();
+    if (typeof renderMoviesList === 'function') renderMoviesList();
+}
+
+// Inline edit: start and save functions
+function startEditCategory(id) {
+    const category = categoriesData.find(c => c.id === id);
+    const card = document.querySelector(`#categoriesList .category-card[data-id="${id}"]`);
+    if (!category || !card) return;
+
+    card.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 w-full">
+            <div class="form-group">
+                <label for="editCategoryName_${id}">Kategori Adı</label>
+                <input type="text" id="editCategoryName_${id}" class="form-control" value="${esc(category.name)}" placeholder="Kategori adı">
+            </div>
+            <div class="form-group">
+                <label for="editCategoryColor_${id}">Renk</label>
+                <input type="color" id="editCategoryColor_${id}" class="form-control color-picker" value="${safeColor(category.color)}">
+            </div>
+            <div class="form-group flex items-end gap-2">
+                <button class="btn btn-primary save-category" data-id="${id}">
+                    <i class="fas fa-save mr-2"></i> Kaydet
+                </button>
+                <button class="btn btn-secondary cancel-category" data-id="${id}">İptal</button>
+            </div>
+        </div>
+    `;
+
+    const saveBtn = card.querySelector('.save-category');
+    const cancelBtn = card.querySelector('.cancel-category');
+    if (saveBtn) {
+        saveBtn.addEventListener('click', function () {
+            const id = parseInt(this.getAttribute('data-id'));
+            saveCategoryEdit(id);
+        });
+    }
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', function () {
+            renderCategoriesList();
+        });
+    }
+}
+
+function saveCategoryEdit(id) {
+    const nameInput = document.getElementById(`editCategoryName_${id}`);
+    const colorInput = document.getElementById(`editCategoryColor_${id}`);
+    const name = nameInput ? nameInput.value.trim() : '';
+    const color = colorInput ? colorInput.value : '';
+
+    if (!name) {
+        alert('Kategori adı boş olamaz.');
+        return;
+    }
+
+    const hexRegex = /^#([0-9A-Fa-f]{6})$/;
+    if (!hexRegex.test(color)) {
+        alert('Lütfen #RRGGBB formatında geçerli bir renk girin.');
+        return;
+    }
+
+    const category = categoriesData.find(c => c.id === id);
+    if (!category) {
+        alert('Kategori bulunamadı.');
+        return;
+    }
+
+    category.name = name;
+    category.color = color;
+
+    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+    // UI güncellemeleri
+    renderCategoriesList();
+    updateSeriesCategorySelector();
+    updateMovieCategorySelector();
+    renderCategoryFilters();
+    if (typeof renderSeriesList === 'function') renderSeriesList();
+    if (typeof renderMoviesList === 'function') renderMoviesList();
+}
+
+// Delete category
+function deleteCategory(id) {
+    if (confirm('Bu kategoriyi silmek istediğinize emin misiniz? Bu kategoriye sahip tüm içeriklerden bu kategori kaldırılacak.')) {
+        // Kategoriyi içeriklerden kaldır
+        seriesData.forEach(series => {
+            if (series.categories) {
+                series.categories = series.categories.filter(catId => catId !== id);
+            }
+        });
+
+        moviesData.forEach(movie => {
+            if (movie.categories) {
+                movie.categories = movie.categories.filter(catId => catId !== id);
+            }
+        });
+
+        // Kategoriyi sil
+        categoriesData = categoriesData.filter(c => c.id !== id);
+        markDeleted('categories', id);
+        if (currentSeriesCategory === id) currentSeriesCategory = null;
+        if (currentMoviesCategory === id) currentMoviesCategory = null;
+
+        // LocalStorage'ı güncelle
+        localStorage.setItem('seriesData', JSON.stringify(seriesData));
+        localStorage.setItem('moviesData', JSON.stringify(moviesData));
+        localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+
+        // UI'ı güncelle
+        renderSeriesList();
+        renderMoviesList();
+        renderCategoriesList();
+        updateSeriesCategorySelector();
+        updateMovieCategorySelector();
+        renderCategoryFilters();
+    }
+}
+
+// Add new tag
+function addTag() {
+    const name = document.getElementById('newTagName').value.trim();
+
+    if (!name) {
+        alert('Lütfen bir etiket adı girin.');
+        return;
+    }
+
+    if (tagsData.some(t => t.name === name)) {
+        alert('Bu etiket zaten var.');
+        return;
+    }
+    tagsData.push({
+        id: newId(),
+        name: name
+    });
+
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+
+    // Reset form
+    document.getElementById('newTagName').value = '';
+
+    // Update UI
+    renderTagsList();
+    // Refresh suggestion chips in modals
+    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+}
+
+// Delete tag (remove from global and all series/movies)
+function deleteTag(id) {
+    const tagObj = tagsData.find(t => t.id === id);
+    const tagName = tagObj ? tagObj.name : null;
+    if (!tagName) {
+        if (!confirm('Global listede bulunamadı. Yine de tüm içerikten silinsin mi?')) return;
+    } else {
+        if (!confirm('Bu etiket global listeden ve tüm dizi/film içeriklerinden silinecek. Emin misiniz?')) return;
+    }
+
+    // Remove from global list
+    tagsData = tagsData.filter(t => t.id !== id);
+    markDeleted('tags', id);
+
+    // Remove from series and movies
+    if (tagName) {
+        if (Array.isArray(seriesData)) {
+            seriesData.forEach(s => {
+                if (Array.isArray(s.tags)) {
+                    s.tags = s.tags.filter(tag => tag !== tagName);
+                }
+            });
+        }
+        if (Array.isArray(moviesData)) {
+            moviesData.forEach(m => {
+                if (Array.isArray(m.tags)) {
+                    m.tags = m.tags.filter(tag => tag !== tagName);
+                }
+            });
+        }
+    }
+
+    // Persist
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+
+    // Refresh UI
+    renderTagsList();
+    renderTagOptions('seriesTagOptions', 'seriesTagsContainer');
+    renderTagOptions('movieTagOptions', 'movieTagsContainer');
+    updateSeriesTagCloud();
+    updateMoviesTagCloud();
+    filterSeries();
+    filterMovies();
+}
+
+// Initialize tag input
+function initTagInput(inputId, containerId) {
+    const input = document.getElementById(inputId);
+    const container = document.getElementById(containerId);
+
+    input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' && this.value.trim() !== '') {
+            e.preventDefault();
+
+            const tag = this.value.trim();
+            const already = Array.from(container.querySelectorAll('.tag')).some(t => t.getAttribute('data-tag') === tag);
+            if (!already) container.insertBefore(createTagElement(tag, container, true), this);
+            this.value = '';
+        }
+    });
+
+    // Existing tags don't need delete buttons automatically added
+
+    // If there are global tags, render suggestion chips (for series/movie modals)
+    const suggestionsId = inputId === 'seriesTagsInput' ? 'seriesTagOptions' : (inputId === 'movieTagsInput' ? 'movieTagOptions' : null);
+    if (suggestionsId) renderTagOptions(suggestionsId, containerId);
+}
+
+// Render selectable tag options under modal inputs
+function renderTagOptions(optionsContainerId, targetContainerId) {
+    const optionsEl = document.getElementById(optionsContainerId);
+    if (!optionsEl) return;
+
+    // Clear existing
+    optionsEl.innerHTML = '';
+
+    // Build unified suggestion set from global tags and existing series/movies
+    const suggestionSet = new Set();
+    // Global tags defined in Tags tab
+    if (Array.isArray(tagsData) && tagsData.length > 0) {
+        tagsData.forEach(t => {
+            if (t && typeof t.name === 'string' && t.name.trim() !== '') {
+                suggestionSet.add(t.name.trim());
+            }
+        });
+    }
+    // Tags from existing series
+    if (Array.isArray(seriesData) && seriesData.length > 0) {
+        seriesData.forEach(s => {
+            if (s && Array.isArray(s.tags)) {
+                s.tags.forEach(tag => {
+                    if (typeof tag === 'string' && tag.trim() !== '') {
+                        suggestionSet.add(tag.trim());
+                    }
+                });
+            }
+        });
+    }
+    // Tags from existing movies
+    if (Array.isArray(moviesData) && moviesData.length > 0) {
+        moviesData.forEach(m => {
+            if (m && Array.isArray(m.tags)) {
+                m.tags.forEach(tag => {
+                    if (typeof tag === 'string' && tag.trim() !== '') {
+                        suggestionSet.add(tag.trim());
+                    }
+                });
+            }
+        });
+    }
+
+    // Render suggestion chips (sorted for consistency)
+    Array.from(suggestionSet).sort((a, b) => a.localeCompare(b, 'tr')).forEach(tagName => {
+        const chip = document.createElement('span');
+        chip.className = 'tag';
+        chip.textContent = tagName;
+        chip.setAttribute('data-tag', tagName);
+
+        chip.addEventListener('click', function (e) {
+            e.stopPropagation();
+            const container = document.getElementById(targetContainerId);
+            // If already selected (there's a .tag with same text), remove it
+            const exists = Array.from(container.querySelectorAll('.tag')).some(t => t.getAttribute('data-tag') === tagName);
+            if (exists) {
+                // remove first matching tag element (ignore delete button text)
+                const toRemove = Array.from(container.querySelectorAll('.tag')).find(t => t.getAttribute('data-tag') === tagName);
+                if (toRemove) container.removeChild(toRemove);
+            } else {
+                const tagEl = createTagElement(tagName, container, true);
+                // Insert before input if present
+                const input = container.querySelector('.tag-input');
+                if (input) container.insertBefore(tagEl, input);
+                else container.appendChild(tagEl);
+            }
+        });
+
+        optionsEl.appendChild(chip);
+    });
+}
+
+// Create tag element with optional delete functionality
+function createTagElement(tag, container, showDeleteButton = true) {
+    const tagEl = document.createElement('span');
+    tagEl.className = 'tag';
+    tagEl.textContent = tag;
+    tagEl.setAttribute('data-tag', tag);
+
+    if (showDeleteButton) {
+        const deleteBtn = document.createElement('button');
+        deleteBtn.type = 'button';
+        deleteBtn.className = 'ml-1 opacity-60 hover:opacity-100';
+        deleteBtn.title = 'Etiketi kaldır';
+        deleteBtn.innerHTML = '&times;';
+        deleteBtn.addEventListener('click', function (e) {
+            e.stopPropagation();
+            container.removeChild(tagEl);
+        });
+        tagEl.appendChild(deleteBtn);
+    }
+
+    return tagEl;
+}
+
+// Sezon düzenleyici (hem ekleme hem düzenleme modunda kullanılır)
+function createSeasonFormRow(season) {
+    const row = document.createElement('div');
+    row.className = 'season-form-item';
+    if (season && season.id != null) row.setAttribute('data-season-id', season.id);
+    if (season && season.releaseDate) row.setAttribute('data-release-date', season.releaseDate);
+    row.innerHTML = `
+        <div class="season-form-header">
+            <span class="season-form-title">Sezon</span>
+            <button type="button" class="remove-season-btn" title="Sezonu kaldır">
+                <i class="fas fa-times"></i> Kaldır
+            </button>
+        </div>
+        <div class="season-form-fields">
+            <div>
+                <label class="text-sm">Sezon No</label>
+                <input type="number" class="form-control season-number" min="0" required>
+            </div>
+            <div>
+                <label class="text-sm">Toplam Bölüm</label>
+                <input type="number" class="form-control season-total-episodes" min="1" required>
+            </div>
+            <div>
+                <label class="text-sm">İzlenen Bölüm</label>
+                <input type="number" class="form-control season-watched-episodes" min="0">
+            </div>
+        </div>
+    `;
+    row.querySelector('.season-number').value = season && season.season !== undefined ? season.season : '';
+    row.querySelector('.season-total-episodes').value = season && season.totalEpisodes ? season.totalEpisodes : '';
+    row.querySelector('.season-watched-episodes').value = season && season.watchedEpisodes ? season.watchedEpisodes : 0;
+    row.querySelector('.remove-season-btn').addEventListener('click', () => {
+        const container = document.getElementById('seasonsContainer');
+        if (container.querySelectorAll('.season-form-item').length <= 1) {
+            alert('Dizinin en az bir sezonu olmalı.');
+            return;
+        }
+        row.remove();
+    });
+    return row;
+}
+
+function renderSeasonForms(seasons) {
+    const container = document.getElementById('seasonsContainer');
+    container.innerHTML = '';
+    (seasons && seasons.length ? seasons : [{ season: 1 }]).forEach(season => {
+        container.appendChild(createSeasonFormRow(season));
+    });
+}
+
+function addSeasonForm() {
+    const container = document.getElementById('seasonsContainer');
+    const numbers = Array.from(container.querySelectorAll('.season-number')).map(i => toInt(i.value));
+    const next = numbers.length ? Math.max(...numbers) + 1 : 1;
+    const row = createSeasonFormRow({ season: next, totalEpisodes: '', watchedEpisodes: 0 });
+    container.appendChild(row);
+    row.querySelector('.season-total-episodes').focus();
+}
+
+function getSeasonsFromForm() {
+    return Array.from(document.querySelectorAll('#seasonsContainer .season-form-item')).map(item => {
+        const idAttr = item.getAttribute('data-season-id');
+        return {
+            id: idAttr ? (Number(idAttr) || idAttr) : null,
+            season: toInt(item.querySelector('.season-number').value),
+            totalEpisodes: toInt(item.querySelector('.season-total-episodes').value),
+            watchedEpisodes: toInt(item.querySelector('.season-watched-episodes').value),
+            releaseDate: item.getAttribute('data-release-date') || null
+        };
+    });
+}
+
+// Get selected categories from selector
+function getSelectedCategories(selectorId) {
+    const selected = [];
+    document.querySelectorAll(`#${selectorId} .category-option.selected`).forEach(option => {
+        selected.push(Number(option.getAttribute('data-id')));
+    });
+    return selected;
+}
+
+// Get tags from container
+function getTagsFromContainer(containerId) {
+    const tags = [];
+    document.querySelectorAll(`#${containerId} .tag`).forEach(tagEl => {
+        const tag = (tagEl.getAttribute('data-tag') || tagEl.textContent || '').trim();
+        if (tag && !tags.includes(tag)) tags.push(tag);
+    });
+    return tags;
+}
+
+// Export data
+document.getElementById('exportData').addEventListener('click', function () {
+    const data = {
+        dataVersion: 2,
+        exportedAt: new Date().toISOString(),
+        series: seriesData,
+        movies: moviesData,
+        categories: categoriesData,
+        tags: tagsData
+    };
+
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const stamp = new Date().toISOString().slice(0, 10);
+    const linkElement = document.createElement('a');
+    linkElement.href = url;
+    linkElement.download = `izleme-takip-yedek-${stamp}.json`;
+    document.body.appendChild(linkElement);
+    linkElement.click();
+    linkElement.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+});
+
+// Import data
+document.getElementById('importData').addEventListener('change', function (e) {
+    const file = e.target.files[0];
+    this.value = '';
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = function (ev) {
+        let data;
+        try {
+            data = JSON.parse(ev.target.result);
+        } catch (err) {
+            alert('Dosya okunamadı, geçerli bir JSON yedeği değil: ' + err.message);
+            return;
+        }
+        if (!data || typeof data !== 'object' || (!Array.isArray(data.series) && !Array.isArray(data.movies))) {
+            alert('Bu dosya bir İzleme Takip yedeği gibi görünmüyor.');
+            return;
+        }
+
+        const nextSeries = Array.isArray(data.series) ? normalizeSeriesList(data.series) : seriesData;
+        const nextMovies = Array.isArray(data.movies) ? normalizeMoviesList(data.movies) : moviesData;
+        const nextCategories = normalizeCategoriesList(data.categories) || categoriesData;
+        const nextTags = Array.isArray(data.tags) ? normalizeTagsData(data.tags) : tagsData;
+
+        const message = `Yedekte ${nextSeries.length} dizi ve ${nextMovies.length} film var.\n` +
+            `Mevcut verileriniz (${seriesData.length} dizi, ${moviesData.length} film) bu yedekle DEĞİŞTİRİLECEK.\n\n` +
+            'Devam edilsin mi? (Mevcut veriler tarayıcıda "importBackup" olarak saklanır.)';
+        if (!confirm(message)) return;
+
+        try {
+            __origSetItem('importBackup', JSON.stringify({ savedAt: new Date().toISOString(), ...getAllDataPayload() }));
+        } catch (_) {}
+
+        seriesData = nextSeries;
+        moviesData = nextMovies;
+        categoriesData = nextCategories;
+        tagsData = nextTags;
+        deletedItems = normalizeDeleted(null);
+        selectedBulkKeys = new Set();
+
+        localStorage.setItem('seriesData', JSON.stringify(seriesData));
+        localStorage.setItem('moviesData', JSON.stringify(moviesData));
+        localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+        localStorage.setItem('tagsData', JSON.stringify(tagsData));
+        localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+
+        refreshAll();
+        alert('Veriler başarıyla yüklendi!');
+    };
+    reader.readAsText(file);
+});
+
+// Event listeners
+// Sekme geçişleri
+const TABS = [
+    { tab: seriesTab, content: seriesContent },
+    { tab: moviesTab, content: moviesContent },
+    { tab: upcomingTab, content: upcomingContent, onShow: renderUpcomingReleases },
+    { tab: categoriesTab, content: categoriesContent },
+    { tab: tagsTab, content: tagsContent },
+    { tab: trailersTab, content: trailersContent, onShow: renderTrailersTab },
+    { tab: document.getElementById('statsTab'), content: document.getElementById('statsContent'), onShow: renderStats }
+];
+
+function showTab(activeTab) {
+    TABS.forEach(({ tab, content }) => {
+        const isActive = tab === activeTab;
+        tab.classList.toggle('active', isActive);
+        content.classList.toggle('hidden', !isActive);
+    });
+    stopTrailersPreview(true);
+    const entry = TABS.find(t => t.tab === activeTab);
+    if (entry && entry.onShow) entry.onShow();
+    try { localStorage.setItem('activeTab', activeTab.id); } catch (_) {}
+}
+
+TABS.forEach(({ tab }) => tab.addEventListener('click', () => showTab(tab)));
+
+function getActiveTabId() {
+    const entry = TABS.find(t => t.tab.classList.contains('active'));
+    return entry ? entry.tab.id : 'seriesTab';
+}
+
+// Upcoming releases filter event listeners
+upcomingFilterAll.addEventListener('click', function () {
+    filterUpcomingContent('all');
+    renderUpcomingReleases();
+});
+
+upcomingFilterSeries.addEventListener('click', function () {
+    filterUpcomingContent('series');
+    renderUpcomingReleases();
+});
+
+upcomingFilterMovies.addEventListener('click', function () {
+    filterUpcomingContent('movies');
+    renderUpcomingReleases();
+});
+
+if (trailersList) {
+    trailersList.addEventListener('mouseover', function (e) {
+        const item = e.target.closest('.trailer-preview-item');
+        if (!item) return;
+        scheduleTrailersPreview(item.getAttribute('data-video-id'), item.getAttribute('data-title') || '');
+    }, { passive: true });
+
+    trailersList.addEventListener('focusin', function (e) {
+        const item = e.target.closest('.trailer-preview-item');
+        if (!item) return;
+        scheduleTrailersPreview(item.getAttribute('data-video-id'), item.getAttribute('data-title') || '');
+    }, { passive: true });
+
+    trailersList.addEventListener('mouseleave', function () {
+        stopTrailersPreview(false);
+    });
+
+    trailersList.addEventListener('click', function (e) {
+        const item = e.target.closest('.trailer-preview-item');
+        if (!item) return;
+        showTrailerModal(item.getAttribute('data-trailer-url'), item.getAttribute('data-title') || '');
+    });
+
+    trailersList.addEventListener('keydown', function (e) {
+        const item = e.target.closest('.trailer-preview-item');
+        if (!item) return;
+        if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            showTrailerModal(item.getAttribute('data-trailer-url'), item.getAttribute('data-title') || '');
+        }
+    });
+}
+
+if (trailersSearch) {
+    trailersSearch.addEventListener('input', function () {
+        trailersSearchQuery = (this.value || '');
+        renderTrailersTab();
+    });
+}
+
+if (trailersSortSelect) {
+    trailersSortSelect.addEventListener('change', function () {
+        currentTrailersSort = this.value || 'alphabetical';
+        renderTrailersTab();
+    });
+}
+
+function setTrailersFilter(filter) {
+    currentTrailersFilter = filter;
+    renderTrailersTab();
+}
+
+if (trailersFilterAll) {
+    trailersFilterAll.addEventListener('click', function () { setTrailersFilter('all'); });
+}
+if (trailersFilterSeries) {
+    trailersFilterSeries.addEventListener('click', function () { setTrailersFilter('series'); });
+}
+if (trailersFilterMovies) {
+    trailersFilterMovies.addEventListener('click', function () { setTrailersFilter('movies'); });
+}
+
+addSeriesBtn.addEventListener('click', addSeries);
+addSeriesBtnEmpty.addEventListener('click', addSeries);
+addMovieBtn.addEventListener('click', addMovie);
+addMovieBtnEmpty.addEventListener('click', addMovie);
+addCategoryBtn.addEventListener('click', addCategory);
+document.getElementById('addTagBtn').addEventListener('click', addTag);
+document.getElementById('promoteAllTagsBtn').addEventListener('click', promoteAllTags);
+
+// Fragman butonları için event listener (event delegation kullanarak)
+document.addEventListener('click', function(e) {
+    if (e.target.closest('.trailer-btn')) {
+        const btn = e.target.closest('.trailer-btn');
+        const trailerUrl = btn.getAttribute('data-trailer-url');
+        const title = btn.getAttribute('data-title');
+        showTrailerModal(trailerUrl, title);
+    }
+});
+
+// Sync Modal events (WebRTC-only)
+openSyncModalBtn.addEventListener('click', () => { syncModalEl.classList.add('active'); });
+closeSyncModalBtn.addEventListener('click', () => closeModal(syncModalEl));
+
+// --- WebRTC Pairing logic ---
+const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+let rtcPeer = null;
+let rtcChannel = null;
+let rtcInitiator = false;
+
+function encodeSignal(obj) { try { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); } catch (e) { return ''; } }
+function decodeSignal(str) { try { return JSON.parse(decodeURIComponent(escape(atob((str || '').trim())))); } catch (e) { alert('Geçersiz kod'); return null; } }
+
+// Basitleştirilmiş WebRTC eşleştirme sistemi
+let pairingState = 'waiting'; // 'waiting', 'offer-generated', 'answer-received', 'connected'
+let isInitiator = false;
+
+function setupRtcChannel() {
+    if (!rtcChannel) return;
+    rtcChannel.onopen = () => {
+        updatePairingStatus('Bağlandı! Cihazlar senkronize edildi.', 'success');
+        if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} connectTimeoutTimer = null; }
+        updateInstructions('connected');
+        pairingState = 'connected';
+        try { rtcChannel.send(JSON.stringify({ type: 'syncData', payload: getAllDataPayload() })); } catch (_) {}
+    };
+    rtcChannel.onmessage = (ev) => {
+        try {
+            const msg = JSON.parse(ev.data);
+            if (msg && msg.type === 'syncData' && msg.payload) { applyRemoteData(msg.payload); }
+        } catch (_) {}
+    };
+    rtcChannel.onclose = () => { 
+        updatePairingStatus('Bağlantı kapandı', 'error');
+        pairingState = 'waiting';
+    };
+}
+
+function initRtcPeer(initiator) {
+    rtcInitiator = !!initiator;
+    isInitiator = initiator;
+    rtcPeer = new RTCPeerConnection(RTC_CONFIG);
+    rtcPeer.ondatachannel = (ev) => { rtcChannel = ev.channel; setupRtcChannel(); };
+    rtcPeer.onicecandidate = () => { /* manual signaling: SDP yeterli */ };
+    if (rtcInitiator) { rtcChannel = rtcPeer.createDataChannel('sync'); setupRtcChannel(); }
+}
+
+// ICE adayları tamamen toplanana kadar bekle
+function waitForIceGatheringComplete(pc) {
+    return new Promise(resolve => {
+        if (!pc) return resolve();
+        if (pc.iceGatheringState === 'complete') return resolve();
+        const check = () => {
+            if (pc.iceGatheringState === 'complete') {
+                pc.removeEventListener('icegatheringstatechange', check);
+                resolve();
+            }
+        };
+        pc.addEventListener('icegatheringstatechange', check);
+        // Güvenlik için maksimum bekleme (10 sn), bazı ortamlarda state olayı gelmeyebilir
+        setTimeout(() => { 
+            pc.removeEventListener('icegatheringstatechange', check);
+            resolve();
+        }, 10000);
+    });
+}
+
+function updatePairingStatus(message, type = 'info') {
+    if (pairingStatus) {
+        pairingStatus.textContent = `Durum: ${message}`;
+        pairingStatus.className = `text-gray-300 mb-2 ${type === 'success' ? 'text-green-400' : type === 'error' ? 'text-red-400' : ''}`;
+    }
+}
+
+function updateInstructions(step) {
+    if (!pairingInstructions) return;
+    
+    const instructions = {
+        'waiting': `
+            <p><strong>Adım 1:</strong> "Kod Üret" butonuna basın</p>
+            <p><strong>Adım 2:</strong> Kodu diğer cihaza paylaşın (QR ile veya kopyala-yapıştır)</p>
+            <p><strong>Adım 3:</strong> Diğer cihazdan gelen cevap kodunu buraya yapıştırın</p>
+            <p><strong>Adım 4:</strong> "Bağlan" butonuna basın</p>
+        `,
+        'offer-generated': `
+            <p><strong>✓ Adım 1 tamamlandı:</strong> Kod üretildi</p>
+            <p><strong>→ Adım 2:</strong> Kodu diğer cihaza paylaşın (QR ile veya kopyala-yapıştır)</p>
+            <p><strong>Adım 3:</strong> Diğer cihazdan gelen cevap kodunu buraya yapıştırın</p>
+            <p><strong>Adım 4:</strong> "Bağlan" butonuna basın</p>
+        `,
+        'answer-received': `
+            <p><strong>✓ Adım 1-3 tamamlandı:</strong> Cevap kodu alındı</p>
+            <p><strong>→ Adım 4:</strong> "Bağlan" butonuna basın</p>
+        `,
+        'connecting': `
+            <p><strong>Bağlantı kuruluyor...</strong> Lütfen bekleyin.</p>
+        `,
+        'connected': `
+            <p><strong>✓ Tüm adımlar tamamlandı!</strong> Cihazlar başarıyla eşleştirildi.</p>
+            <p>Artık verileriniz otomatik olarak senkronize edilecek.</p>
+        `
+    };
+    
+    pairingInstructions.innerHTML = instructions[step] || instructions['waiting'];
+}
+
+async function generateCode() {
+    try {
+        initRtcPeer(true);
+        const offer = await rtcPeer.createOffer();
+        await rtcPeer.setLocalDescription(offer);
+        updatePairingStatus('Kod hazırlanıyor - Ağ bilgileri toplanıyor...');
+        await waitForIceGatheringComplete(rtcPeer);
+        pairingCode.value = encodeSignal(rtcPeer.localDescription);
+        
+        updatePairingStatus('Kod üretildi - Diğer cihaza paylaşın');
+        updateInstructions('offer-generated');
+        pairingState = 'offer-generated';
+        
+        // Label'ı güncelle
+        if (codeLabel) codeLabel.textContent = 'Üretilen Kod (Diğer cihaza paylaşın)';
+        
+    } catch (e) { 
+        updatePairingStatus('Kod üretilemedi: ' + e.message, 'error');
+    }
+}
+
+function resetPairingState() {
+    pairingState = 'waiting';
+    isInitiator = false;
+    if (rtcPeer) {
+        rtcPeer.close();
+        rtcPeer = null;
+    }
+    if (rtcChannel) {
+        rtcChannel.close();
+        rtcChannel = null;
+    }
+    if (pairingCode) pairingCode.value = '';
+    if (codeLabel) codeLabel.textContent = 'Eşleştirme Kodu';
+    updatePairingStatus('Hazır - Yeni eşleştirme başlatabilirsiniz');
+    updateInstructions('waiting');
+}
+
+async function connectToPeer() {
+    const codeValue = pairingCode.value.trim();
+    if (!codeValue) {
+        alert('Lütfen bir kod girin veya üretin!');
+        return;
+    }
+
+    try {
+        if (pairingState === 'waiting') {
+            // Bu cihaz bağlanan taraf - offer kodunu işle
+            const remote = decodeSignal(codeValue);
+            if (!remote) {
+                alert('Geçersiz kod formatı!');
+                return;
+            }
+            
+            initRtcPeer(false);
+            await rtcPeer.setRemoteDescription(remote);
+            const answer = await rtcPeer.createAnswer();
+            await rtcPeer.setLocalDescription(answer);
+            updatePairingStatus('Cevap hazırlanıyor - Ağ bilgileri toplanıyor...');
+            await waitForIceGatheringComplete(rtcPeer);
+            
+            // Answer kodunu göster
+            pairingCode.value = encodeSignal(rtcPeer.localDescription);
+            updatePairingStatus('Cevap kodu üretildi - İlk cihaza verin');
+            updateInstructions('answer-received');
+            pairingState = 'answer-received';
+            
+            if (codeLabel) codeLabel.textContent = 'Cevap Kodu (İlk cihaza verin)';
+            
+        } else if (pairingState === 'offer-generated') {
+            // Bu cihaz başlatan taraf - answer kodunu işle
+            const ans = decodeSignal(codeValue);
+            if (!ans) {
+                alert('Geçersiz cevap kodu formatı!');
+                return;
+            }
+            
+            await rtcPeer.setRemoteDescription(ans);
+            updatePairingStatus('Bağlantı kuruluyor...');
+            updateInstructions('connecting');
+            if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} }
+            connectTimeoutTimer = setTimeout(() => {
+                if (pairingState !== 'connected' || !rtcChannel || rtcChannel.readyState !== 'open') {
+                    updatePairingStatus('Bağlantı kurulamadı. Ağ veya WebRTC engeli olabilir.', 'error');
+                    updateInstructions('answer-received');
+                }
+            }, connectTimeoutMs);
+            
+        } else if (pairingState === 'answer-received') {
+            // Cevap kodu zaten üretildi, tekrar bağlanmaya çalışıyor
+            updatePairingStatus('Cevap kodu zaten üretildi. İlk cihaza verin ve orada "Bağlan" butonuna basın.', 'error');
+            
+        } else if (pairingState === 'connected') {
+            // Zaten bağlı, yeni eşleştirme başlatmak istiyor
+            const restart = confirm('Zaten bağlısınız. Yeni bir eşleştirme başlatmak istiyor musunuz?');
+            if (restart) {
+                resetPairingState();
+                updatePairingStatus('Durum sıfırlandı. Yeni eşleştirme başlatabilirsiniz.');
+            }
+            
+        } else {
+            // Bilinmeyen durum - güvenli sıfırlama
+            console.warn('Bilinmeyen pairingState:', pairingState);
+            resetPairingState();
+            updatePairingStatus('Durum sıfırlandı. Lütfen tekrar deneyin.');
+        }
+        
+    } catch (e) { 
+        updatePairingStatus('Bağlantı hatası: ' + e.message, 'error');
+        console.error('WebRTC bağlantı hatası:', e);
+    }
+}
+
+function showQrCode() {
+    const code = pairingCode.value.trim();
+    if (!code) {
+        alert('Önce bir kod üretin!');
+        return;
+    }
+    
+    if (qrContainer) {
+        qrContainer.innerHTML = '';
+        try {
+            new QRCode(qrContainer, {
+                text: code,
+                width: 280,
+                height: 280,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                // Uzun eşleştirme kodu için en yüksek kapasite (düşük hata düzeltme)
+                correctLevel: QRCode.CorrectLevel.L
+            });
+        } catch (err) {
+            qrContainer.innerHTML = '<p class="text-sm text-red-400">Kod QR koda sığmayacak kadar uzun. Kodu kopyalayıp mesajla gönderin.</p>';
+        }
+    }
+}
+
+// QR tarama (kamera)
+let qrScanner = null;
+const qrScannerContainer = document.getElementById('qrScannerContainer');
+const stopQrScanBtn = document.getElementById('stopQrScanBtn');
+
+async function stopQrScanner() {
+    if (qrScanner) {
+        try { await qrScanner.stop(); } catch (_) {}
+        try { qrScanner.clear(); } catch (_) {}
+        qrScanner = null;
+    }
+    if (qrScannerContainer) qrScannerContainer.classList.add('hidden');
+    if (stopQrScanBtn) stopQrScanBtn.classList.add('hidden');
+}
+
+async function startQrScanner() {
+    if (typeof Html5Qrcode === 'undefined') {
+        alert('QR tarayıcı yüklenemedi. İnternet bağlantınızı kontrol edin.');
+        return;
+    }
+    if (!window.isSecureContext) {
+        alert('Kamera yalnızca güvenli (https) bağlantıda çalışır.');
+        return;
+    }
+    await stopQrScanner();
+    qrScannerContainer.innerHTML = '<div id="qrReader"></div>';
+    qrScannerContainer.classList.remove('hidden');
+    stopQrScanBtn.classList.remove('hidden');
+    qrScanner = new Html5Qrcode('qrReader');
+    try {
+        await qrScanner.start(
+            { facingMode: 'environment' },
+            { fps: 10, qrbox: { width: 250, height: 250 } },
+            decodedText => {
+                pairingCode.value = decodedText.trim();
+                stopQrScanner();
+                updatePairingStatus('QR kod okundu. Şimdi "Bağlan"a basın.', 'success');
+            }
+        );
+    } catch (err) {
+        await stopQrScanner();
+        alert('Kamera açılamadı: ' + (err && err.message ? err.message : err));
+    }
+}
+
+if (scanQrBtn) scanQrBtn.addEventListener('click', startQrScanner);
+if (stopQrScanBtn) stopQrScanBtn.addEventListener('click', stopQrScanner);
+
+// Event listeners
+if (generateCodeBtn) generateCodeBtn.addEventListener('click', generateCode);
+if (connectBtn) connectBtn.addEventListener('click', connectToPeer);
+if (showQrBtn) showQrBtn.addEventListener('click', showQrCode);
+
+// Reset pairing button
+const resetPairingBtn = document.getElementById('resetPairingBtn');
+if (resetPairingBtn) resetPairingBtn.addEventListener('click', function() {
+    resetPairingState();
+    updatePairingStatus('Durum sıfırlandı. Yeni eşleştirme başlatabilirsiniz.');
+});
+document.getElementById('addNewSeasonBtn').addEventListener('click', addSeasonForm);
+
+document.getElementById('cancelSeries').addEventListener('click', function () {
+    closeModal(seriesModal);
+});
+
+document.getElementById('cancelMovie').addEventListener('click', function () {
+    closeModal(movieModal);
+});
+
+// Series form submit
+document.getElementById('seriesForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const id = document.getElementById('seriesId').value;
+    const name = document.getElementById('seriesName').value.trim();
+    const imdbRating = document.getElementById('seriesImdbRating').value;
+    const releaseDate = document.getElementById('seriesReleaseDate').value;
+    const seasonsFromForm = getSeasonsFromForm();
+
+    if (!name) {
+        alert('Dizi adı gereklidir.');
+        return;
+    }
+    if (seasonsFromForm.length === 0) {
+        alert('En az bir sezon eklemelisiniz!');
+        return;
+    }
+    const invalid = seasonsFromForm.find(s => s.totalEpisodes <= 0);
+    if (invalid) {
+        alert(`Sezon ${invalid.season} için toplam bölüm sayısını girin.`);
+        return;
+    }
+    const seasonNumbers = seasonsFromForm.map(s => s.season);
+    if (new Set(seasonNumbers).size !== seasonNumbers.length) {
+        alert('Aynı sezon numarası birden fazla kez girilmiş.');
+        return;
+    }
+
+    const duplicate = seriesData.find(s => trLower(s.name) === trLower(name) && String(s.id) !== String(id));
+    if (duplicate && !confirm(`"${duplicate.name}" adında bir dizi zaten var. Yine de ayrı bir kayıt olarak kaydedilsin mi?`)) {
+        return;
+    }
+
+    const now = new Date().toISOString();
+    const existing = id ? findSeries(id) : null;
+    const previousSeasons = existing ? existing.seasons : [];
+
+    const seasons = seasonsFromForm.map(formSeason => {
+        const previous = previousSeasons.find(s => formSeason.id != null && String(s.id) === String(formSeason.id));
+        const watched = Math.min(formSeason.watchedEpisodes, formSeason.totalEpisodes);
+        let lastWatchedAt = null;
+        if (watched > 0) {
+            lastWatchedAt = previous && watched <= previous.watchedEpisodes
+                ? (previous.lastWatchedAt || null)
+                : now;
+        }
+        const changed = !previous || previous.season !== formSeason.season ||
+            previous.totalEpisodes !== formSeason.totalEpisodes || previous.watchedEpisodes !== watched;
+        return {
+            id: previous ? previous.id : newId(),
+            season: formSeason.season,
+            totalEpisodes: formSeason.totalEpisodes,
+            watchedEpisodes: watched,
+            releaseDate: formSeason.releaseDate || (previous ? previous.releaseDate : null) || null,
+            updatedAt: changed ? now : (previous.updatedAt || now),
+            lastWatchedAt
+        };
+    });
+
+    const fields = {
+        name,
+        platform: document.getElementById('seriesPlatform').value,
+        categories: getSelectedCategories('seriesCategorySelector'),
+        tags: getTagsFromContainer('seriesTagsContainer'),
+        trailerUrl: document.getElementById('seriesTrailerUrl').value.trim(),
+        imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+        description: document.getElementById('seriesDescription').value.trim(),
+        imageUrl: document.getElementById('seriesImageUrl').value.trim(),
+        releaseDate: releaseDate || null,
+        myRating: parseRatingInput('seriesMyRating'),
+        notes: document.getElementById('seriesNotes').value.trim(),
+        userStatus: document.getElementById('seriesUserStatus').value || null,
+        seasons,
+        updatedAt: now
+    };
+    const extra = typeof getAutoFillExtras === 'function' ? getAutoFillExtras('series') : {};
+
+    if (existing) {
+        Object.assign(existing, extra, fields);
+        refreshSeriesLastWatched(existing);
+    } else {
+        const created = normalizeSeriesItem({ id: newId(), ...extra, ...fields, createdAt: now });
+        seriesData.push(created);
+    }
+
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    closeModal(seriesModal);
+    refreshAll();
+});
+
+// Movie form submit
+document.getElementById('movieForm').addEventListener('submit', function (e) {
+    e.preventDefault();
+
+    const id = document.getElementById('movieId').value;
+    const name = document.getElementById('movieName').value.trim();
+    const watched = document.getElementById('movieWatched').checked;
+    const categories = getSelectedCategories('movieCategorySelector');
+    const tags = getTagsFromContainer('movieTagsContainer');
+    const trailerUrl = document.getElementById('movieTrailerUrl').value.trim();
+    const imdbRating = document.getElementById('movieImdbRating').value;
+    const description = document.getElementById('movieDescription').value.trim();
+    const imageUrl = document.getElementById('movieImageUrl').value.trim();
+    const releaseDate = document.getElementById('movieReleaseDate').value;
+
+    if (!name) {
+        alert('Film adı gereklidir.');
+        return;
+    }
+    const duplicate = moviesData.find(m => trLower(m.name) === trLower(name) && String(m.id) !== String(id));
+    if (duplicate && !confirm(`"${duplicate.name}" adında bir film zaten var. Yine de ayrı bir kayıt olarak kaydedilsin mi?`)) {
+        return;
+    }
+
+    if (id) {
+        // Edit existing movie
+        const index = moviesData.findIndex(m => String(m.id) === String(id));
+        if (index !== -1) {
+            const previousMovie = moviesData[index];
+            const now = new Date().toISOString();
+            const nextLastWatchedAt = !watched
+                ? null
+                : !previousMovie.watched
+                    ? now
+                    : previousMovie.lastWatchedAt || now;
+            moviesData[index] = {
+                ...previousMovie,
+                ...(typeof getAutoFillExtras === 'function' ? getAutoFillExtras('movie') : {}),
+                name,
+                watched,
+                categories,
+                tags,
+                trailerUrl,
+                imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+                description,
+                imageUrl,
+                releaseDate: releaseDate || null,
+                myRating: parseRatingInput('movieMyRating'),
+                notes: document.getElementById('movieNotes').value.trim(),
+                updatedAt: now,
+                lastWatchedAt: nextLastWatchedAt
+            };
+        }
+    } else {
+        // Add new movie
+        const createdAt = new Date().toISOString();
+        moviesData.push({
+            ...(typeof getAutoFillExtras === 'function' ? getAutoFillExtras('movie') : {}),
+            id: newId(),
+            name,
+            watched,
+            categories,
+            tags,
+            trailerUrl,
+            imdbRating: imdbRating ? parseFloat(imdbRating) : null,
+            description,
+            imageUrl,
+            releaseDate: releaseDate || null,
+            myRating: parseRatingInput('movieMyRating'),
+            notes: document.getElementById('movieNotes').value.trim(),
+            createdAt,
+            updatedAt: createdAt,
+            lastWatchedAt: watched ? createdAt : null
+        });
+    }
+
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    closeModal(movieModal);
+    refreshAll();
+});
+
+// Search and filter events
+searchSeries.addEventListener('input', filterSeries);
+searchMovies.addEventListener('input', filterMovies);
+
+// Filter buttons
+// Fragman sekmesindeki filtre butonlarının kendi dinleyicisi var; burada sadece dizi/film sekmeleri
+document.querySelectorAll('#seriesContent .filter-button, #moviesContent .filter-button').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const filter = this.getAttribute('data-filter');
+
+        if (this.closest('#seriesContent')) {
+            currentSeriesFilter = filter;
+            document.querySelectorAll('#seriesContent .filter-button').forEach(b => {
+                b.classList.remove('active');
+            });
+            this.classList.add('active');
+            filterSeries();
+        } else {
+            currentMoviesFilter = filter;
+            document.querySelectorAll('#moviesContent .filter-button').forEach(b => {
+                b.classList.remove('active');
+            });
+            this.classList.add('active');
+            filterMovies();
+        }
+    });
+});
+
+// View options
+document.querySelectorAll('.view-button').forEach(btn => {
+    btn.addEventListener('click', function () {
+        const view = this.getAttribute('data-view');
+
+        if (this.closest('#seriesContent')) {
+            seriesView = view;
+            document.querySelectorAll('#seriesContent .view-button').forEach(b => {
+                b.classList.remove('active');
+            });
+            this.classList.add('active');
+            renderSeriesList();
+        } else {
+            moviesView = view;
+            document.querySelectorAll('#moviesContent .view-button').forEach(b => {
+                b.classList.remove('active');
+            });
+            this.classList.add('active');
+            renderMoviesList();
+        }
+    });
+});
+
+// Poster aspect ratio selectors
+const posterAspectSelectSeries = document.getElementById('posterAspectSelectSeries');
+const posterAspectSelectMovies = document.getElementById('posterAspectSelectMovies');
+const layoutModeSelectSeries = document.getElementById('layoutModeSelectSeries');
+const layoutModeSelectMovies = document.getElementById('layoutModeSelectMovies');
+
+function syncPosterAspectSelects(value) {
+    if (posterAspectSelectSeries) posterAspectSelectSeries.value = value;
+    if (posterAspectSelectMovies) posterAspectSelectMovies.value = value;
+}
+
+function syncLayoutModeSelects(value) {
+    if (layoutModeSelectSeries) layoutModeSelectSeries.value = value;
+    if (layoutModeSelectMovies) layoutModeSelectMovies.value = value;
+}
+
+// Initialize selects with current value
+syncPosterAspectSelects(posterAspect);
+syncLayoutModeSelects(layoutMode);
+
+function handleLayoutModeChange(value) {
+    layoutMode = value;
+    localStorage.setItem('layoutMode', layoutMode);
+    syncLayoutModeSelects(layoutMode);
+    syncLayoutToggleActive(layoutMode);
+    renderSeriesList();
+    renderMoviesList();
+}
+
+function handlePosterAspectChange(value, context) {
+    posterAspect = value;
+    localStorage.setItem('posterAspect', posterAspect);
+    // Re-render lists; prefer current visible tab if context known
+    if (context === 'series') {
+        renderSeriesList();
+    } else if (context === 'movies') {
+        renderMoviesList();
+    } else {
+        // Fallback: render both
+        renderSeriesList();
+        renderMoviesList();
+    }
+    // Keep both selects in sync
+    syncPosterAspectSelects(posterAspect);
+}
+
+if (posterAspectSelectSeries) {
+    posterAspectSelectSeries.addEventListener('change', function () {
+        handlePosterAspectChange(this.value, 'series');
+    });
+}
+
+if (posterAspectSelectMovies) {
+    posterAspectSelectMovies.addEventListener('change', function () {
+        handlePosterAspectChange(this.value, 'movies');
+    });
+}
+
+if (layoutModeSelectSeries) {
+    layoutModeSelectSeries.addEventListener('change', function () {
+        handleLayoutModeChange(this.value);
+    });
+}
+
+if (layoutModeSelectMovies) {
+    layoutModeSelectMovies.addEventListener('change', function () {
+        handleLayoutModeChange(this.value);
+    });
+}
+
+// Yerleşim toggle butonları
+const layoutToggleGridSeries = document.getElementById('layoutToggleGridSeries');
+const layoutToggleMasonrySeries = document.getElementById('layoutToggleMasonrySeries');
+const layoutToggleGridMovies = document.getElementById('layoutToggleGridMovies');
+const layoutToggleMasonryMovies = document.getElementById('layoutToggleMasonryMovies');
+
+function syncLayoutToggleActive(value) {
+    const setActive = (gridBtn, masonryBtn) => {
+        if (!gridBtn || !masonryBtn) return;
+        gridBtn.classList.toggle('active', value === 'grid');
+        masonryBtn.classList.toggle('active', value === 'masonry');
+    };
+    setActive(layoutToggleGridSeries, layoutToggleMasonrySeries);
+    setActive(layoutToggleGridMovies, layoutToggleMasonryMovies);
+}
+
+// İlk aktif durumu ayarla
+syncLayoutToggleActive(layoutMode);
+
+// Toggle click olayları
+if (layoutToggleGridSeries) layoutToggleGridSeries.addEventListener('click', () => handleLayoutModeChange('grid'));
+if (layoutToggleMasonrySeries) layoutToggleMasonrySeries.addEventListener('click', () => handleLayoutModeChange('masonry'));
+if (layoutToggleGridMovies) layoutToggleGridMovies.addEventListener('click', () => handleLayoutModeChange('grid'));
+if (layoutToggleMasonryMovies) layoutToggleMasonryMovies.addEventListener('click', () => handleLayoutModeChange('masonry'));
+
+// =====================================================================
+// Otomatik doldurma (TMDB, OMDb, TVmaze)
+// =====================================================================
+const TMDB_IMG = 'https://image.tmdb.org/t/p/';
+
+function getApiKey(name) {
+    try { return (localStorage.getItem(name) || '').trim(); } catch (_) { return ''; }
+}
+
+function hasTmdbKey() {
+    return !!getApiKey('tmdbKey');
+}
+
+// İstek sınırı (429) veya geçici ağ hatalarında kısa bekleyip tekrar dener
+async function fetchJson(url, options, attempt = 0) {
+    let res;
+    try {
+        res = await fetch(url, options);
+    } catch (networkError) {
+        if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 2500 * (attempt + 1)));
+            return fetchJson(url, options, attempt + 1);
+        }
+        throw new Error('Bağlantı kurulamadı (internet veya istek sınırı).');
+    }
+    if (res.status === 429 && attempt < 2) {
+        await new Promise(r => setTimeout(r, 2500 * (attempt + 1)));
+        return fetchJson(url, options, attempt + 1);
+    }
+    if (!res.ok) {
+        const err = new Error('HTTP ' + res.status);
+        err.status = res.status;
+        throw err;
+    }
+    return res.json();
+}
+
+async function tmdbFetch(path, params = {}) {
+    const key = getApiKey('tmdbKey');
+    if (!key) throw new Error('TMDB anahtarı yok');
+    const url = new URL('https://api.themoviedb.org/3' + path);
+    Object.entries({ language: 'tr-TR', ...params }).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
+    });
+    const headers = { accept: 'application/json' };
+    if (key.startsWith('eyJ')) headers.Authorization = 'Bearer ' + key;
+    else url.searchParams.set('api_key', key);
+    try {
+        return await fetchJson(url.toString(), { headers });
+    } catch (err) {
+        if (err.status === 401) throw new Error('TMDB anahtarı geçersiz. Ayarlar\'dan kontrol et.');
+        if (err.status === 429) throw new Error('TMDB istek sınırı aşıldı, biraz sonra tekrar dene.');
+        throw new Error('TMDB\'ye ulaşılamadı (' + err.message + ').');
+    }
+}
+
+function normalizeTitle(value) {
+    return trLower(value)
+        .normalize('NFD').replace(/[̀-ͯ]/g, '')
+        .replace(/[^a-z0-9ğüşöçı]+/g, ' ')
+        .trim();
+}
+
+// --- Tür → kategori/etiket eşleme ---
+const GENRE_ALIASES = {
+    'suc': ['polisiye', 'suç'], 'suç': ['polisiye', 'suç'], 'crime': ['polisiye', 'suç'],
+    'fantazi': ['fantastik'], 'fantasy': ['fantastik'],
+    'bilim kurgu': ['bilim kurgu'], 'science fiction': ['bilim kurgu'], 'science-fiction': ['bilim kurgu'], 'sci fi': ['bilim kurgu'],
+    'action': ['aksiyon'], 'adventure': ['macera'], 'comedy': ['komedi'], 'drama': ['dram'],
+    'horror': ['korku'], 'war': ['savaş'], 'politik': ['politik'], 'history': ['tarih'],
+    'documentary': ['belgesel'], 'thriller': ['gerilim'], 'mystery': ['gizem'], 'gizem': ['gizem'],
+    'anime': ['anime'], 'supernatural': ['paranormal'], 'romance': ['romantik'], 'romantik': ['romantik'],
+    'family': ['aile'], 'animation': ['animasyon'], 'music': ['müzik'], 'western': ['western', 'vahşi batı']
+};
+
+function genreCandidates(genreName) {
+    const parts = String(genreName || '').split(/&|,|\//).map(p => trLower(p).replace(/-/g, ' ').trim()).filter(Boolean);
+    const out = new Set();
+    parts.forEach(p => {
+        out.add(p);
+        (GENRE_ALIASES[p] || []).forEach(a => out.add(a));
+    });
+    return Array.from(out);
+}
+
+function matchGenres(genres, options = {}) {
+    const categoryIds = new Set();
+    const tagNames = new Set();
+    const catByName = new Map(categoriesData.map(c => [trLower(c.name).replace(/-/g, ' '), c.id]));
+    const allTags = new Set([
+        ...tagsData.map(t => t.name),
+        ...seriesData.flatMap(s => s.tags || []),
+        ...moviesData.flatMap(m => m.tags || [])
+    ]);
+    const tagByName = new Map(Array.from(allTags).map(t => [trLower(t), t]));
+
+    (genres || []).forEach(g => {
+        genreCandidates(g).forEach(candidate => {
+            if (catByName.has(candidate)) categoryIds.add(catByName.get(candidate));
+            else if (tagByName.has(candidate)) tagNames.add(tagByName.get(candidate));
+        });
+    });
+
+    const countries = (options.countries || []).map(c => String(c).toUpperCase());
+    if (countries.includes('TR') && catByName.has('yerli')) categoryIds.add(catByName.get('yerli'));
+    const isAnimation = (genres || []).some(g => /animasyon|animation|anime/i.test(g));
+    if (isAnimation && countries.includes('JP') && catByName.has('anime')) categoryIds.add(catByName.get('anime'));
+
+    return { categoryIds: Array.from(categoryIds), tagNames: Array.from(tagNames) };
+}
+
+// --- Platform eşleme ---
+function mapPlatformName(name) {
+    const n = trLower(name);
+    if (!n) return '';
+    if (n.includes('netflix')) return 'Netflix';
+    if (n.includes('amazon') || n.includes('prime video')) return 'Amazon Prime';
+    if (n.includes('disney')) return 'Disney+';
+    if (n.includes('hbo') || n === 'max') return 'HBO Max';
+    if (n.includes('blutv')) return 'BluTV';
+    if (n.includes('exxen')) return 'Exxen';
+    if (n.includes('gain')) return 'Gain';
+    if (n.includes('tabii')) return 'Tabii';
+    if (n === 'tod' || n.includes('tod tv')) return 'TOD';
+    if (n.includes('apple')) return 'Apple TV+';
+    return name;
+}
+
+function pickPlatform(details) {
+    const providers = details['watch/providers'] && details['watch/providers'].results;
+    const tr = providers && providers.TR;
+    const list = tr && (tr.flatrate || tr.ads || tr.free);
+    if (list && list.length) {
+        const sorted = [...list].sort((a, b) => (a.display_priority || 99) - (b.display_priority || 99));
+        return mapPlatformName(sorted[0].provider_name);
+    }
+    const network = details.networks && details.networks[0];
+    return network ? mapPlatformName(network.name) : '';
+}
+
+// --- Fragman seçimi ---
+function pickTrailer(videos) {
+    const list = (videos && videos.results) || [];
+    const scored = list
+        .filter(v => v.site === 'YouTube' && v.key)
+        .map(v => {
+            let score = 0;
+            if (v.type === 'Trailer') score += 4;
+            else if (v.type === 'Teaser') score += 2;
+            if (v.official) score += 1;
+            if (v.iso_639_1 === 'tr') score += 3;
+            else if (v.iso_639_1 === 'en') score += 1;
+            return { v, score, date: getTimestamp(v.published_at) };
+        })
+        .sort((a, b) => (b.score - a.score) || (a.date - b.date));
+    return scored.length ? 'https://www.youtube.com/watch?v=' + scored[0].v.key : '';
+}
+
+function pickTrReleaseDate(details) {
+    const results = details.release_dates && details.release_dates.results;
+    const tr = results && results.find(r => r.iso_3166_1 === 'TR');
+    if (tr && tr.release_dates && tr.release_dates.length) {
+        const preferred = tr.release_dates.find(r => r.type === 3) || tr.release_dates.find(r => r.type === 4) || tr.release_dates[0];
+        if (preferred && preferred.release_date) return preferred.release_date.slice(0, 10);
+    }
+    return details.release_date || '';
+}
+
+async function fetchOmdbRating(imdbId) {
+    const key = getApiKey('omdbKey');
+    if (!key || !imdbId) return null;
+    try {
+        const data = await fetchJson(`https://www.omdbapi.com/?i=${encodeURIComponent(imdbId)}&apikey=${encodeURIComponent(key)}`);
+        const rating = parseFloat(data && data.imdbRating);
+        return Number.isFinite(rating) ? rating : null;
+    } catch (_) {
+        return null;
+    }
+}
+
+// --- Arama ---
+async function searchTitles(kind, query) {
+    if (hasTmdbKey()) {
+        const data = await tmdbFetch(kind === 'series' ? '/search/tv' : '/search/movie', { query, include_adult: 'false' });
+        return (data.results || []).slice(0, 8).map(r => ({
+            source: 'tmdb',
+            id: r.id,
+            title: kind === 'series' ? r.name : r.title,
+            originalTitle: kind === 'series' ? r.original_name : r.original_title,
+            year: ((kind === 'series' ? r.first_air_date : r.release_date) || '').slice(0, 4),
+            poster: r.poster_path ? TMDB_IMG + 'w92' + r.poster_path : '',
+            overview: r.overview || ''
+        }));
+    }
+    if (kind === 'series') {
+        const data = await fetchJson('https://api.tvmaze.com/search/shows?q=' + encodeURIComponent(query));
+        return (data || []).slice(0, 8).map(({ show }) => ({
+            source: 'tvmaze',
+            id: show.id,
+            title: show.name,
+            originalTitle: '',
+            year: (show.premiered || '').slice(0, 4),
+            poster: show.image ? safeUrl(show.image.medium) : '',
+            overview: stripHtml(show.summary)
+        }));
+    }
+    throw new Error('Film araması için TMDB anahtarı gerekli. Sağ üstteki ⚙ Ayarlar\'dan ekleyebilirsin (ücretsiz).');
+}
+
+function stripHtml(html) {
+    const div = document.createElement('div');
+    div.innerHTML = String(html || '');
+    return (div.textContent || '').trim();
+}
+
+// --- Detaylar: formda kullanılacak ortak yapı ---
+async function fetchTitleDetails(kind, result) {
+    if (result.source === 'tvmaze') return fetchTvmazeDetails(result.id);
+
+    const path = kind === 'series' ? `/tv/${result.id}` : `/movie/${result.id}`;
+    const append = kind === 'series'
+        ? 'videos,external_ids,watch/providers'
+        : 'videos,external_ids,watch/providers,release_dates';
+    const d = await tmdbFetch(path, { append_to_response: append, include_video_language: 'tr,en,null' });
+
+    let description = d.overview || '';
+    if (!description) {
+        try {
+            const en = await tmdbFetch(path, { language: 'en-US' });
+            description = en.overview || '';
+        } catch (_) {}
+    }
+
+    const imdbId = (d.external_ids && d.external_ids.imdb_id) || d.imdb_id || '';
+    let rating = await fetchOmdbRating(imdbId);
+    if (rating === null && d.vote_count > 10 && d.vote_average) rating = Math.round(d.vote_average * 10) / 10;
+
+    const genres = (d.genres || []).map(g => g.name);
+    const countries = kind === 'series'
+        ? (d.origin_country || [])
+        : (d.production_countries || []).map(c => c.iso_3166_1).concat(d.origin_country || []);
+
+    const info = {
+        source: 'tmdb',
+        tmdbId: d.id,
+        tmdbType: kind === 'series' ? 'tv' : 'movie',
+        imdbId,
+        name: kind === 'series' ? d.name : d.title,
+        originalName: kind === 'series' ? d.original_name : d.original_title,
+        description,
+        imageUrl: d.poster_path ? TMDB_IMG + 'w500' + d.poster_path : '',
+        imdbRating: rating,
+        trailerUrl: pickTrailer(d.videos),
+        releaseDate: kind === 'series' ? (d.first_air_date || '') : pickTrReleaseDate(d),
+        platform: pickPlatform(d),
+        genres,
+        countries,
+        seasons: []
+    };
+
+    if (kind === 'series') {
+        info.seasons = (d.seasons || [])
+            .filter(s => s.season_number > 0 && (s.episode_count > 0 || s.air_date))
+            .map(s => ({ season: s.season_number, totalEpisodes: s.episode_count || 0, releaseDate: s.air_date || null }));
+        // Yayınlanacak bir sonraki bölüm yeni bir sezonun başlangıcıysa tarihini sezona yaz
+        const next = d.next_episode_to_air;
+        if (next && next.air_date) {
+            const season = info.seasons.find(s => s.season === next.season_number);
+            if (season && next.episode_number === 1) season.releaseDate = next.air_date;
+        }
+        if (!info.trailerUrl) {
+            try {
+                const vids = await tmdbFetch(`${path}/videos`, { language: 'en-US' });
+                info.trailerUrl = pickTrailer(vids);
+            } catch (_) {}
+        }
+    }
+    return info;
+}
+
+async function fetchTvmazeDetails(id) {
+    const [show, episodes, seasons] = await Promise.all([
+        fetchJson(`https://api.tvmaze.com/shows/${id}`),
+        fetchJson(`https://api.tvmaze.com/shows/${id}/episodes`).catch(() => []),
+        fetchJson(`https://api.tvmaze.com/shows/${id}/seasons`).catch(() => [])
+    ]);
+    const counts = {};
+    (episodes || []).forEach(ep => { if (ep.season > 0) counts[ep.season] = (counts[ep.season] || 0) + 1; });
+    const seasonList = (seasons || []).filter(s => s.number > 0).map(s => ({
+        season: s.number,
+        totalEpisodes: Math.max(counts[s.number] || 0, s.episodeOrder || 0),
+        releaseDate: s.premiereDate || null
+    })).filter(s => s.totalEpisodes > 0 || s.releaseDate);
+
+    const channel = show.webChannel ? show.webChannel.name : (show.network ? show.network.name : '');
+    const country = (show.network && show.network.country && show.network.country.code) ||
+        (show.webChannel && show.webChannel.country && show.webChannel.country.code) || '';
+    const imdbId = show.externals && show.externals.imdb;
+    let rating = await fetchOmdbRating(imdbId);
+    if (rating === null && show.rating && show.rating.average) rating = show.rating.average;
+
+    return {
+        source: 'tvmaze',
+        tvmazeId: show.id,
+        imdbId: imdbId || '',
+        name: show.name,
+        originalName: show.name,
+        description: stripHtml(show.summary),
+        imageUrl: show.image ? safeUrl(show.image.original || show.image.medium) : '',
+        imdbRating: rating,
+        trailerUrl: '',
+        releaseDate: show.premiered || '',
+        platform: mapPlatformName(channel),
+        genres: show.genres || [],
+        countries: country ? [country] : [],
+        seasons: seasonList
+    };
+}
+
+// --- Form entegrasyonu ---
+const autoFillState = {
+    series: { extras: {}, timer: null, requestSeq: 0, lastQuery: '' },
+    movie: { extras: {}, timer: null, requestSeq: 0, lastQuery: '' }
+};
+
+function autoFillEls(kind) {
+    const prefix = kind === 'series' ? 'series' : 'movie';
+    return {
+        name: document.getElementById(prefix + 'Name'),
+        status: document.getElementById(kind + 'AutoFillStatus'),
+        results: document.getElementById(kind + 'AutoFillResults'),
+        trailer: document.getElementById(prefix + 'TrailerUrl'),
+        rating: document.getElementById(prefix + 'ImdbRating'),
+        description: document.getElementById(prefix + 'Description'),
+        image: document.getElementById(prefix + 'ImageUrl'),
+        release: document.getElementById(prefix + 'ReleaseDate'),
+        preview: document.getElementById(prefix + 'ImagePreview'),
+        categorySelector: prefix === 'series' ? 'seriesCategorySelector' : 'movieCategorySelector',
+        tagsContainer: prefix + 'TagsContainer'
+    };
+}
+
+function setAutoFillStatus(kind, message, isError) {
+    const el = autoFillEls(kind).status;
+    if (!el) return;
+    el.innerHTML = message || '';
+    el.classList.toggle('error', !!isError);
+}
+
+function hideAutoFillResults(kind) {
+    const el = autoFillEls(kind).results;
+    if (el) {
+        el.classList.add('hidden');
+        el.innerHTML = '';
+    }
+}
+
+function resetAutoFill(kind) {
+    const state = autoFillState[kind];
+    state.extras = {};
+    state.lastQuery = '';
+    clearTimeout(state.timer);
+    state.requestSeq++;
+    hideAutoFillResults(kind);
+    const els = autoFillEls(kind);
+    const hint = hasTmdbKey() || kind === 'series'
+        ? '<i class="fas fa-magic mr-1"></i>Adını yaz, çıkan listeden seç: bilgiler otomatik dolar.'
+        : '<i class="fas fa-info-circle mr-1"></i>Otomatik doldurma için <button type="button" class="helper-link" data-open-settings>TMDB anahtarı ekle</button>.';
+    setAutoFillStatus(kind, hint);
+    document.querySelectorAll(`#${kind === 'series' ? 'seriesForm' : 'movieForm'} .form-group.autofilled`).forEach(g => g.classList.remove('autofilled'));
+    updateImagePreview(els.image, els.preview);
+}
+
+function getAutoFillExtras(kind) {
+    return { ...(autoFillState[kind] ? autoFillState[kind].extras : {}) };
+}
+
+function updateImagePreview(input, preview) {
+    if (!input || !preview) return;
+    const url = safeUrl(input.value);
+    if (url) {
+        preview.src = url;
+        preview.classList.remove('hidden');
+    } else {
+        preview.removeAttribute('src');
+        preview.classList.add('hidden');
+    }
+}
+
+async function runAutoFillSearch(kind, query, { immediate } = {}) {
+    const state = autoFillState[kind];
+    const q = String(query || '').trim();
+    if (q.length < 2) {
+        hideAutoFillResults(kind);
+        return;
+    }
+    if (!immediate && q === state.lastQuery) return;
+    state.lastQuery = q;
+    const seq = ++state.requestSeq;
+    setAutoFillStatus(kind, '<i class="fas fa-spinner fa-spin mr-1"></i>İnternette aranıyor...');
+
+    try {
+        const results = await searchTitles(kind, q);
+        if (seq !== state.requestSeq) return;
+        renderAutoFillResults(kind, results);
+        if (results.length === 0) setAutoFillStatus(kind, 'Sonuç bulunamadı. Farklı yazmayı veya orijinal adını denemeyi deneyebilirsin.');
+        else setAutoFillStatus(kind, results[0].source === 'tvmaze'
+            ? 'Doğru olanı seç. (Anahtarsız kaynak: açıklama İngilizce, fragman yok. TMDB anahtarı eklersen hepsi Türkçe gelir.)'
+            : 'Doğru olanı seç, bilgiler otomatik dolsun.');
+    } catch (err) {
+        if (seq !== state.requestSeq) return;
+        hideAutoFillResults(kind);
+        setAutoFillStatus(kind, esc(err.message), true);
+    }
+}
+
+function renderAutoFillResults(kind, results) {
+    const el = autoFillEls(kind).results;
+    if (!el) return;
+    if (!results.length) {
+        hideAutoFillResults(kind);
+        return;
+    }
+    el.innerHTML = results.map((r, i) => `
+        <button type="button" class="autofill-result" data-index="${i}">
+            ${r.poster ? `<img src="${esc(r.poster)}" alt="" loading="lazy">` : '<span class="noposter"><i class="fas fa-image"></i></span>'}
+            <span class="min-w-0">
+                <span class="title block">${esc(r.title)}${r.year ? ` <span class="sub">(${esc(r.year)})</span>` : ''}</span>
+                ${r.originalTitle && r.originalTitle !== r.title ? `<span class="sub block">${esc(r.originalTitle)}</span>` : ''}
+                ${r.overview ? `<span class="overview">${esc(r.overview)}</span>` : ''}
+            </span>
+        </button>
+    `).join('');
+    el.classList.remove('hidden');
+    el.querySelectorAll('.autofill-result').forEach(btn => {
+        btn.addEventListener('click', () => applyAutoFillResult(kind, results[Number(btn.getAttribute('data-index'))]));
+    });
+}
+
+function markAutofilled(input) {
+    const group = input && input.closest('.form-group');
+    if (group) group.classList.add('autofilled');
+}
+
+async function applyAutoFillResult(kind, result) {
+    const state = autoFillState[kind];
+    const seq = ++state.requestSeq;
+    hideAutoFillResults(kind);
+    setAutoFillStatus(kind, `<i class="fas fa-spinner fa-spin mr-1"></i>"${esc(result.title)}" bilgileri getiriliyor...`);
+
+    let info;
+    try {
+        info = await fetchTitleDetails(kind, result);
+    } catch (err) {
+        if (seq === state.requestSeq) setAutoFillStatus(kind, esc(err.message), true);
+        return;
+    }
+    if (seq !== state.requestSeq) return;
+
+    const els = autoFillEls(kind);
+    const setField = (input, value) => {
+        if (!input || value === undefined || value === null || value === '') return false;
+        input.value = value;
+        markAutofilled(input);
+        return true;
+    };
+
+    setField(els.name, info.name);
+    setField(els.description, info.description);
+    setField(els.image, info.imageUrl);
+    setField(els.rating, info.imdbRating != null ? info.imdbRating : '');
+    setField(els.release, info.releaseDate);
+    const trailerFilled = setField(els.trailer, info.trailerUrl);
+    updateImagePreview(els.image, els.preview);
+
+    if (kind === 'series' && info.platform) {
+        setPlatformValue('seriesPlatform', info.platform);
+        markAutofilled(document.getElementById('seriesPlatform'));
+    }
+
+    // Kategoriler ve etiketler: mevcut seçime ekle
+    const matched = matchGenres(info.genres, { countries: info.countries });
+    const currentCats = getSelectedCategories(els.categorySelector);
+    setSelectedCategories(els.categorySelector, Array.from(new Set([...currentCats, ...matched.categoryIds])));
+    const container = document.getElementById(els.tagsContainer);
+    const input = container.querySelector('.tag-input');
+    matched.tagNames.forEach(tag => {
+        const exists = Array.from(container.querySelectorAll('.tag')).some(t => t.getAttribute('data-tag') === tag);
+        if (!exists) container.insertBefore(createTagElement(tag, container, true), input);
+    });
+
+    if (kind === 'series' && info.seasons.length) mergeSeasonsIntoForm(info.seasons);
+
+    state.extras = {
+        tmdbId: info.tmdbId || undefined,
+        tmdbType: info.tmdbType || undefined,
+        tvmazeId: info.tvmazeId || undefined,
+        imdbId: info.imdbId || undefined,
+        originalName: info.originalName || undefined
+    };
+    Object.keys(state.extras).forEach(k => state.extras[k] === undefined && delete state.extras[k]);
+
+    const notes = [];
+    if (!trailerFilled) notes.push('fragman bulunamadı (<button type="button" class="helper-link" data-helper="youtube" data-kind="' + kind + '">YouTube\'da ara</button>)');
+    if (matched.categoryIds.length === 0 && info.genres.length) notes.push('türler (' + esc(info.genres.join(', ')) + ') mevcut kategorilerinle eşleşmedi');
+    setAutoFillStatus(kind, '<i class="fas fa-check-circle text-green-500 mr-1"></i>Bilgiler dolduruldu. Kontrol edip Kaydet\'e bas.' +
+        (notes.length ? '<br><span class="opacity-80">Not: ' + notes.join('; ') + '.</span>' : ''));
+}
+
+// TMDB sezonlarını formdaki sezonlarla birleştir (izlenen bölümler korunur)
+function mergeSeasonsIntoForm(fetchedSeasons) {
+    const container = document.getElementById('seasonsContainer');
+    const rows = Array.from(container.querySelectorAll('.season-form-item'));
+    // Ekleme modunda boş varsayılan satırı kaldır
+    rows.forEach(row => {
+        const total = row.querySelector('.season-total-episodes').value;
+        const watched = toInt(row.querySelector('.season-watched-episodes').value);
+        if (!row.getAttribute('data-season-id') && !total && !watched) row.remove();
+    });
+
+    fetchedSeasons.forEach(fs => {
+        const existing = Array.from(container.querySelectorAll('.season-form-item'))
+            .find(row => toInt(row.querySelector('.season-number').value) === fs.season);
+        if (existing) {
+            const totalInput = existing.querySelector('.season-total-episodes');
+            const watched = toInt(existing.querySelector('.season-watched-episodes').value);
+            if (fs.totalEpisodes > 0) totalInput.value = Math.max(fs.totalEpisodes, watched);
+            if (fs.releaseDate) existing.setAttribute('data-release-date', fs.releaseDate);
+        } else {
+            container.appendChild(createSeasonFormRow({
+                season: fs.season,
+                totalEpisodes: fs.totalEpisodes || '',
+                watchedEpisodes: 0,
+                releaseDate: fs.releaseDate
+            }));
+        }
+    });
+
+    // Sezon numarasına göre sırala
+    Array.from(container.querySelectorAll('.season-form-item'))
+        .sort((a, b) => toInt(a.querySelector('.season-number').value) - toInt(b.querySelector('.season-number').value))
+        .forEach(row => container.appendChild(row));
+    if (!container.querySelector('.season-form-item')) container.appendChild(createSeasonFormRow({ season: 1 }));
+}
+
+function setupAutoFill() {
+    ['series', 'movie'].forEach(kind => {
+        const els = autoFillEls(kind);
+        const state = autoFillState[kind];
+
+        els.name.addEventListener('input', () => {
+            clearTimeout(state.timer);
+            state.timer = setTimeout(() => runAutoFillSearch(kind, els.name.value), 450);
+        });
+        els.name.addEventListener('keydown', e => {
+            if (e.key === 'Escape' && !els.results.classList.contains('hidden')) {
+                e.stopPropagation();
+                hideAutoFillResults(kind);
+            } else if (e.key === 'ArrowDown') {
+                const first = els.results.querySelector('.autofill-result');
+                if (first) { e.preventDefault(); first.focus(); }
+            }
+        });
+        els.results.addEventListener('keydown', e => {
+            const current = document.activeElement;
+            if (!current || !current.classList.contains('autofill-result')) return;
+            if (e.key === 'ArrowDown' && current.nextElementSibling) { e.preventDefault(); current.nextElementSibling.focus(); }
+            if (e.key === 'ArrowUp') { e.preventDefault(); (current.previousElementSibling || els.name).focus(); }
+            if (e.key === 'Escape') { e.stopPropagation(); hideAutoFillResults(kind); els.name.focus(); }
+        });
+        els.image.addEventListener('input', () => updateImagePreview(els.image, els.preview));
+        els.preview.addEventListener('error', () => els.preview.classList.add('hidden'));
+    });
+
+    document.addEventListener('click', e => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const searchBtn = target.closest('.autofill-search-btn');
+        if (searchBtn) {
+            const kind = searchBtn.getAttribute('data-kind');
+            runAutoFillSearch(kind, autoFillEls(kind).name.value, { immediate: true });
+            return;
+        }
+
+        if (target.closest('[data-open-settings]')) {
+            openSettingsModal();
+            return;
+        }
+
+        const helper = target.closest('.helper-link[data-helper]');
+        if (helper) {
+            const kind = helper.getAttribute('data-kind');
+            const name = autoFillEls(kind).name.value.trim();
+            if (!name) { alert('Önce adını yaz.'); return; }
+            const q = encodeURIComponent(name + (helper.getAttribute('data-helper') === 'youtube' ? ' fragman' : ' poster'));
+            const url = helper.getAttribute('data-helper') === 'youtube'
+                ? 'https://www.youtube.com/results?search_query=' + q
+                : 'https://www.google.com/search?tbm=isch&q=' + q;
+            window.open(url, '_blank', 'noopener');
+            return;
+        }
+
+        // Sonuç listesi dışına tıklanınca kapat
+        ['series', 'movie'].forEach(kind => {
+            const group = autoFillEls(kind).name.closest('.autofill-group');
+            if (group && !group.contains(target)) hideAutoFillResults(kind);
+        });
+    });
+}
+
+// --- Ayarlar modalı ---
+const settingsModal = document.getElementById('settingsModal');
+
+function openSettingsModal() {
+    document.getElementById('tmdbKeyInput').value = getApiKey('tmdbKey');
+    document.getElementById('omdbKeyInput').value = getApiKey('omdbKey');
+    document.getElementById('apiKeyStatus').innerHTML = hasTmdbKey()
+        ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>TMDB anahtarı kayıtlı.</span>'
+        : '<span class="opacity-80">Henüz TMDB anahtarı eklenmedi.</span>';
+    settingsModal.classList.add('active');
+}
+
+document.getElementById('openSettings').addEventListener('click', openSettingsModal);
+document.getElementById('closeSettingsModal').addEventListener('click', () => closeModal(settingsModal));
+document.getElementById('toggleTmdbKey').addEventListener('click', () => {
+    const input = document.getElementById('tmdbKeyInput');
+    input.type = input.type === 'password' ? 'text' : 'password';
+});
+
+document.getElementById('saveApiKeysBtn').addEventListener('click', async () => {
+    const statusEl = document.getElementById('apiKeyStatus');
+    const tmdbKey = document.getElementById('tmdbKeyInput').value.trim();
+    const omdbKey = document.getElementById('omdbKeyInput').value.trim();
+    if (tmdbKey) __origSetItem('tmdbKey', tmdbKey); else localStorage.removeItem('tmdbKey');
+    if (omdbKey) __origSetItem('omdbKey', omdbKey); else localStorage.removeItem('omdbKey');
+
+    const messages = [];
+    if (tmdbKey) {
+        statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Test ediliyor...';
+        try {
+            const data = await tmdbFetch('/search/movie', { query: 'Inception' });
+            messages.push(data && Array.isArray(data.results)
+                ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>TMDB anahtarı çalışıyor.</span>'
+                : '<span class="text-red-500">TMDB beklenmeyen yanıt verdi.</span>');
+        } catch (err) {
+            messages.push('<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>' + esc(err.message) + '</span>');
+        }
+    } else {
+        messages.push('<span class="opacity-80">TMDB anahtarı kaldırıldı.</span>');
+    }
+    if (omdbKey) {
+        try {
+            const data = await fetchJson(`https://www.omdbapi.com/?i=tt1375666&apikey=${encodeURIComponent(omdbKey)}`);
+            messages.push(data && data.Response === 'True'
+                ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>OMDb anahtarı çalışıyor.</span>'
+                : '<span class="text-red-500">OMDb anahtarı geçersiz: ' + esc(data && data.Error) + '</span>');
+        } catch (err) {
+            messages.push('<span class="text-red-500">OMDb test edilemedi: ' + esc(err.message) + '</span>');
+        }
+    }
+    statusEl.innerHTML = messages.join('<br>');
+    resetAutoFill('series');
+    resetAutoFill('movie');
+});
+
+// --- Toplu eksik tamamlama ---
+let bulkFillRunning = false;
+let bulkFillStop = false;
+
+function isEmptyField(value) {
+    return value === undefined || value === null || value === '';
+}
+
+function itemNeedsFill(item) {
+    return ['imageUrl', 'trailerUrl', 'description', 'imdbRating', 'releaseDate'].some(f => isEmptyField(item[f]));
+}
+
+async function findExactMatch(kind, item) {
+    const results = await searchTitles(kind, item.originalName || item.name);
+    const wanted = [item.name, item.originalName].filter(Boolean).map(normalizeTitle);
+    return results.find(r => wanted.includes(normalizeTitle(r.title)) || wanted.includes(normalizeTitle(r.originalTitle))) || null;
+}
+
+async function fillItem(kind, item, options) {
+    let info;
+    if (item.tmdbId && hasTmdbKey()) {
+        info = await fetchTitleDetails(kind, { source: 'tmdb', id: item.tmdbId });
+    } else if (item.tvmazeId && !hasTmdbKey() && kind === 'series') {
+        info = await fetchTitleDetails(kind, { source: 'tvmaze', id: item.tvmazeId });
+    } else {
+        const match = await findExactMatch(kind, item);
+        if (!match) return { status: 'nomatch' };
+        info = await fetchTitleDetails(kind, match);
+    }
+
+    const filled = [];
+    const fill = (field, value, label) => {
+        if (isEmptyField(item[field]) && !isEmptyField(value)) {
+            item[field] = value;
+            filled.push(label);
+        }
+    };
+    fill('imageUrl', info.imageUrl, 'poster');
+    fill('trailerUrl', info.trailerUrl, 'fragman');
+    // Anahtarsız kaynağın açıklamaları İngilizce; Türkçe listeye toplu olarak yazma
+    if (info.source !== 'tvmaze') fill('description', info.description, 'açıklama');
+    fill('imdbRating', info.imdbRating, 'puan');
+    fill('releaseDate', info.releaseDate || null, 'tarih');
+    if (kind === 'series' && (!item.platform || item.platform === 'Diğer') && info.platform) {
+        item.platform = info.platform;
+        filled.push('platform');
+    }
+    if (options.categories && (!item.categories || item.categories.length === 0)) {
+        const matched = matchGenres(info.genres, { countries: info.countries });
+        if (matched.categoryIds.length) {
+            item.categories = matched.categoryIds;
+            filled.push('kategori');
+        }
+    }
+    if (kind === 'series' && options.addSeasons) {
+        const known = new Set(item.seasons.map(s => s.season));
+        const added = info.seasons.filter(s => !known.has(s.season) && s.totalEpisodes > 0);
+        added.forEach(s => item.seasons.push(normalizeSeason({ ...s, watchedEpisodes: 0 })));
+        // Mevcut sezonların tarihlerini ve eksik bölüm sayılarını tamamla
+        info.seasons.forEach(s => {
+            const existing = item.seasons.find(x => x.season === s.season);
+            if (existing && !existing.releaseDate && s.releaseDate) existing.releaseDate = s.releaseDate;
+            if (existing && s.totalEpisodes > existing.totalEpisodes) existing.totalEpisodes = s.totalEpisodes;
+        });
+        item.seasons.sort((a, b) => a.season - b.season);
+        if (added.length) filled.push(added.length + ' yeni sezon');
+    }
+    if (info.tmdbId && !item.tmdbId) item.tmdbId = info.tmdbId;
+    if (info.tvmazeId && !item.tvmazeId) item.tvmazeId = info.tvmazeId;
+    if (info.imdbId && !item.imdbId) item.imdbId = info.imdbId;
+    if (filled.length) item.updatedAt = new Date().toISOString();
+    return { status: filled.length ? 'filled' : 'unchanged', filled };
+}
+
+document.getElementById('startBulkFillBtn').addEventListener('click', async () => {
+    if (bulkFillRunning) return;
+    const addSeasons = document.getElementById('bulkFillAddSeasons').checked;
+    const categories = document.getElementById('bulkFillCategories').checked;
+    if (!hasTmdbKey()) {
+        if (!confirm('TMDB anahtarı yok. Sadece diziler, sınırlı (İngilizce) kaynakla tamamlanacak. Devam edilsin mi?')) return;
+    }
+
+    const queue = [
+        ...seriesData.filter(s => itemNeedsFill(s) || addSeasons).map(item => ({ kind: 'series', item })),
+        ...(hasTmdbKey() ? moviesData.filter(itemNeedsFill).map(item => ({ kind: 'movie', item })) : [])
+    ];
+    if (queue.length === 0) {
+        alert('Tamamlanacak eksik bilgi bulunamadı.');
+        return;
+    }
+
+    bulkFillRunning = true;
+    bulkFillStop = false;
+    const startBtn = document.getElementById('startBulkFillBtn');
+    const stopBtn = document.getElementById('stopBulkFillBtn');
+    const progress = document.getElementById('bulkFillProgress');
+    const fillBar = document.getElementById('bulkFillProgressFill');
+    const text = document.getElementById('bulkFillProgressText');
+    const log = document.getElementById('bulkFillLog');
+    startBtn.disabled = true;
+    stopBtn.classList.remove('hidden');
+    progress.classList.remove('hidden');
+    log.classList.remove('hidden');
+    log.innerHTML = '';
+
+    const counts = { filled: 0, nomatch: 0, unchanged: 0, error: 0 };
+    const addLog = html => {
+        const div = document.createElement('div');
+        div.innerHTML = html;
+        log.prepend(div);
+    };
+
+    for (let i = 0; i < queue.length && !bulkFillStop; i++) {
+        const { kind, item } = queue[i];
+        text.textContent = `${i + 1} / ${queue.length} — ${item.name}`;
+        fillBar.style.width = `${((i + 1) / queue.length) * 100}%`;
+        try {
+            const result = await fillItem(kind, item, { addSeasons, categories });
+            counts[result.status]++;
+            if (result.status === 'filled') addLog(`<i class="fas fa-check text-green-500 mr-1"></i>${esc(item.name)}: ${esc(result.filled.join(', '))}`);
+            if (result.status === 'nomatch') addLog(`<i class="fas fa-question text-amber-500 mr-1"></i>${esc(item.name)}: birebir eşleşme bulunamadı (düzenle ekranındaki ✨ ile elle seçebilirsin)`);
+        } catch (err) {
+            counts.error++;
+            addLog(`<i class="fas fa-times text-red-500 mr-1"></i>${esc(item.name)}: ${esc(err.message)}`);
+            if (/anahtar|sınır/i.test(err.message)) break;
+        }
+        if ((i + 1) % 10 === 0) {
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            localStorage.setItem('moviesData', JSON.stringify(moviesData));
+        }
+        await new Promise(r => setTimeout(r, hasTmdbKey() ? 150 : 600));
+    }
+
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    refreshAll();
+
+    text.textContent = `${bulkFillStop ? 'Durduruldu' : 'Bitti'}: ${counts.filled} kayıt tamamlandı, ${counts.nomatch} eşleşmedi, ${counts.unchanged} değişmedi${counts.error ? ', ' + counts.error + ' hata' : ''}.`;
+    bulkFillRunning = false;
+    startBtn.disabled = false;
+    stopBtn.classList.add('hidden');
+});
+
+document.getElementById('stopBulkFillBtn').addEventListener('click', () => { bulkFillStop = true; });
+
+setupAutoFill();
+
+// --- İstatistikler ---
+function renderBarRows(entries) {
+    if (!entries.length) return '<p class="text-sm opacity-70">Henüz veri yok.</p>';
+    const max = Math.max(...entries.map(e => e.count), 1);
+    return entries.map(e => `
+        <div class="stats-bar-row">
+            <span class="name" title="${esc(e.name)}">${esc(e.name)}</span>
+            <span class="track"><span class="fill" style="display:block;width:${(e.count / max) * 100}%;${e.color ? `background:${safeColor(e.color)}` : ''}"></span></span>
+            <span class="count">${e.count}</span>
+        </div>`).join('');
+}
+
+function renderStats() {
+    const kpis = document.getElementById('statsKpis');
+    if (!kpis) return;
+
+    const watchedEpisodes = seriesData.reduce((sum, s) => sum + getSeriesTotals(s).watched, 0);
+    const totalEpisodes = seriesData.reduce((sum, s) => sum + getSeriesTotals(s).total, 0);
+    const completedSeries = seriesData.filter(s => getSeriesTotals(s).status === 'completed').length;
+    const watchedMovies = moviesData.filter(m => m.watched).length;
+    const kpiItems = [
+        { label: 'İzlenen bölüm', value: watchedEpisodes, sub: totalEpisodes ? `/ ${totalEpisodes} (%${Math.round(watchedEpisodes / totalEpisodes * 100)})` : '' },
+        { label: 'Tamamlanan dizi', value: completedSeries, sub: `/ ${seriesData.length}` },
+        { label: 'İzlenen film', value: watchedMovies, sub: `/ ${moviesData.length}` },
+        { label: 'Yakında çıkacak', value: getUpcomingContent().length, sub: '' }
+    ];
+    kpis.innerHTML = kpiItems.map(k => `
+        <div class="stats-kpi">
+            <div class="value">${k.value}<span class="text-sm font-normal opacity-60 ml-1">${esc(k.sub)}</span></div>
+            <div class="label">${esc(k.label)}</div>
+        </div>`).join('');
+
+    const statusLabels = { watching: 'İzleniyor', planning: 'Planlanıyor', completed: 'Tamamlandı', paused: 'Duraklatıldı', dropped: 'Bırakıldı' };
+    const statusCounts = {};
+    seriesData.forEach(s => { const st = getSeriesTotals(s).status; statusCounts[st] = (statusCounts[st] || 0) + 1; });
+    document.getElementById('statsSeriesStatus').innerHTML = renderBarRows(
+        Object.keys(statusLabels).filter(k => statusCounts[k]).map(k => ({ name: statusLabels[k], count: statusCounts[k] }))
+    );
+
+    document.getElementById('statsCategories').innerHTML = renderBarRows(
+        categoriesData.map(c => ({
+            name: c.name,
+            color: c.color,
+            count: seriesData.filter(s => s.categories.includes(c.id)).length + moviesData.filter(m => m.categories.includes(c.id)).length
+        })).filter(e => e.count > 0).sort((a, b) => b.count - a.count)
+    );
+
+    const platformCounts = {};
+    seriesData.forEach(s => { const p = s.platform || 'Diğer'; platformCounts[p] = (platformCounts[p] || 0) + 1; });
+    document.getElementById('statsPlatforms').innerHTML = renderBarRows(
+        Object.entries(platformCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
+    );
+
+    const all = [
+        ...seriesData.map(s => ({ ...s, type: 'Dizi' })),
+        ...moviesData.map(m => ({ ...m, type: 'Film' }))
+    ];
+    const rated = all.filter(x => x.myRating != null).sort((a, b) => b.myRating - a.myRating).slice(0, 8);
+    document.getElementById('statsTopRated').innerHTML = rated.length
+        ? rated.map(x => `<div class="stats-list-item"><span>${esc(x.name)} <span class="opacity-60 text-xs">${x.type}</span></span><span class="text-pink-500"><i class="fas fa-heart"></i> ${esc(x.myRating)}</span></div>`).join('')
+        : '<p class="text-sm opacity-70">Kayıtlara "Benim Puanım" verdiğinde burada listelenir.</p>';
+
+    const recent = all
+        .map(x => ({ ...x, ts: x.type === 'Dizi' ? getSeriesLastWatchedTimestamp(x) : getLastWatchedTimestamp(x) }))
+        .filter(x => x.ts > 0)
+        .sort((a, b) => b.ts - a.ts)
+        .slice(0, 10);
+    document.getElementById('statsRecent').innerHTML = recent.length
+        ? recent.map(x => `<div class="stats-list-item"><span>${esc(x.name)} <span class="opacity-60 text-xs">${x.type}</span></span><span class="opacity-70">${esc(new Date(x.ts).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }))}</span></div>`).join('')
+        : '<p class="text-sm opacity-70">Henüz izleme kaydı yok.</p>';
+}
+
+// --- Klavye kısayolları ---
+// "/" : aktif sekmede aramaya odaklan, "n" : yeni dizi/film ekle
+document.addEventListener('keydown', function (e) {
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+    const el = document.activeElement;
+    const typing = el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.tagName === 'SELECT' || el.isContentEditable);
+    if (typing || document.querySelector('.modal.active')) return;
+    const tabId = getActiveTabId();
+    if (e.key === '/') {
+        const search = tabId === 'moviesTab' ? searchMovies : tabId === 'trailersTab' ? trailersSearch : tabId === 'seriesTab' ? searchSeries : null;
+        if (search) {
+            e.preventDefault();
+            search.focus();
+            search.select();
+        }
+    } else if (e.key === 'n' || e.key === 'N') {
+        if (tabId === 'seriesTab') { e.preventDefault(); addSeries(); }
+        else if (tabId === 'moviesTab') { e.preventDefault(); addMovie(); }
+    }
+});
+
+// Sorting functions
+function getSortComparator(sortType, getLastWatched) {
+    const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'tr');
+    switch (sortType) {
+        case 'recent':
+            return (a, b) => (getLastWatched(b) - getLastWatched(a))
+                || (getTimestamp(b.updatedAt) - getTimestamp(a.updatedAt))
+                || byName(a, b);
+        case 'newest':
+            return (a, b) => (getTimestamp(b.createdAt) - getTimestamp(a.createdAt)) || byName(a, b);
+        case 'oldest':
+            return (a, b) => (getTimestamp(a.createdAt) - getTimestamp(b.createdAt)) || byName(a, b);
+        case 'alphabetical':
+            return byName;
+        case 'alphabetical-desc':
+            return (a, b) => byName(b, a);
+        case 'rating-desc':
+            return (a, b) => ((b.imdbRating || 0) - (a.imdbRating || 0)) || byName(a, b);
+        case 'rating-asc':
+            return (a, b) => ((a.imdbRating || 0) - (b.imdbRating || 0)) || byName(a, b);
+        case 'my-rating-desc':
+            return (a, b) => ((b.myRating || 0) - (a.myRating || 0)) || ((b.imdbRating || 0) - (a.imdbRating || 0)) || byName(a, b);
+        case 'release-desc':
+            return (a, b) => (getTimestamp(b.releaseDate) - getTimestamp(a.releaseDate)) || byName(a, b);
+        default:
+            return null;
+    }
+}
+
+function sortSeries(sortType) {
+    const comparator = getSortComparator(sortType, getSeriesLastWatchedTimestamp);
+    if (comparator) filteredSeriesData.sort(comparator);
+    renderSeriesList();
+}
+
+function sortMovies(sortType) {
+    const comparator = getSortComparator(sortType, getLastWatchedTimestamp);
+    if (comparator) filteredMoviesData.sort(comparator);
+    renderMoviesList();
+}
+
+// Sıralama seçimini hatırla
+const seriesSortSelectEl = document.getElementById('seriesSortSelect');
+const moviesSortSelectEl = document.getElementById('moviesSortSelect');
+seriesSortSelectEl.value = localStorage.getItem('seriesSort') || 'recent';
+moviesSortSelectEl.value = localStorage.getItem('moviesSort') || 'recent';
+if (!seriesSortSelectEl.value) seriesSortSelectEl.value = 'recent';
+if (!moviesSortSelectEl.value) moviesSortSelectEl.value = 'recent';
+
+seriesSortSelectEl.addEventListener('change', function() {
+    localStorage.setItem('seriesSort', this.value);
+    sortSeries(this.value);
+});
+
+moviesSortSelectEl.addEventListener('change', function() {
+    localStorage.setItem('moviesSort', this.value);
+    sortMovies(this.value);
+});
+
+// Initialize the app
+initApp();
+
+// Son açık sekmeyi hatırla
+try {
+    const savedTab = document.getElementById(localStorage.getItem('activeTab') || '');
+    if (savedTab && TABS.some(t => t.tab === savedTab)) showTab(savedTab);
+} catch (_) {}
+
+// PWA: çevrimdışı çalışma için service worker
+if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+    });
+}

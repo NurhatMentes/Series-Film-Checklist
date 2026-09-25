@@ -3,25 +3,35 @@ name: Build and deploy to GitHub Pages
 on:
   push:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - name: Collect site files
+        run: |
+          mkdir -p _site
+          cp -r index.html css js sw.js manifest.webmanifest icon.svg _site/
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          node-version: '18'
-      - name: Install dependencies
-        run: npm ci --no-audit --no-fund || true
-      - name: Build (noop)
-        run: echo "No build step; publishing root files to Pages"
+          path: _site
       - name: Deploy to GitHub Pages
-        uses: actions/configure-pages@v4
-      - name: Upload artifact for deployment
-        uses: actions/upload-pages-artifact@v4
-        with:
-          path: .
-      - name: Publish to GitHub Pages
-        uses: actions/deploy-pages@v1
+        id: deployment
+        uses: actions/deploy-pages@v4
