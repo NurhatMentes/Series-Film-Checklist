@@ -3380,7 +3380,100 @@ async function transformBytes(bytes, stream) {
     return new Uint8Array(await response.arrayBuffer());
 }
 
+// --- Kompakt eşleştirme kodu ("m2.") ---
+// Veri kanalı bağlantısı için SDP'nin yalnızca gerekli parçaları gönderilir:
+// ICE kullanıcı adı/şifresi, DTLS parmak izi, rol, mid ve UDP adayları.
+// Karşı taraf SDP'yi bunlardan yeniden kurar. Kod ~200 karakter olur; QR kolay okunur.
+const COMPACT_PREFIX = 'm2.';
+const CANDIDATE_PRIORITY = { h: 2130706431, s: 1694498815, p: 1862270975, r: 16777215 };
+const CANDIDATE_TYPES = { host: 'h', srflx: 's', prflx: 'p', relay: 'r' };
+const CANDIDATE_NAMES = { h: 'host', s: 'srflx', p: 'prflx', r: 'relay' };
+
+function sdpValue(lines, key) {
+    const line = lines.find(l => l.startsWith('a=' + key + ':'));
+    return line ? line.slice(key.length + 3).trim() : '';
+}
+
+function encodeCompactSignal(description) {
+    const lines = String(description.sdp || '').split(/\r?\n/);
+    const ufrag = sdpValue(lines, 'ice-ufrag');
+    const pwd = sdpValue(lines, 'ice-pwd');
+    const fingerprint = sdpValue(lines, 'fingerprint');
+    const setup = sdpValue(lines, 'setup');
+    const mid = sdpValue(lines, 'mid') || '0';
+    const [fpAlg, fpHex] = fingerprint.split(/\s+/);
+    if (!ufrag || !pwd || fpAlg !== 'sha-256' || !fpHex || !setup) return null;
+    if (/[|,\s]/.test(ufrag + pwd + mid)) return null;
+    if (!lines.some(l => l.startsWith('m=application'))) return null;
+
+    const fpBytes = new Uint8Array(fpHex.split(':').map(h => parseInt(h, 16)));
+    const candidates = [];
+    lines.filter(l => l.startsWith('a=candidate:')).forEach(line => {
+        const parts = line.slice('a=candidate:'.length).split(/\s+/);
+        // foundation component transport priority ip port typ type ...
+        const [, component, transport, , ip, port, , type] = parts;
+        if (component !== '1' || String(transport).toLowerCase() !== 'udp') return;
+        const t = CANDIDATE_TYPES[type];
+        if (!t || !ip || !port || /[,\s]/.test(ip)) return;
+        const key = `${t} ${ip} ${port}`;
+        if (!candidates.includes(key)) candidates.push(key);
+    });
+    if (candidates.length === 0) return null;
+
+    const role = setup === 'actpass' ? 'x' : setup === 'active' ? 'a' : 'p';
+    return COMPACT_PREFIX + [
+        description.type === 'offer' ? 'o' : 'a',
+        ufrag,
+        pwd,
+        bytesToBase64Url(fpBytes),
+        role,
+        mid,
+        candidates.join(',')
+    ].join('|');
+}
+
+function decodeCompactSignal(text) {
+    const fields = text.slice(COMPACT_PREFIX.length).split('|');
+    if (fields.length !== 7) return null;
+    const [t, ufrag, pwd, fp, role, mid, cands] = fields;
+    const fpHex = Array.from(base64UrlToBytes(fp)).map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(':');
+    const setup = role === 'x' ? 'actpass' : role === 'a' ? 'active' : 'passive';
+    const candidateLines = cands.split(',').filter(Boolean).map((c, i) => {
+        const [type, ip, port] = c.split(' ');
+        const name = CANDIDATE_NAMES[type];
+        if (!name) return null;
+        const related = name === 'host' ? '' : ' raddr 0.0.0.0 rport 0';
+        return `a=candidate:${i + 1} 1 udp ${CANDIDATE_PRIORITY[type] - i} ${ip} ${port} typ ${name}${related} generation 0`;
+    }).filter(Boolean);
+    const sessionId = String(Date.now()) + String(Math.floor(Math.random() * 1000));
+    const sdp = [
+        'v=0',
+        `o=- ${sessionId} 2 IN IP4 127.0.0.1`,
+        's=-',
+        't=0 0',
+        `a=group:BUNDLE ${mid}`,
+        'a=msid-semantic: WMS',
+        'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+        'c=IN IP4 0.0.0.0',
+        ...candidateLines,
+        `a=ice-ufrag:${ufrag}`,
+        `a=ice-pwd:${pwd}`,
+        'a=ice-options:trickle',
+        `a=fingerprint:sha-256 ${fpHex}`,
+        `a=setup:${setup}`,
+        `a=mid:${mid}`,
+        'a=sctp-port:5000',
+        'a=max-message-size:262144',
+        ''
+    ].join('\r\n');
+    return { type: t === 'o' ? 'offer' : 'answer', sdp };
+}
+
 async function encodeSignal(description) {
+    try {
+        const compact = encodeCompactSignal(description);
+        if (compact) return compact;
+    } catch (_) {}
     const payload = JSON.stringify({ t: description.type, s: slimSdp(description.sdp) });
     const bytes = new TextEncoder().encode(payload);
     if (typeof CompressionStream === 'function') {
@@ -3392,9 +3485,11 @@ async function encodeSignal(description) {
 }
 
 async function decodeSignal(text) {
-    const raw = String(text || '').replace(/\s+/g, '');
+    let raw = String(text || '').trim();
     if (!raw) return null;
+    if (!raw.startsWith(COMPACT_PREFIX)) raw = raw.replace(/\s+/g, '');
     try {
+        if (raw.startsWith(COMPACT_PREFIX)) return decodeCompactSignal(raw);
         let json;
         if (raw.startsWith(SIGNAL_PREFIX)) {
             if (typeof DecompressionStream !== 'function') {
@@ -3533,6 +3628,7 @@ async function generateCode() {
 
         // Label'ı güncelle
         if (codeLabel) codeLabel.textContent = 'Üretilen Kod (Diğer cihaza paylaşın)';
+        showQrCode();
 
     } catch (e) {
         updatePairingStatus('Kod üretilemedi: ' + e.message, 'error');
@@ -3586,6 +3682,7 @@ async function connectToPeer() {
             pairingState = 'answer-received';
 
             if (codeLabel) codeLabel.textContent = 'Cevap Kodu (İlk cihaza verin)';
+            showQrCode();
 
         } else if (pairingState === 'offer-generated') {
             // Bu cihaz başlatan taraf - answer kodunu işle
@@ -3683,10 +3780,11 @@ async function showQrCode() {
     if (qrContainer) {
         qrContainer.innerHTML = '';
         try {
+            const size = Math.max(220, Math.min(340, (qrContainer.clientWidth || 340) - 24));
             new QRCode(qrContainer, {
                 text: code,
-                width: 280,
-                height: 280,
+                width: size,
+                height: size,
                 colorDark: "#000000",
                 colorLight: "#ffffff",
                 // Uzun eşleştirme kodu için en yüksek kapasite (düşük hata düzeltme)
@@ -3738,15 +3836,38 @@ async function startQrScanner() {
     qrScannerContainer.innerHTML = '<div id="qrReader"></div>';
     qrScannerContainer.classList.remove('hidden');
     stopQrScanBtn.classList.remove('hidden');
-    qrScanner = new Html5Qrcode('qrReader');
+    const scannerOptions = {
+        verbose: false,
+        // Android Chrome'daki yerleşik QR okuyucuyu kullan (çok daha hızlı ve isabetli)
+        experimentalFeatures: { useBarCodeDetectorIfSupported: true }
+    };
+    if (window.Html5QrcodeSupportedFormats) scannerOptions.formatsToSupport = [Html5QrcodeSupportedFormats.QR_CODE];
+    qrScanner = new Html5Qrcode('qrReader', scannerOptions);
+    let handled = false;
     try {
         await qrScanner.start(
             { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 250, height: 250 } },
-            decodedText => {
+            {
+                fps: 15,
+                // Görüntünün büyük kısmını tara
+                qrbox: (width, height) => {
+                    const side = Math.floor(Math.min(width, height) * 0.85);
+                    return { width: side, height: side };
+                },
+                videoConstraints: {
+                    facingMode: 'environment',
+                    width: { ideal: 1920 },
+                    height: { ideal: 1080 }
+                }
+            },
+            async decodedText => {
+                if (handled) return;
+                handled = true;
                 pairingCode.value = decodedText.trim();
-                stopQrScanner();
-                updatePairingStatus('QR kod okundu. Şimdi "Bağlan"a basın.', 'success');
+                await stopQrScanner();
+                updatePairingStatus('QR kod okundu, bağlanılıyor...', 'success');
+                if (navigator.vibrate) navigator.vibrate(80);
+                connectToPeer();
             }
         );
     } catch (err) {
