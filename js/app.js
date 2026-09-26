@@ -630,6 +630,12 @@ function refreshAll() {
     if (trailersContent && !trailersContent.classList.contains('hidden')) renderTrailersTab();
     const statsContent = document.getElementById('statsContent');
     if (statsContent && !statsContent.classList.contains('hidden')) renderStats();
+    // Öneriler açıksa, listeye eklenenleri öneri listesinden düş
+    const discoverContent = document.getElementById('discoverContent');
+    if (discoverContent && !discoverContent.classList.contains('hidden')) {
+        const cached = safeParse('discoverCache', null);
+        if (cached && Array.isArray(cached.results)) renderDiscoverList(cached.results);
+    }
 }
 
 // --- Bildirim (toast) ---
@@ -1582,6 +1588,12 @@ function scheduleTrailersPreview(videoId, title) {
     }, 120);
 }
 
+// Kart başlığının yanında çıkış yılı (varsa)
+function renderYearBadge(releaseDate) {
+    const match = /^(\d{4})/.exec(String(releaseDate || ''));
+    return match ? ` <span class="card-year">(${match[1]})</span>` : '';
+}
+
 function renderCategoryBadges(categoryIds) {
     return (categoryIds || [])
         .map(catId => categoriesData.find(c => c.id === catId))
@@ -1701,12 +1713,15 @@ function renderSeriesList() {
                 <div class="mb-4">
                     <div class="flex justify-between items-start mb-2">
                         <div class="flex items-center space-x-2">
-                            <h3 class="text-xl card-title">${esc(series.name)}</h3>
+                            <h3 class="text-xl card-title">${esc(series.name)}${renderYearBadge(series.releaseDate)}</h3>
                             ${series.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(series.trailerUrl)}" data-title="${esc(series.name)}">
                                 <i class="fab fa-youtube"></i> Fragman
                             </button>` : ''}
                         </div>
                         <div class="flex space-x-1 ml-2">
+                            <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(series.id)}" title="Benzerlerini öner">
+                                <i class="fas fa-lightbulb"></i>
+                            </button>
                             <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(series.id)}" title="Düzenle">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -1781,12 +1796,15 @@ function renderMoviesList() {
                 <div class="mb-4">
                     <div class="flex justify-between items-start mb-2">
                         <div class="flex items-center space-x-2">
-                            <h3 class="text-xl card-title">${esc(movie.name)}</h3>
+                            <h3 class="text-xl card-title">${esc(movie.name)}${renderYearBadge(movie.releaseDate)}</h3>
                             ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(movie.trailerUrl)}" data-title="${esc(movie.name)}">
                                 <i class="fab fa-youtube"></i> Fragman
                             </button>` : ''}
                         </div>
                         <div class="flex space-x-1 ml-2">
+                            <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(movie.id)}" title="Benzerlerini öner">
+                                <i class="fas fa-lightbulb"></i>
+                            </button>
                             <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(movie.id)}" title="Düzenle">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -3198,6 +3216,7 @@ const TABS = [
     { tab: categoriesTab, content: categoriesContent },
     { tab: tagsTab, content: tagsContent },
     { tab: trailersTab, content: trailersContent, onShow: renderTrailersTab },
+    { tab: document.getElementById('discoverTab'), content: document.getElementById('discoverContent'), onShow: () => renderDiscover(false) },
     { tab: document.getElementById('statsTab'), content: document.getElementById('statsContent'), onShow: renderStats }
 ];
 
@@ -5467,6 +5486,313 @@ function startCloudSyncInterval() {
     }, 2 * 60 * 1000);
 }
 
+// =====================================================================
+// Öneriler (TMDB "recommendations" + "similar")
+// =====================================================================
+const RECS_CACHE_TTL = 3 * 24 * 60 * 60 * 1000; // 3 gün
+const recsIndex = new Map(); // "movie:123" -> öneri nesnesi
+let currentDiscoverFilter = 'all';
+let discoverLoading = false;
+
+function getDismissedRecs() {
+    const list = safeParse('dismissedRecs', []);
+    return new Set(Array.isArray(list) ? list : []);
+}
+
+function dismissRec(key) {
+    const set = getDismissedRecs();
+    set.add(key);
+    __origSetItem('dismissedRecs', JSON.stringify(Array.from(set)));
+}
+
+function recKey(kind, id) {
+    return kind + ':' + id;
+}
+
+// Listede var mı? (TMDB kimliği veya ad eşleşmesiyle)
+function isInMyList(kind, rec) {
+    const list = kind === 'series' ? seriesData : moviesData;
+    const titles = [rec.title, rec.originalTitle].filter(Boolean).map(normalizeTitle);
+    return list.some(item =>
+        (item.tmdbId && Number(item.tmdbId) === Number(rec.id)) ||
+        titles.includes(normalizeTitle(item.name)) ||
+        (item.originalName && titles.includes(normalizeTitle(item.originalName)))
+    );
+}
+
+// Kaydın TMDB kimliğini bul (yoksa adıyla arayıp kaydet)
+async function resolveTmdbId(kind, item) {
+    const expectedType = kind === 'series' ? 'tv' : 'movie';
+    if (item.tmdbId && (!item.tmdbType || item.tmdbType === expectedType)) return Number(item.tmdbId);
+    const match = await findExactMatch(kind, item);
+    if (!match || match.source !== 'tmdb') return null;
+    item.tmdbId = match.id;
+    item.tmdbType = expectedType;
+    localStorage.setItem(kind === 'series' ? 'seriesData' : 'moviesData', JSON.stringify(kind === 'series' ? seriesData : moviesData));
+    return match.id;
+}
+
+function mapTmdbResult(kind, r) {
+    return {
+        kind,
+        id: r.id,
+        title: kind === 'series' ? r.name : r.title,
+        originalTitle: kind === 'series' ? r.original_name : r.original_title,
+        year: ((kind === 'series' ? r.first_air_date : r.release_date) || '').slice(0, 4),
+        poster: r.poster_path ? TMDB_IMG + 'w342' + r.poster_path : '',
+        overview: r.overview || '',
+        vote: r.vote_average ? Math.round(r.vote_average * 10) / 10 : null,
+        voteCount: r.vote_count || 0
+    };
+}
+
+// Bir yapımın benzerleri (önbellekli)
+async function fetchRecommendations(kind, tmdbId) {
+    const cacheKey = 'recsCache:' + recKey(kind, tmdbId);
+    const cached = safeParse(cacheKey, null);
+    if (cached && Date.now() - cached.at < RECS_CACHE_TTL && Array.isArray(cached.items)) return cached.items;
+
+    const base = (kind === 'series' ? '/tv/' : '/movie/') + tmdbId;
+    const recs = await tmdbFetch(base + '/recommendations', { page: 1 });
+    let results = recs.results || [];
+    if (results.length < 8) {
+        try {
+            const similar = await tmdbFetch(base + '/similar', { page: 1 });
+            results = results.concat(similar.results || []);
+        } catch (_) {}
+    }
+    const seen = new Set();
+    const items = results
+        .filter(r => r && r.id && !seen.has(r.id) && seen.add(r.id))
+        .map(r => mapTmdbResult(kind, r))
+        .filter(r => r.title);
+    try { __origSetItem(cacheKey, JSON.stringify({ at: Date.now(), items })); } catch (_) {}
+    return items;
+}
+
+function renderRecCard(rec, reason) {
+    const key = recKey(rec.kind, rec.id);
+    recsIndex.set(key, rec);
+    const inList = isInMyList(rec.kind, rec);
+    const typeText = rec.kind === 'series' ? 'Dizi' : 'Film';
+    const poster = safeUrl(rec.poster);
+    return `
+        <div class="rec-card" data-rec-key="${esc(key)}">
+            <div class="rec-poster">
+                ${poster ? `<img src="${esc(poster)}" alt="${esc(rec.title)}" loading="lazy" onerror="handleImageError(this)">` : '<div class="rec-noposter"><i class="fas fa-image"></i></div>'}
+                <span class="rec-type">${typeText}</span>
+                ${rec.vote ? `<span class="rec-vote"><i class="fas fa-star"></i> ${esc(rec.vote)}</span>` : ''}
+            </div>
+            <div class="rec-body">
+                <div class="rec-title">${esc(rec.title)}${rec.year ? ` <span class="rec-year">(${esc(rec.year)})</span>` : ''}</div>
+                ${reason ? `<div class="rec-reason"><i class="fas fa-heart mr-1"></i>${esc(reason)}</div>` : ''}
+                ${rec.overview ? `<p class="rec-overview">${esc(rec.overview)}</p>` : ''}
+                <div class="rec-actions">
+                    ${inList
+                        ? '<span class="rec-inlist"><i class="fas fa-check mr-1"></i>Listende var</span>'
+                        : `<button type="button" class="btn btn-primary btn-sm" data-rec-add="${esc(key)}"><i class="fas fa-plus mr-1"></i>Listeme Ekle</button>`}
+                    <button type="button" class="btn btn-secondary btn-sm" data-rec-dismiss="${esc(key)}" title="Bunu bir daha önerme"><i class="fas fa-eye-slash"></i></button>
+                </div>
+            </div>
+        </div>
+    `;
+}
+
+// --- Tek bir yapıma benzerler (kart üzerindeki 💡) ---
+const recsModal = document.getElementById('recsModal');
+
+async function showSimilarFor(kind, id) {
+    const list = kind === 'series' ? seriesData : moviesData;
+    const item = list.find(x => String(x.id) === String(id));
+    if (!item) return;
+    const titleEl = document.getElementById('recsModalTitle');
+    const statusEl = document.getElementById('recsModalStatus');
+    const listEl = document.getElementById('recsModalList');
+    titleEl.textContent = `"${item.name}" sevenler bunları da sevdi`;
+    listEl.innerHTML = '';
+    recsModal.classList.add('active');
+
+    if (!hasTmdbKey()) {
+        statusEl.innerHTML = 'Öneriler için TMDB anahtarı gerekli. <button type="button" class="helper-link" data-open-settings>Ayarlar\'dan ekle</button>.';
+        return;
+    }
+    statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Öneriler getiriliyor...';
+    try {
+        const tmdbId = await resolveTmdbId(kind, item);
+        if (!tmdbId) {
+            statusEl.textContent = `"${item.name}" TMDB'de bulunamadı. Düzenle ekranındaki ✨ ile doğru yapımı seçersen öneriler çalışır.`;
+            return;
+        }
+        const dismissed = getDismissedRecs();
+        const recs = (await fetchRecommendations(kind, tmdbId)).filter(r => !dismissed.has(recKey(r.kind, r.id)));
+        if (!recs.length) {
+            statusEl.textContent = 'Bu yapım için öneri bulunamadı.';
+            return;
+        }
+        const notInList = recs.filter(r => !isInMyList(r.kind, r)).length;
+        statusEl.textContent = `${recs.length} öneri (${notInList} tanesi listende yok).`;
+        listEl.innerHTML = recs.slice(0, 20).map(r => renderRecCard(r, null)).join('');
+    } catch (err) {
+        statusEl.textContent = err.message;
+    }
+}
+
+// --- Keşfet: tüm listeye göre kişisel öneriler ---
+function pickSeedItems() {
+    const candidates = [
+        ...seriesData.map(s => ({ kind: 'series', item: s, status: getSeriesTotals(s).status })),
+        ...moviesData.map(m => ({ kind: 'movie', item: m, status: m.watched ? 'completed' : 'planning' }))
+    ].filter(c => c.status !== 'dropped');
+
+    const score = c => {
+        let s = 0;
+        if (c.item.myRating != null) s += c.item.myRating * 2;
+        if (c.status === 'completed') s += 6;
+        else if (c.status === 'watching') s += 5;
+        if (c.item.imdbRating) s += Number(c.item.imdbRating);
+        const lastWatched = c.kind === 'series' ? getSeriesLastWatchedTimestamp(c.item) : getLastWatchedTimestamp(c.item);
+        if (lastWatched) s += Math.max(0, 6 - (Date.now() - lastWatched) / (30 * 24 * 3600 * 1000)); // son 6 ay
+        return s;
+    };
+    return candidates
+        .filter(c => c.status !== 'planning' || c.item.myRating != null)
+        .map(c => ({ ...c, weight: score(c) }))
+        .sort((a, b) => b.weight - a.weight)
+        .slice(0, 12);
+}
+
+async function buildDiscoverRecommendations(onProgress) {
+    const seeds = pickSeedItems();
+    const dismissed = getDismissedRecs();
+    const pool = new Map();
+    let done = 0;
+    for (const seed of seeds) {
+        onProgress && onProgress(`${++done}/${seeds.length}: "${seed.item.name}" için öneriler alınıyor...`);
+        let tmdbId = null;
+        try { tmdbId = await resolveTmdbId(seed.kind, seed.item); } catch (err) {
+            if (/anahtar|sınır/i.test(err.message)) throw err;
+        }
+        if (!tmdbId) continue;
+        let recs = [];
+        try { recs = await fetchRecommendations(seed.kind, tmdbId); } catch (err) {
+            if (/anahtar|sınır/i.test(err.message)) throw err;
+        }
+        recs.slice(0, 15).forEach((rec, index) => {
+            const key = recKey(rec.kind, rec.id);
+            if (dismissed.has(key) || isInMyList(rec.kind, rec)) return;
+            const entry = pool.get(key) || { rec, score: 0, reasons: [] };
+            // Birden fazla favoride çıkan ve listede üst sıralarda olanlar öne geçer
+            entry.score += 1 + seed.weight / 20 + (15 - index) / 30;
+            if (!entry.reasons.includes(seed.item.name)) entry.reasons.push(seed.item.name);
+            pool.set(key, entry);
+        });
+    }
+    const results = Array.from(pool.values())
+        .map(e => ({ ...e, score: e.score + (e.rec.vote || 0) / 10 + Math.min(e.rec.voteCount, 5000) / 20000 }))
+        .sort((a, b) => b.score - a.score)
+        .slice(0, 40)
+        .map(e => ({ rec: e.rec, reason: e.reasons.slice(0, 2).join(' ve ') + ' sevdiğin için' }));
+    __origSetItem('discoverCache', JSON.stringify({ at: Date.now(), results }));
+    return results;
+}
+
+function renderDiscoverList(results) {
+    const listEl = document.getElementById('discoverList');
+    const dismissed = getDismissedRecs();
+    const filtered = results.filter(({ rec }) =>
+        !dismissed.has(recKey(rec.kind, rec.id)) &&
+        !isInMyList(rec.kind, rec) &&
+        (currentDiscoverFilter === 'all' || (currentDiscoverFilter === 'series') === (rec.kind === 'series')));
+    listEl.innerHTML = filtered.length
+        ? filtered.map(({ rec, reason }) => renderRecCard(rec, reason)).join('')
+        : '<p class="text-sm opacity-70 col-span-full">Gösterilecek öneri kalmadı. "Yenile" ile yeniden hesaplayabilirsin.</p>';
+    document.querySelectorAll('[data-discover-filter]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-discover-filter') === currentDiscoverFilter);
+    });
+}
+
+async function renderDiscover(forceRefresh) {
+    const statusEl = document.getElementById('discoverStatus');
+    if (!statusEl) return;
+    if (!hasTmdbKey()) {
+        statusEl.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Öneriler için TMDB anahtarı gerekli. <button type="button" class="helper-link" data-open-settings>Ayarlar\'dan ekle</button>.';
+        document.getElementById('discoverList').innerHTML = '';
+        return;
+    }
+    const cached = safeParse('discoverCache', null);
+    if (!forceRefresh && cached && Array.isArray(cached.results) && Date.now() - cached.at < RECS_CACHE_TTL) {
+        statusEl.textContent = 'Son hesaplama: ' + new Date(cached.at).toLocaleString('tr-TR');
+        renderDiscoverList(cached.results);
+        return;
+    }
+    if (discoverLoading) return;
+    if (pickSeedItems().length === 0) {
+        statusEl.textContent = 'Öneri üretmek için önce birkaç yapımı izlendi/tamamlandı olarak işaretle veya puan ver.';
+        return;
+    }
+    discoverLoading = true;
+    const refreshBtn = document.getElementById('refreshDiscoverBtn');
+    if (refreshBtn) refreshBtn.disabled = true;
+    try {
+        const results = await buildDiscoverRecommendations(text => {
+            statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>' + esc(text);
+        });
+        statusEl.textContent = results.length
+            ? `Beğendiğin ${pickSeedItems().length} yapıma göre ${results.length} öneri bulundu.`
+            : 'Şu an öneri bulunamadı.';
+        renderDiscoverList(results);
+    } catch (err) {
+        statusEl.textContent = err.message;
+    } finally {
+        discoverLoading = false;
+        if (refreshBtn) refreshBtn.disabled = false;
+    }
+}
+
+function setupRecommendations() {
+    document.getElementById('closeRecsModal').addEventListener('click', () => closeModal(recsModal));
+    document.getElementById('refreshDiscoverBtn').addEventListener('click', () => renderDiscover(true));
+    document.querySelectorAll('[data-discover-filter]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            currentDiscoverFilter = btn.getAttribute('data-discover-filter');
+            const cached = safeParse('discoverCache', null);
+            if (cached && Array.isArray(cached.results)) renderDiscoverList(cached.results);
+        });
+    });
+
+    document.addEventListener('click', e => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const similarBtn = target.closest('.similar-icon');
+        if (similarBtn) {
+            const kind = similarBtn.closest('.series-card') ? 'series' : 'movie';
+            showSimilarFor(kind, similarBtn.getAttribute('data-id'));
+            return;
+        }
+
+        const addBtn = target.closest('[data-rec-add]');
+        if (addBtn) {
+            const rec = recsIndex.get(addBtn.getAttribute('data-rec-add'));
+            if (!rec) return;
+            closeModal(recsModal);
+            if (rec.kind === 'series') addSeries(rec.title); else addMovie(rec.title);
+            // Ekleme penceresini TMDB bilgileriyle otomatik doldur
+            applyAutoFillResult(rec.kind, { source: 'tmdb', id: rec.id, title: rec.title });
+            return;
+        }
+
+        const dismissBtn = target.closest('[data-rec-dismiss]');
+        if (dismissBtn) {
+            const key = dismissBtn.getAttribute('data-rec-dismiss');
+            dismissRec(key);
+            const card = dismissBtn.closest('.rec-card');
+            if (card) card.remove();
+            showToast('Bu yapım bir daha önerilmeyecek.');
+        }
+    });
+}
+
 // Sorting functions
 function getSortComparator(sortType, getLastWatched) {
     const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'tr');
@@ -5529,6 +5855,7 @@ moviesSortSelectEl.addEventListener('change', function() {
 // Initialize the app
 initApp();
 setupCloudSync();
+setupRecommendations();
 
 // Son açık sekmeyi hatırla
 try {

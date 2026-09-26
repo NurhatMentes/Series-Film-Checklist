@@ -24,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20260926-5">
+    <link rel="stylesheet" href="css/styles.css?v=20260926-7">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -120,6 +120,9 @@
             </button>
             <button id="trailersTab" class="tab-button px-6 py-3 font-medium text-white border-none">
                 <i class="fas fa-play mr-2"></i> Fragmanlar
+            </button>
+            <button id="discoverTab" class="tab-button px-6 py-3 font-medium text-white border-none">
+                <i class="fas fa-lightbulb mr-2"></i> Öneriler
             </button>
             <button id="statsTab" class="tab-button px-6 py-3 font-medium text-white border-none">
                 <i class="fas fa-chart-bar mr-2"></i> İstatistikler
@@ -513,6 +516,26 @@
                         <!-- Etiketler buraya dinamik olarak eklenecek -->
                     </div>
                 </div>
+            </div>
+        </div>
+
+        <div id="discoverContent" class="tab-content hidden">
+            <div class="card p-6 mb-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+                    <h2 class="text-2xl font-bold flex items-center"><i class="fas fa-lightbulb mr-3 text-amber-400"></i>Senin İçin Öneriler</h2>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="filter-btn active" data-discover-filter="all"><i class="fas fa-list mr-1"></i> Tümü</button>
+                        <button type="button" class="filter-btn" data-discover-filter="series"><i class="fas fa-tv mr-1"></i> Diziler</button>
+                        <button type="button" class="filter-btn" data-discover-filter="movies"><i class="fas fa-film mr-1"></i> Filmler</button>
+                        <button type="button" id="refreshDiscoverBtn" class="btn btn-primary btn-sm"><i class="fas fa-sync-alt mr-1"></i> Yenile</button>
+                    </div>
+                </div>
+                <p class="text-sm opacity-80 mb-4">
+                    Puan verdiğin, bitirdiğin ve son izlediğin yapımlara göre derlenir. Birden fazla favorinde ortak çıkanlar üstte yer alır;
+                    listende olanlar gösterilmez. Kartlardaki <i class="fas fa-lightbulb text-amber-400"></i> ile tek bir yapıma benzerleri de görebilirsin.
+                </p>
+                <div id="discoverStatus" class="text-sm mb-4"></div>
+                <div id="discoverList" class="recs-grid"></div>
             </div>
         </div>
 
@@ -999,6 +1022,18 @@
         </div>
     </div>
 
+    <!-- Benzer yapımlar -->
+    <div id="recsModal" class="modal">
+        <div class="modal-content recs-modal-content">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <h2 id="recsModalTitle" class="text-xl font-bold"></h2>
+                <button type="button" id="closeRecsModal" class="close-trailer-btn !text-current" aria-label="Kapat">&times;</button>
+            </div>
+            <div id="recsModalStatus" class="text-sm opacity-80 mb-4"></div>
+            <div id="recsModalList" class="recs-grid"></div>
+        </div>
+    </div>
+
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
 
@@ -1085,7 +1120,7 @@
 
 
 
-    <script src="js/app.js?v=20260926-5"></script>
+    <script src="js/app.js?v=20260926-7"></script>
 </body>
 
 </html>

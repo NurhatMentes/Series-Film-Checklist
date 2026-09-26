@@ -2029,3 +2029,130 @@ body.dark-theme {
     border-radius: 6px;
     background: var(--surface-3);
 }
+
+/* Öneriler */
+.recs-modal-content {
+    max-width: 1000px;
+    width: 94%;
+}
+
+.recs-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.rec-card {
+    display: flex;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+}
+
+.rec-poster {
+    position: relative;
+    width: 92px;
+    flex-shrink: 0;
+    aspect-ratio: 2 / 3;
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--surface-3);
+}
+
+.rec-poster img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+}
+
+.rec-noposter {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    font-size: 1.5rem;
+}
+
+.rec-type,
+.rec-vote {
+    position: absolute;
+    left: 4px;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 999px;
+    color: #fff;
+    background: rgba(15, 23, 42, 0.75);
+}
+
+.rec-type { top: 4px; }
+.rec-vote { bottom: 4px; color: #facc15; }
+
+.rec-body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    flex: 1;
+}
+
+.rec-title {
+    font-weight: 700;
+    line-height: 1.25;
+}
+
+.rec-year {
+    font-weight: 400;
+    opacity: 0.65;
+    font-size: 0.85rem;
+}
+
+.rec-reason {
+    font-size: 0.75rem;
+    color: #db2777;
+}
+
+.dark-theme .rec-reason {
+    color: #f9a8d4;
+}
+
+.rec-overview {
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+
+.rec-actions {
+    margin-top: auto;
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.rec-inlist {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #10b981;
+}
+
+.similar-icon {
+    padding: 4px;
+    flex-shrink: 0;
+}
+
+/* Kart başlığındaki çıkış yılı */
+.card-year {
+    font-size: 0.85em;
+    font-weight: 500;
+    color: var(--text-muted);
+    white-space: nowrap;
+}

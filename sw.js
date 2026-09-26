@@ -1,6 +1,6 @@
 // İzleme Takip - service worker (çevrimdışı çalışma)
-const CACHE = 'izleme-takip-20260926-5';
-const APP_SHELL = ['./', './index.html', './css/styles.css?v=20260926-5', './js/app.js?v=20260926-5', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'izleme-takip-20260926-7';
+const APP_SHELL = ['./', './index.html', './css/styles.css?v=20260926-7', './js/app.js?v=20260926-7', './manifest.webmanifest', './icon.svg'];
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', event => {

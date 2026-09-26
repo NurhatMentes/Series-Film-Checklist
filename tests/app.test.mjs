@@ -180,3 +180,48 @@ test('bulut senkronu: iki cihaz aynı gist üzerinden değişiklikleri paylaşı
     phone.close();
     pc.close();
 });
+
+test('öneriler: ortak öneri üste çıkar, listede olan ve reddedilen gösterilmez', async () => {
+    const w = loadApp({
+        moviesData: [
+            { id: 1, name: 'Favori Film', watched: true, myRating: 9, tmdbId: 10, tmdbType: 'movie', createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'İkinci Film', watched: true, tmdbId: 20, tmdbType: 'movie', createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    w.localStorage.setItem('tmdbKey', 'test');
+    const movie = (id, title) => ({ id, title, original_title: title, release_date: '2020-01-01', vote_average: 7, vote_count: 100, overview: '' });
+    const responses = {
+        '/movie/10/recommendations': [movie(100, 'Ortak Öneri'), movie(200, 'Sadece Birincisi'), movie(20, 'İkinci Film')],
+        '/movie/20/recommendations': [movie(100, 'Ortak Öneri'), movie(300, 'Sadece İkincisi')]
+    };
+    w.fetch = async url => {
+        const path = new URL(url).pathname.replace('/3', '');
+        const results = responses[path] || [];
+        return { ok: true, status: 200, json: async () => ({ results }) };
+    };
+
+    const results = JSON.parse(JSON.stringify(await w.buildDiscoverRecommendations()));
+    const titles = results.map(r => r.rec.title);
+    assert.equal(titles[0], 'Ortak Öneri');
+    assert.ok(results[0].reason.includes('Favori Film') && results[0].reason.includes('İkinci Film'));
+    assert.ok(!titles.includes('İkinci Film'), 'listede olan yapım önerilmemeli');
+
+    w.dismissRec('movie:100');
+    w.localStorage.removeItem('discoverCache');
+    const again = JSON.parse(JSON.stringify(await w.buildDiscoverRecommendations())).map(r => r.rec.title);
+    assert.ok(!again.includes('Ortak Öneri'), 'reddedilen öneri bir daha çıkmamalı');
+    w.close();
+});
+
+test('kartlarda çıkış yılı varsa başlığın yanında gösterilir', () => {
+    const w = loadApp({
+        moviesData: [
+            { id: 1, name: 'Yıllı Film', releaseDate: '2014-11-05' },
+            { id: 2, name: 'Yılsız Film' }
+        ]
+    });
+    const titles = Array.from(w.document.querySelectorAll('#moviesList .card-title')).map(el => el.textContent.trim());
+    assert.ok(titles.includes('Yıllı Film (2014)'));
+    assert.ok(titles.includes('Yılsız Film'));
+    w.close();
+});
