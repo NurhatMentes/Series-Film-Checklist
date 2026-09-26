@@ -1,7 +1,7 @@
 // İzleme Takip - service worker (çevrimdışı çalışma)
-const CACHE = 'izleme-takip-v2';
+const CACHE = 'izleme-takip-v3';
 const APP_SHELL = ['./', './index.html', './css/styles.css', './js/app.js', './manifest.webmanifest', './icon.svg'];
-const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
+const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', event => {
     event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)).then(() => self.skipWaiting()));

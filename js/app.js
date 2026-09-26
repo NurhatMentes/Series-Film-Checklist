@@ -515,7 +515,7 @@ function setupImageErrorHandling() {
 const savedTheme = localStorage.getItem('theme') || 'light';
 if (savedTheme === 'dark') {
     document.body.classList.add('dark-theme');
-    document.querySelector('#themeToggle i').className = 'fas fa-sun text-white text-xl';
+    document.querySelector('#themeToggle i').className = 'fas fa-sun';
 }
 
 // Theme toggle
@@ -526,7 +526,7 @@ document.getElementById('themeToggle').addEventListener('click', function () {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 
     const icon = this.querySelector('i');
-    icon.className = isDark ? 'fas fa-sun text-white text-xl' : 'fas fa-moon text-white text-xl';
+    icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
 });
 
 // DOM Elements
@@ -1554,14 +1554,14 @@ function stopTrailersPreview(resetInfoText) {
         clearTimeout(trailersPreviewStartTimer);
         trailersPreviewStartTimer = null;
     }
-    
+
     // Iframe'i temizle
     const container = document.getElementById('trailersPreviewPlayer');
     if (container) {
         container.innerHTML = '';
     }
     trailersPreviewPlayer = null;
-    
+
     trailersPreviewVideoId = null;
     if (resetInfoText && trailersPreviewInfo) {
         trailersPreviewInfo.textContent = 'Liste üstünde imleç (cursor) ile bir fragmanın üstüne gelince önizleme (preview) oynar. Üzerine tıklayınca tam açılır.';
@@ -1572,7 +1572,7 @@ function playTrailersPreview(videoId, title) {
     if (!videoId) return;
     if (trailersPreviewVideoId === videoId) return;
     trailersPreviewVideoId = videoId;
-    
+
     const container = document.getElementById('trailersPreviewPlayer');
     if (!container) return;
 
@@ -2248,11 +2248,11 @@ function getDaysUntilRelease(dateString) {
 
 function getReleaseBadgeInfo(releaseDate) {
     if (!releaseDate) return null;
-    
+
     const daysUntil = getDaysUntilRelease(releaseDate);
     const formattedDate = formatReleaseDate(releaseDate);
     if (daysUntil === null) return null;
-    
+
     if (daysUntil < 0) {
         return {
             text: 'Yayında',
@@ -2342,7 +2342,7 @@ function resetTrailerPlayerState() {
         clearTimeout(trailerStartTimeout);
         trailerStartTimeout = null;
     }
-    
+
     // Iframe'i temizle
     const playerContainer = document.getElementById('trailerPlayer');
     if (playerContainer) {
@@ -3359,6 +3359,7 @@ let isInitiator = false;
 function setupRtcChannel() {
     if (!rtcChannel) return;
     rtcChannel.onopen = () => {
+        setSyncIndicator(true);
         updatePairingStatus('Bağlandı! Cihazlar senkronize edildi.', 'success');
         if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} connectTimeoutTimer = null; }
         updateInstructions('connected');
@@ -3371,7 +3372,8 @@ function setupRtcChannel() {
             if (msg && msg.type === 'syncData' && msg.payload) { applyRemoteData(msg.payload); }
         } catch (_) {}
     };
-    rtcChannel.onclose = () => { 
+    rtcChannel.onclose = () => {
+        setSyncIndicator(false);
         updatePairingStatus('Bağlantı kapandı', 'error');
         pairingState = 'waiting';
     };
@@ -3399,11 +3401,19 @@ function waitForIceGatheringComplete(pc) {
         };
         pc.addEventListener('icegatheringstatechange', check);
         // Güvenlik için maksimum bekleme (10 sn), bazı ortamlarda state olayı gelmeyebilir
-        setTimeout(() => { 
+        setTimeout(() => {
             pc.removeEventListener('icegatheringstatechange', check);
             resolve();
         }, 10000);
     });
+}
+
+// Header'daki senkronizasyon butonunda bağlantı durumunu göster
+function setSyncIndicator(connected) {
+    const dot = document.getElementById('syncIndicator');
+    if (dot) dot.hidden = !connected;
+    const btn = document.getElementById('openSyncModal');
+    if (btn) btn.title = connected ? 'Senkronizasyon: bağlı' : 'Cihazlar arası senkronizasyon';
 }
 
 function updatePairingStatus(message, type = 'info') {
@@ -3415,7 +3425,7 @@ function updatePairingStatus(message, type = 'info') {
 
 function updateInstructions(step) {
     if (!pairingInstructions) return;
-    
+
     const instructions = {
         'waiting': `
             <p><strong>Adım 1:</strong> "Kod Üret" butonuna basın</p>
@@ -3441,7 +3451,7 @@ function updateInstructions(step) {
             <p>Artık verileriniz otomatik olarak senkronize edilecek.</p>
         `
     };
-    
+
     pairingInstructions.innerHTML = instructions[step] || instructions['waiting'];
 }
 
@@ -3453,15 +3463,15 @@ async function generateCode() {
         updatePairingStatus('Kod hazırlanıyor - Ağ bilgileri toplanıyor...');
         await waitForIceGatheringComplete(rtcPeer);
         pairingCode.value = encodeSignal(rtcPeer.localDescription);
-        
+
         updatePairingStatus('Kod üretildi - Diğer cihaza paylaşın');
         updateInstructions('offer-generated');
         pairingState = 'offer-generated';
-        
+
         // Label'ı güncelle
         if (codeLabel) codeLabel.textContent = 'Üretilen Kod (Diğer cihaza paylaşın)';
-        
-    } catch (e) { 
+
+    } catch (e) {
         updatePairingStatus('Kod üretilemedi: ' + e.message, 'error');
     }
 }
@@ -3498,22 +3508,22 @@ async function connectToPeer() {
                 alert('Geçersiz kod formatı!');
                 return;
             }
-            
+
             initRtcPeer(false);
             await rtcPeer.setRemoteDescription(remote);
             const answer = await rtcPeer.createAnswer();
             await rtcPeer.setLocalDescription(answer);
             updatePairingStatus('Cevap hazırlanıyor - Ağ bilgileri toplanıyor...');
             await waitForIceGatheringComplete(rtcPeer);
-            
+
             // Answer kodunu göster
             pairingCode.value = encodeSignal(rtcPeer.localDescription);
             updatePairingStatus('Cevap kodu üretildi - İlk cihaza verin');
             updateInstructions('answer-received');
             pairingState = 'answer-received';
-            
+
             if (codeLabel) codeLabel.textContent = 'Cevap Kodu (İlk cihaza verin)';
-            
+
         } else if (pairingState === 'offer-generated') {
             // Bu cihaz başlatan taraf - answer kodunu işle
             const ans = decodeSignal(codeValue);
@@ -3521,7 +3531,7 @@ async function connectToPeer() {
                 alert('Geçersiz cevap kodu formatı!');
                 return;
             }
-            
+
             await rtcPeer.setRemoteDescription(ans);
             updatePairingStatus('Bağlantı kuruluyor...');
             updateInstructions('connecting');
@@ -3532,11 +3542,11 @@ async function connectToPeer() {
                     updateInstructions('answer-received');
                 }
             }, connectTimeoutMs);
-            
+
         } else if (pairingState === 'answer-received') {
             // Cevap kodu zaten üretildi, tekrar bağlanmaya çalışıyor
             updatePairingStatus('Cevap kodu zaten üretildi. İlk cihaza verin ve orada "Bağlan" butonuna basın.', 'error');
-            
+
         } else if (pairingState === 'connected') {
             // Zaten bağlı, yeni eşleştirme başlatmak istiyor
             const restart = confirm('Zaten bağlısınız. Yeni bir eşleştirme başlatmak istiyor musunuz?');
@@ -3544,27 +3554,69 @@ async function connectToPeer() {
                 resetPairingState();
                 updatePairingStatus('Durum sıfırlandı. Yeni eşleştirme başlatabilirsiniz.');
             }
-            
+
         } else {
             // Bilinmeyen durum - güvenli sıfırlama
             console.warn('Bilinmeyen pairingState:', pairingState);
             resetPairingState();
             updatePairingStatus('Durum sıfırlandı. Lütfen tekrar deneyin.');
         }
-        
-    } catch (e) { 
+
+    } catch (e) {
         updatePairingStatus('Bağlantı hatası: ' + e.message, 'error');
         console.error('WebRTC bağlantı hatası:', e);
     }
 }
 
-function showQrCode() {
+// Harici betiği bir kez yükle; ilk kaynak çalışmazsa sıradakini dene
+const scriptLoads = {};
+function loadScriptOnce(globalName, urls) {
+    if (window[globalName]) return Promise.resolve(window[globalName]);
+    if (scriptLoads[globalName]) return scriptLoads[globalName];
+    scriptLoads[globalName] = (async () => {
+        for (const url of urls) {
+            try {
+                await new Promise((resolve, reject) => {
+                    const script = document.createElement('script');
+                    script.src = url;
+                    script.async = true;
+                    script.onload = resolve;
+                    script.onerror = () => { script.remove(); reject(new Error('yüklenemedi: ' + url)); };
+                    document.head.appendChild(script);
+                });
+                if (window[globalName]) return window[globalName];
+            } catch (_) {}
+        }
+        scriptLoads[globalName] = null;
+        throw new Error('Kütüphane yüklenemedi');
+    })();
+    return scriptLoads[globalName];
+}
+
+const QR_GENERATOR_URLS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js',
+    'https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js'
+];
+const QR_SCANNER_URLS = [
+    'https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js',
+    'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/html5-qrcode.min.js',
+    'https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js'
+];
+
+async function showQrCode() {
     const code = pairingCode.value.trim();
     if (!code) {
         alert('Önce bir kod üretin!');
         return;
     }
-    
+
+    try {
+        await loadScriptOnce('QRCode', QR_GENERATOR_URLS);
+    } catch (_) {
+        alert('QR kod oluşturucu yüklenemedi. Kodu kopyalayıp mesajla gönderebilirsiniz.');
+        return;
+    }
+
     if (qrContainer) {
         qrContainer.innerHTML = '';
         try {
@@ -3599,13 +3651,25 @@ async function stopQrScanner() {
 }
 
 async function startQrScanner() {
-    if (typeof Html5Qrcode === 'undefined') {
-        alert('QR tarayıcı yüklenemedi. İnternet bağlantınızı kontrol edin.');
-        return;
-    }
     if (!window.isSecureContext) {
         alert('Kamera yalnızca güvenli (https) bağlantıda çalışır.');
         return;
+    }
+    const originalHtml = scanQrBtn ? scanQrBtn.innerHTML : '';
+    if (scanQrBtn) {
+        scanQrBtn.disabled = true;
+        scanQrBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i> Yükleniyor...';
+    }
+    try {
+        await loadScriptOnce('Html5Qrcode', QR_SCANNER_URLS);
+    } catch (_) {
+        alert('QR tarayıcı yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin; olmazsa kodu kopyala-yapıştır ile girebilirsiniz.');
+        return;
+    } finally {
+        if (scanQrBtn) {
+            scanQrBtn.disabled = false;
+            scanQrBtn.innerHTML = originalHtml;
+        }
     }
     await stopQrScanner();
     qrScannerContainer.innerHTML = '<div id="qrReader"></div>';

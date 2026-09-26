@@ -27,19 +27,27 @@
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
-    <button type="button" class="theme-toggle" id="themeToggle" title="Tema değiştir" aria-label="Tema değiştir">
-        <i class="fas fa-moon text-white text-xl"></i>
-    </button>
-    <button type="button" class="theme-toggle settings-toggle" id="openSettings" title="Otomatik doldurma ayarları" aria-label="Ayarlar">
-        <i class="fas fa-cog text-white text-xl"></i>
-    </button>
-
     <div class="app-container">
         <!-- Header -->
-        <div class="text-center mb-8">
-            <h1 class="text-5xl font-bold text-white mb-4 drop-shadow-lg">🎬 İzleme Takip</h1>
-            <p class="text-xl text-purple-100 opacity-90">Dizilerinizi ve filmlerinizi akıllıca takip edin</p>
-        </div>
+        <header class="app-header">
+            <div class="app-brand">
+                <h1>🎬 İzleme Takip</h1>
+                <p>Dizilerinizi ve filmlerinizi akıllıca takip edin</p>
+            </div>
+            <div class="header-actions">
+                <button type="button" id="openSyncModal" class="header-btn header-btn-wide" title="Cihazlar arası senkronizasyon" aria-label="Senkronizasyon">
+                    <i class="fas fa-sync-alt"></i>
+                    <span class="header-btn-label">Senkronizasyon</span>
+                    <span class="sync-dot" id="syncIndicator" hidden></span>
+                </button>
+                <button type="button" id="openSettings" class="header-btn" title="Otomatik doldurma ayarları" aria-label="Ayarlar">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button type="button" id="themeToggle" class="header-btn" title="Tema değiştir" aria-label="Tema değiştir">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+        </header>
 
         <!-- Backup & Restore Section -->
         <div class="card p-6 mb-8 bg-white/10 backdrop-blur-sm">
@@ -992,7 +1000,6 @@
 
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-    <button id="openSyncModal" class="sync-btn"><i class="fas fa-sync-alt"></i> Senkronizasyon</button>
 
     <!-- Senkronizasyon Modal -->
     <div id="syncModal" class="modal sync-modal">
@@ -1046,9 +1053,6 @@
         </div>
     </div>
 
-    <!-- QR Code libraries -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-        <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.9/html5-qrcode.min.js"></script>
 
 
     <script src="js/app.js"></script>
