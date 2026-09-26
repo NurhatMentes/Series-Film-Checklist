@@ -2,7 +2,10 @@
 
 Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı dostu bir web uygulaması. Yerel depolama ile çalışır, verileriniz güvende kalır ve istediğiniz zaman yedek alıp geri yükleyebilirsiniz.
 
-<img width="510" height="906" alt="image" src="https://github.com/user-attachments/assets/b1302960-934b-4c01-91ed-c2c2f4cb32a1" />
+<img width="732" height="901" alt="image" src="https://github.com/user-attachments/assets/66d9bd6a-389d-4780-a6a0-1b1a156e9b44" />
+<img width="970" height="689" alt="image" src="https://github.com/user-attachments/assets/b0ad58e0-dd0d-44ab-87c1-30bf02219310" />
+<img width="929" height="737" alt="image" src="https://github.com/user-attachments/assets/a034289d-5271-4afa-973a-e329d5f5c1f8" />
+
 
 
 <img width="1389" height="751" alt="image" src="https://github.com/user-attachments/assets/f7abef3d-21c3-4f9b-b877-35af573e4a82" />
