@@ -2014,3 +2014,18 @@ body.dark-theme {
         display: none;
     }
 }
+
+/* Bulut senkronizasyonu kutusu */
+.cloud-sync-box {
+    padding: 16px;
+    border-radius: 14px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+}
+
+.cloud-sync-box code {
+    font-size: 0.8rem;
+    padding: 1px 6px;
+    border-radius: 6px;
+    background: var(--surface-3);
+}

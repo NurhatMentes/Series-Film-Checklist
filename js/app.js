@@ -373,12 +373,14 @@ function handleSharedStorageUpdate(key, nextValue) {
 function schedulePeerPush() {
     if (!rtcChannel || rtcChannel.readyState !== 'open') return;
     clearTimeout(peerPushDebounceTimer);
-    peerPushDebounceTimer = setTimeout(() => {
+    peerPushDebounceTimer = setTimeout(async () => {
         try {
-            const payload = getAllDataPayload();
-            rtcChannel.send(JSON.stringify({ type: 'syncData', payload }));
-            updatePairingStatus('Bağlı - veriler gönderildi (' + new Date(payload.updatedAt).toLocaleTimeString('tr-TR') + ')', 'success');
-        } catch (_) {}
+            if (await sendSyncPayload(rtcChannel)) {
+                updatePairingStatus('Bağlı - veriler gönderildi (' + new Date().toLocaleTimeString('tr-TR') + ')', 'success');
+            }
+        } catch (err) {
+            updatePairingStatus('Veri gönderilemedi: ' + err.message, 'error');
+        }
     }, 600);
 }
 
@@ -408,35 +410,9 @@ function mergeById(localList, remoteList, localDeleted, remoteDeleted) {
     return { items, deleted };
 }
 
+// Diğer cihazdan (P2P) gelen veriyi birleştir
 function applyRemoteData(data) {
-    if (!data || typeof data !== 'object') return;
-    const remoteDeleted = normalizeDeleted(data.deleted);
-
-    const series = mergeById(seriesData, normalizeSeriesList(data.series), deletedItems.series, remoteDeleted.series);
-    const movies = mergeById(moviesData, normalizeMoviesList(data.movies), deletedItems.movies, remoteDeleted.movies);
-    const categories = mergeById(categoriesData, normalizeCategoriesList(data.categories) || [], deletedItems.categories, remoteDeleted.categories);
-    const tags = mergeById(tagsData, normalizeTagsData(data.tags), deletedItems.tags, remoteDeleted.tags);
-
-    seriesData = series.items;
-    moviesData = movies.items;
-    categoriesData = categories.items;
-    tagsData = normalizeTagsData(tags.items);
-    deletedItems = {
-        series: series.deleted,
-        movies: movies.deleted,
-        categories: categories.deleted,
-        tags: tags.deleted
-    };
-
-    // Uzak veriyi kaydederken geri gönderme (sonsuz döngüyü engeller)
-    __origSetItem('seriesData', JSON.stringify(seriesData));
-    __origSetItem('moviesData', JSON.stringify(moviesData));
-    __origSetItem('categoriesData', JSON.stringify(categoriesData));
-    __origSetItem('tagsData', JSON.stringify(tagsData));
-    __origSetItem('deletedItems', JSON.stringify(deletedItems));
-
-    refreshAll();
-    updatePairingStatus('Bağlı - veriler birleştirildi (' + new Date().toLocaleTimeString('tr-TR') + ')', 'success');
+    receivePeerPayload(data);
 }
 
 // Patch localStorage.setItem to auto-push
@@ -450,6 +426,7 @@ localStorage.setItem = function(key, value) {
     }
     if (DATA_KEYS.includes(key)) {
         schedulePeerPush();
+        if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
     }
 };
 
@@ -3517,21 +3494,16 @@ let isInitiator = false;
 function setupRtcChannel() {
     if (!rtcChannel) return;
     rtcChannel.onopen = () => {
-        setSyncIndicator(true);
+        updateSyncIndicator();
         updatePairingStatus('Bağlandı! Cihazlar senkronize edildi.', 'success');
         if (connectTimeoutTimer) { try { clearTimeout(connectTimeoutTimer); } catch(_) {} connectTimeoutTimer = null; }
         updateInstructions('connected');
         pairingState = 'connected';
-        try { rtcChannel.send(JSON.stringify({ type: 'syncData', payload: getAllDataPayload() })); } catch (_) {}
+        sendSyncPayload(rtcChannel).catch(err => updatePairingStatus('Veri gönderilemedi: ' + err.message, 'error'));
     };
-    rtcChannel.onmessage = (ev) => {
-        try {
-            const msg = JSON.parse(ev.data);
-            if (msg && msg.type === 'syncData' && msg.payload) { applyRemoteData(msg.payload); }
-        } catch (_) {}
-    };
+    rtcChannel.onmessage = (ev) => { handlePeerMessage(ev.data); };
     rtcChannel.onclose = () => {
-        setSyncIndicator(false);
+        updateSyncIndicator();
         updatePairingStatus('Bağlantı kapandı', 'error');
         pairingState = 'waiting';
     };
@@ -5124,6 +5096,377 @@ document.addEventListener('keydown', function (e) {
     }
 });
 
+// =====================================================================
+// Senkronizasyon ortak yardımcıları
+// =====================================================================
+
+// Uzak veriyi yerel veriyle birleştir. Yerel veri değiştiyse true döner.
+function mergeIncomingData(data) {
+    if (!data || typeof data !== 'object') return false;
+    const before = canonicalData(getSyncState());
+    const remoteDeleted = normalizeDeleted(data.deleted);
+
+    const series = mergeById(seriesData, normalizeSeriesList(data.series), deletedItems.series, remoteDeleted.series);
+    const movies = mergeById(moviesData, normalizeMoviesList(data.movies), deletedItems.movies, remoteDeleted.movies);
+    const categories = mergeById(categoriesData, normalizeCategoriesList(data.categories) || [], deletedItems.categories, remoteDeleted.categories);
+    const tags = mergeById(tagsData, normalizeTagsData(data.tags), deletedItems.tags, remoteDeleted.tags);
+
+    seriesData = series.items;
+    moviesData = movies.items;
+    categoriesData = categories.items;
+    tagsData = normalizeTagsData(tags.items);
+    deletedItems = {
+        series: series.deleted,
+        movies: movies.deleted,
+        categories: categories.deleted,
+        tags: tags.deleted
+    };
+
+    const changed = canonicalData(getSyncState()) !== before;
+    if (changed) {
+        // Uzak veriyi kaydederken tekrar gönderme tetiklenmesin
+        __origSetItem('seriesData', JSON.stringify(seriesData));
+        __origSetItem('moviesData', JSON.stringify(moviesData));
+        __origSetItem('categoriesData', JSON.stringify(categoriesData));
+        __origSetItem('tagsData', JSON.stringify(tagsData));
+        __origSetItem('deletedItems', JSON.stringify(deletedItems));
+        refreshAll();
+    }
+    return changed;
+}
+
+function getSyncState() {
+    return { series: seriesData, movies: moviesData, categories: categoriesData, tags: tagsData, deleted: deletedItems };
+}
+
+// Sıradan bağımsız karşılaştırma için kararlı metin
+function canonicalData(state) {
+    const byId = list => [...(list || [])].sort((a, b) => String(a.id).localeCompare(String(b.id)));
+    const sortKeys = obj => Object.keys(obj || {}).sort().reduce((acc, k) => { acc[k] = obj[k]; return acc; }, {});
+    const deleted = state.deleted || {};
+    return JSON.stringify({
+        series: byId(state.series),
+        movies: byId(state.movies),
+        categories: byId(state.categories),
+        tags: byId(state.tags),
+        deleted: ['series', 'movies', 'categories', 'tags'].reduce((acc, k) => { acc[k] = sortKeys(deleted[k]); return acc; }, {})
+    });
+}
+
+function updateSyncIndicator() {
+    const p2pOpen = !!(rtcChannel && rtcChannel.readyState === 'open');
+    setSyncIndicator(p2pOpen || cloudSyncHealthy);
+}
+
+// =====================================================================
+// P2P: büyük veriyi sıkıştırıp parçalar halinde gönder
+// (WebRTC tek mesajda ~256 KB'tan fazlasını gönderemez)
+// =====================================================================
+const P2P_CHUNK_SIZE = 16000;
+const incomingChunks = new Map();
+
+async function packMessage(obj) {
+    const json = JSON.stringify(obj);
+    if (typeof CompressionStream === 'function') {
+        try {
+            const bytes = await transformBytes(new TextEncoder().encode(json), new CompressionStream('deflate-raw'));
+            return { enc: 'deflate', body: bytesToBase64Url(bytes) };
+        } catch (_) {}
+    }
+    return { enc: 'json', body: json };
+}
+
+async function unpackMessage(enc, body) {
+    if (enc === 'deflate') {
+        const bytes = await transformBytes(base64UrlToBytes(body), new DecompressionStream('deflate-raw'));
+        return JSON.parse(new TextDecoder().decode(bytes));
+    }
+    return JSON.parse(body);
+}
+
+function waitForBufferDrain(channel) {
+    if (channel.bufferedAmount < 1024 * 1024) return Promise.resolve();
+    return new Promise(resolve => {
+        channel.bufferedAmountLowThreshold = 256 * 1024;
+        const done = () => { channel.removeEventListener('bufferedamountlow', done); resolve(); };
+        channel.addEventListener('bufferedamountlow', done);
+        setTimeout(done, 3000);
+    });
+}
+
+async function sendSyncPayload(channel) {
+    if (!channel || channel.readyState !== 'open') return false;
+    const { enc, body } = await packMessage({ type: 'syncData', payload: getAllDataPayload() });
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const total = Math.max(1, Math.ceil(body.length / P2P_CHUNK_SIZE));
+    for (let i = 0; i < total; i++) {
+        if (channel.readyState !== 'open') return false;
+        await waitForBufferDrain(channel);
+        channel.send(JSON.stringify({ type: 'chunk', id, i, total, enc, data: body.slice(i * P2P_CHUNK_SIZE, (i + 1) * P2P_CHUNK_SIZE) }));
+    }
+    return true;
+}
+
+async function handlePeerMessage(raw) {
+    let msg;
+    try { msg = JSON.parse(raw); } catch (_) { return; }
+    if (!msg) return;
+    if (msg.type === 'syncData' && msg.payload) {
+        receivePeerPayload(msg.payload);
+        return;
+    }
+    if (msg.type !== 'chunk' || !msg.id) return;
+    let entry = incomingChunks.get(msg.id);
+    if (!entry) {
+        entry = { parts: new Array(msg.total), count: 0, enc: msg.enc };
+        incomingChunks.set(msg.id, entry);
+        updatePairingStatus('Veri alınıyor...', 'info');
+    }
+    if (entry.parts[msg.i] === undefined) {
+        entry.parts[msg.i] = msg.data;
+        entry.count++;
+    }
+    if (entry.count === msg.total) {
+        incomingChunks.delete(msg.id);
+        try {
+            const full = await unpackMessage(entry.enc, entry.parts.join(''));
+            if (full && full.type === 'syncData' && full.payload) receivePeerPayload(full.payload);
+        } catch (err) {
+            updatePairingStatus('Gelen veri okunamadı: ' + err.message, 'error');
+        }
+    }
+}
+
+function receivePeerPayload(payload) {
+    const before = { series: seriesData.length, movies: moviesData.length };
+    const changed = mergeIncomingData(payload);
+    const time = new Date().toLocaleTimeString('tr-TR');
+    if (changed) {
+        const diff = `${seriesData.length - before.series >= 0 ? '+' : ''}${seriesData.length - before.series} dizi, ${moviesData.length - before.movies >= 0 ? '+' : ''}${moviesData.length - before.movies} film`;
+        updatePairingStatus(`Bağlı - veriler birleştirildi (${diff}, ${time})`, 'success');
+        showToast('Diğer cihazdan gelen veriler birleştirildi.');
+        // Birleşmiş hali karşı tarafa da gönder (onun da eksiği kalmasın)
+        schedulePeerPush();
+    } else {
+        updatePairingStatus(`Bağlı - iki cihaz zaten aynı (${time})`, 'success');
+    }
+    if (typeof scheduleCloudSync === 'function') scheduleCloudSync();
+}
+
+// =====================================================================
+// Bulut senkronizasyonu (GitHub Gist)
+// Veriler kullanıcının GitHub hesabında gizli bir gist'te tutulur.
+// Her değişiklikten sonra ve uygulama açılınca otomatik birleştirilir.
+// =====================================================================
+const GIST_FILE = 'izleme-takip-data.json';
+const GIST_DESCRIPTION = 'İzleme Takip verileri (otomatik senkron - silmeyin)';
+let cloudSyncHealthy = false;
+let cloudSyncTimer = null;
+let cloudSyncRunning = false;
+let cloudSyncAgain = false;
+
+function getGistToken() { return getApiKey('gistToken'); }
+function isCloudSyncConfigured() { return !!getGistToken(); }
+
+async function githubFetch(path, options = {}) {
+    const token = getGistToken();
+    const res = await fetch('https://api.github.com' + path, {
+        ...options,
+        cache: 'no-store',
+        headers: {
+            Accept: 'application/vnd.github+json',
+            Authorization: 'Bearer ' + token,
+            'X-GitHub-Api-Version': '2022-11-28',
+            ...(options.body ? { 'Content-Type': 'application/json' } : {})
+        }
+    });
+    if (res.status === 401) throw new Error('GitHub anahtarı geçersiz veya süresi dolmuş.');
+    if (res.status === 403 || res.status === 404) {
+        const text = await res.text().catch(() => '');
+        if (/rate limit/i.test(text)) throw new Error('GitHub istek sınırı aşıldı, biraz sonra tekrar denenecek.');
+        throw new Error('GitHub erişimi reddedildi. Anahtarın "gist" izni olduğundan emin olun.');
+    }
+    if (!res.ok) throw new Error('GitHub hatası (' + res.status + ')');
+    return res.status === 204 ? null : res.json();
+}
+
+async function findOrCreateGist() {
+    const saved = getApiKey('gistId');
+    if (saved) return saved;
+    for (let page = 1; page <= 5; page++) {
+        const list = await githubFetch(`/gists?per_page=100&page=${page}`);
+        const found = (list || []).find(g => g.files && g.files[GIST_FILE]);
+        if (found) {
+            __origSetItem('gistId', found.id);
+            return found.id;
+        }
+        if (!list || list.length < 100) break;
+    }
+    const created = await githubFetch('/gists', {
+        method: 'POST',
+        body: JSON.stringify({
+            description: GIST_DESCRIPTION,
+            public: false,
+            files: { [GIST_FILE]: { content: JSON.stringify(buildCloudPayload()) } }
+        })
+    });
+    __origSetItem('gistId', created.id);
+    return created.id;
+}
+
+function buildCloudPayload() {
+    return { app: 'izleme-takip', dataVersion: 2, savedAt: new Date().toISOString(), ...getSyncState() };
+}
+
+async function readGistData(gistId) {
+    const gist = await githubFetch('/gists/' + gistId);
+    const file = gist && gist.files && gist.files[GIST_FILE];
+    if (!file) return null;
+    let content = file.content;
+    if (file.truncated && file.raw_url) {
+        const raw = await fetch(file.raw_url, { cache: 'no-store' });
+        content = await raw.text();
+    }
+    try { return JSON.parse(content); } catch (_) { return null; }
+}
+
+function setCloudStatus(message, type) {
+    const el = document.getElementById('cloudSyncStatus');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'text-sm mt-2 ' + (type === 'error' ? 'text-red-400' : type === 'success' ? 'text-green-500' : 'opacity-80');
+}
+
+function renderCloudSyncUI() {
+    const configured = isCloudSyncConfigured();
+    const setup = document.getElementById('cloudSyncSetup');
+    const active = document.getElementById('cloudSyncActive');
+    if (setup) setup.classList.toggle('hidden', configured);
+    if (active) active.classList.toggle('hidden', !configured);
+    const last = getApiKey('gistLastSync');
+    if (configured && last && !document.getElementById('cloudSyncStatus').textContent) {
+        setCloudStatus('Son senkron: ' + new Date(last).toLocaleString('tr-TR'), 'success');
+    }
+}
+
+async function cloudSync({ silent = false } = {}) {
+    if (!isCloudSyncConfigured()) return;
+    if (cloudSyncRunning) { cloudSyncAgain = true; return; }
+    if (!navigator.onLine) {
+        setCloudStatus('Çevrimdışı - bağlantı gelince senkronize edilecek.', 'info');
+        return;
+    }
+    cloudSyncRunning = true;
+    if (!silent) setCloudStatus('Senkronize ediliyor...', 'info');
+    try {
+        const gistId = await findOrCreateGist();
+        let remote;
+        try {
+            remote = await readGistData(gistId);
+        } catch (err) {
+            // Gist silinmişse yenisini oluştur
+            if (/reddedildi/.test(err.message)) {
+                localStorage.removeItem('gistId');
+                remote = null;
+            } else {
+                throw err;
+            }
+        }
+        const localChanged = remote ? mergeIncomingData(remote) : false;
+        const remoteCanonical = remote ? canonicalData({
+            series: normalizeSeriesList(remote.series),
+            movies: normalizeMoviesList(remote.movies),
+            categories: normalizeCategoriesList(remote.categories) || [],
+            tags: normalizeTagsData(remote.tags),
+            deleted: normalizeDeleted(remote.deleted)
+        }) : null;
+        if (remoteCanonical !== canonicalData(getSyncState())) {
+            const id = getApiKey('gistId') || await findOrCreateGist();
+            await githubFetch('/gists/' + id, {
+                method: 'PATCH',
+                body: JSON.stringify({ files: { [GIST_FILE]: { content: JSON.stringify(buildCloudPayload()) } } })
+            });
+        }
+        const now = new Date().toISOString();
+        __origSetItem('gistLastSync', now);
+        cloudSyncHealthy = true;
+        setCloudStatus('Son senkron: ' + new Date(now).toLocaleString('tr-TR') + (localChanged ? ' (diğer cihazdan değişiklikler alındı)' : ''), 'success');
+        if (localChanged && !silent) showToast('Buluttaki değişiklikler alındı.');
+    } catch (err) {
+        cloudSyncHealthy = false;
+        setCloudStatus('Senkron hatası: ' + err.message, 'error');
+    } finally {
+        cloudSyncRunning = false;
+        updateSyncIndicator();
+        if (cloudSyncAgain) {
+            cloudSyncAgain = false;
+            scheduleCloudSync(1500);
+        }
+    }
+}
+
+function scheduleCloudSync(delay = 3000) {
+    if (!isCloudSyncConfigured()) return;
+    clearTimeout(cloudSyncTimer);
+    cloudSyncTimer = setTimeout(() => cloudSync({ silent: true }), delay);
+}
+
+function setupCloudSync() {
+    const tokenInput = document.getElementById('gistTokenInput');
+    document.getElementById('connectCloudBtn').addEventListener('click', async () => {
+        const token = tokenInput.value.trim();
+        if (!token) {
+            alert('Önce GitHub anahtarını yapıştırın.');
+            return;
+        }
+        __origSetItem('gistToken', token);
+        localStorage.removeItem('gistId');
+        tokenInput.value = '';
+        renderCloudSyncUI();
+        await cloudSync();
+        startCloudSyncInterval();
+        if (!cloudSyncHealthy) {
+            // Hatalı anahtarı sakla ama kullanıcıya düzeltme imkânı ver
+            renderCloudSyncUI();
+        }
+    });
+    document.getElementById('cloudSyncNowBtn').addEventListener('click', () => cloudSync());
+    document.getElementById('disconnectCloudBtn').addEventListener('click', () => {
+        if (!confirm('Bu cihazda bulut senkronizasyonu kapatılsın mı? (Buluttaki verileriniz silinmez.)')) return;
+        ['gistToken', 'gistId', 'gistLastSync'].forEach(k => localStorage.removeItem(k));
+        cloudSyncHealthy = false;
+        setCloudStatus('', 'info');
+        renderCloudSyncUI();
+        updateSyncIndicator();
+    });
+
+    renderCloudSyncUI();
+    if (isCloudSyncConfigured()) {
+        cloudSync({ silent: true });
+        startCloudSyncInterval();
+    }
+
+    // Sekmeye dönünce ve internet gelince güncel hali çek
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') scheduleCloudSync(500);
+    });
+    window.addEventListener('online', () => scheduleCloudSync(500));
+}
+
+// Açık kaldığı sürece 2 dakikada bir kontrol et (sadece bulut senkronu kuruluysa)
+let cloudSyncInterval = null;
+function startCloudSyncInterval() {
+    if (cloudSyncInterval) return;
+    cloudSyncInterval = setInterval(() => {
+        if (!isCloudSyncConfigured()) {
+            clearInterval(cloudSyncInterval);
+            cloudSyncInterval = null;
+            return;
+        }
+        if (document.visibilityState === 'visible') cloudSync({ silent: true });
+    }, 2 * 60 * 1000);
+}
+
 // Sorting functions
 function getSortComparator(sortType, getLastWatched) {
     const byName = (a, b) => (a.name || '').localeCompare(b.name || '', 'tr');
@@ -5185,6 +5528,7 @@ moviesSortSelectEl.addEventListener('change', function() {
 
 // Initialize the app
 initApp();
+setupCloudSync();
 
 // Son açık sekmeyi hatırla
 try {

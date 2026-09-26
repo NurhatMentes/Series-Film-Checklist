@@ -24,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20260926-4">
+    <link rel="stylesheet" href="css/styles.css?v=20260926-5">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -1010,9 +1010,38 @@
                 <button id="closeSyncModal" class="close-trailer-btn">&times;</button>
             </div>
             <div class="p-6 sync-form">
-                <div>
-                    <h4 class="text-lg font-semibold mb-2">Cihaz Eşleştirme</h4>
-                    <p class="text-gray-400 text-sm mb-3">İki cihaz arasında doğrudan bağlantı kurun. Sunucu gerekmez.</p>
+                <!-- Otomatik bulut senkronizasyonu (GitHub Gist) -->
+                <section class="cloud-sync-box mb-6">
+                    <h4 class="text-lg font-semibold mb-1"><i class="fas fa-cloud mr-2 text-sky-400"></i>Otomatik Senkronizasyon <span class="text-xs font-medium px-2 py-0.5 rounded-full bg-green-500/20 text-green-500 align-middle">Önerilen</span></h4>
+                    <p class="text-sm opacity-80 mb-3">
+                        Verileriniz GitHub hesabınızdaki <strong>gizli bir gist</strong>'te tutulur. Her cihazda bir kez kurun;
+                        sonra değişiklikler kendiliğinden tüm cihazlara gider. Cihazların aynı anda açık olması gerekmez.
+                    </p>
+
+                    <div id="cloudSyncSetup">
+                        <ol class="text-sm opacity-90 mb-3 list-decimal pl-5 space-y-1">
+                            <li><a href="https://github.com/settings/tokens/new?scopes=gist&amp;description=%C4%B0zleme%20Takip%20senkron" target="_blank" rel="noopener" class="underline font-medium">Bu bağlantıdan</a> GitHub'da yeni bir anahtar oluşturun ("gist" izni seçili gelir; süreyi "No expiration" yapabilirsiniz).</li>
+                            <li>"Generate token" deyin ve çıkan <code>ghp_...</code> anahtarını kopyalayın.</li>
+                            <li>Aşağıya yapıştırıp <strong>Bağlan</strong>'a basın. Diğer cihazlarda da aynı anahtarı girin.</li>
+                        </ol>
+                        <div class="flex gap-2">
+                            <input type="password" id="gistTokenInput" class="form-control flex-1" autocomplete="off" placeholder="ghp_...">
+                            <button type="button" id="connectCloudBtn" class="btn btn-primary"><i class="fas fa-link mr-1"></i> Bağlan</button>
+                        </div>
+                    </div>
+
+                    <div id="cloudSyncActive" class="hidden">
+                        <div class="flex flex-wrap gap-2">
+                            <button type="button" id="cloudSyncNowBtn" class="btn btn-primary"><i class="fas fa-sync-alt mr-1"></i> Şimdi Senkronize Et</button>
+                            <button type="button" id="disconnectCloudBtn" class="btn btn-secondary"><i class="fas fa-unlink mr-1"></i> Bu Cihazda Kapat</button>
+                        </div>
+                    </div>
+                    <p id="cloudSyncStatus" class="text-sm mt-2"></p>
+                </section>
+
+                <div class="border-t pt-5" style="border-color: var(--border)">
+                    <h4 class="text-lg font-semibold mb-2">Alternatif: Doğrudan Cihaz Eşleştirme (QR)</h4>
+                    <p class="text-gray-400 text-sm mb-3">İki cihaz aynı anda açıkken tek seferlik aktarım. Hesap gerekmez.</p>
                     
                     <div class="form-group">
                         <label class="block text-sm mb-1" id="codeLabel">Eşleştirme Kodu</label>
@@ -1056,7 +1085,7 @@
 
 
 
-    <script src="js/app.js?v=20260926-4"></script>
+    <script src="js/app.js?v=20260926-5"></script>
 </body>
 
 </html>
