@@ -1163,8 +1163,44 @@ body.dark-theme {
 }
 
 
-.sync-modal .modal-header { background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%); }
-.sync-modal-content { width: 720px; max-width: 92vw; }
+.sync-modal-content {
+    width: 720px;
+    max-width: 92vw;
+    padding: 0;
+}
+
+.sync-modal .modal-header {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 16px 20px;
+    background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+    color: #fff;
+}
+
+.sync-modal .modal-header h3 {
+    margin: 0;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.sync-modal .close-trailer-btn {
+    flex-shrink: 0;
+}
+
+#qrContainer img,
+#qrContainer canvas {
+    margin-top: 12px;
+    padding: 12px;
+    background: #fff;
+    border-radius: 12px;
+    max-width: 100%;
+    height: auto;
+}
 .sync-form .form-group { margin-bottom: 12px; }
 .sync-form textarea { min-height: 140px; resize: vertical; }
 

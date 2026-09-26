@@ -8,7 +8,7 @@ import { JSDOM } from 'jsdom';
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8')
     // Dış kaynakları (CDN) testte yükleme
     .replace(/<script src="https?:[^"]*"><\/script>/g, '')
-    .replace(/<script src="js\/app.js"><\/script>/, '');
+    .replace(/<script src="js\/app\.js(\?v=[^"]*)?"><\/script>/, '');
 const appJs = readFileSync(new URL('../js/app.js', import.meta.url), 'utf8');
 
 // Uygulama betiğini gerçek bir <script> gibi çalıştır (let/const değişkenleri global kalsın)

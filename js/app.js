@@ -3349,8 +3349,71 @@ let rtcPeer = null;
 let rtcChannel = null;
 let rtcInitiator = false;
 
-function encodeSignal(obj) { try { return btoa(unescape(encodeURIComponent(JSON.stringify(obj)))); } catch (e) { return ''; } }
-function decodeSignal(str) { try { return JSON.parse(decodeURIComponent(escape(atob((str || '').trim())))); } catch (e) { alert('Geçersiz kod'); return null; } }
+// --- Eşleştirme kodu: kısaltılmış + sıkıştırılmış SDP ---
+// Kod QR'a sığsın diye TCP adayları atılır ve metin deflate ile sıkıştırılır.
+// "z1." ile başlayan kodlar sıkıştırılmıştır; eski (düz base64) kodlar da okunmaya devam eder.
+const SIGNAL_PREFIX = 'z1.';
+
+function slimSdp(sdp) {
+    return String(sdp || '')
+        .split(/\r?\n/)
+        .filter(line => line && !(line.startsWith('a=candidate:') && / tcp /i.test(line)))
+        .join('\r\n') + '\r\n';
+}
+
+function bytesToBase64Url(bytes) {
+    let binary = '';
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlToBytes(text) {
+    const b64 = text.replace(/-/g, '+').replace(/_/g, '/');
+    const binary = atob(b64 + '==='.slice((b64.length + 3) % 4));
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+}
+
+async function transformBytes(bytes, stream) {
+    const response = new Response(new Blob([bytes]).stream().pipeThrough(stream));
+    return new Uint8Array(await response.arrayBuffer());
+}
+
+async function encodeSignal(description) {
+    const payload = JSON.stringify({ t: description.type, s: slimSdp(description.sdp) });
+    const bytes = new TextEncoder().encode(payload);
+    if (typeof CompressionStream === 'function') {
+        try {
+            return SIGNAL_PREFIX + bytesToBase64Url(await transformBytes(bytes, new CompressionStream('deflate-raw')));
+        } catch (_) {}
+    }
+    return bytesToBase64Url(bytes);
+}
+
+async function decodeSignal(text) {
+    const raw = String(text || '').replace(/\s+/g, '');
+    if (!raw) return null;
+    try {
+        let json;
+        if (raw.startsWith(SIGNAL_PREFIX)) {
+            if (typeof DecompressionStream !== 'function') {
+                alert('Bu tarayıcı sıkıştırılmış kodu açamıyor. Lütfen tarayıcınızı güncelleyin.');
+                return null;
+            }
+            const bytes = await transformBytes(base64UrlToBytes(raw.slice(SIGNAL_PREFIX.length)), new DecompressionStream('deflate-raw'));
+            json = new TextDecoder().decode(bytes);
+        } else {
+            json = new TextDecoder().decode(base64UrlToBytes(raw));
+        }
+        const data = JSON.parse(json);
+        if (data && data.t && data.s) return { type: data.t, sdp: data.s };
+        if (data && data.type && data.sdp) return data; // eski format
+        return null;
+    } catch (_) {
+        return null;
+    }
+}
 
 // Basitleştirilmiş WebRTC eşleştirme sistemi
 let pairingState = 'waiting'; // 'waiting', 'offer-generated', 'answer-received', 'connected'
@@ -3462,7 +3525,7 @@ async function generateCode() {
         await rtcPeer.setLocalDescription(offer);
         updatePairingStatus('Kod hazırlanıyor - Ağ bilgileri toplanıyor...');
         await waitForIceGatheringComplete(rtcPeer);
-        pairingCode.value = encodeSignal(rtcPeer.localDescription);
+        pairingCode.value = await encodeSignal(rtcPeer.localDescription);
 
         updatePairingStatus('Kod üretildi - Diğer cihaza paylaşın');
         updateInstructions('offer-generated');
@@ -3503,7 +3566,7 @@ async function connectToPeer() {
     try {
         if (pairingState === 'waiting') {
             // Bu cihaz bağlanan taraf - offer kodunu işle
-            const remote = decodeSignal(codeValue);
+            const remote = await decodeSignal(codeValue);
             if (!remote) {
                 alert('Geçersiz kod formatı!');
                 return;
@@ -3517,7 +3580,7 @@ async function connectToPeer() {
             await waitForIceGatheringComplete(rtcPeer);
 
             // Answer kodunu göster
-            pairingCode.value = encodeSignal(rtcPeer.localDescription);
+            pairingCode.value = await encodeSignal(rtcPeer.localDescription);
             updatePairingStatus('Cevap kodu üretildi - İlk cihaza verin');
             updateInstructions('answer-received');
             pairingState = 'answer-received';
@@ -3526,7 +3589,7 @@ async function connectToPeer() {
 
         } else if (pairingState === 'offer-generated') {
             // Bu cihaz başlatan taraf - answer kodunu işle
-            const ans = decodeSignal(codeValue);
+            const ans = await decodeSignal(codeValue);
             if (!ans) {
                 alert('Geçersiz cevap kodu formatı!');
                 return;

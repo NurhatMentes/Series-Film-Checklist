@@ -1,6 +1,6 @@
 // İzleme Takip - service worker (çevrimdışı çalışma)
-const CACHE = 'izleme-takip-v3';
-const APP_SHELL = ['./', './index.html', './css/styles.css', './js/app.js', './manifest.webmanifest', './icon.svg'];
+const CACHE = 'izleme-takip-20260926-3';
+const APP_SHELL = ['./', './index.html', './css/styles.css?v=20260926-3', './js/app.js?v=20260926-3', './manifest.webmanifest', './icon.svg'];
 const CDN_HOSTS = ['cdn.tailwindcss.com', 'cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 
 self.addEventListener('install', event => {
@@ -23,7 +23,8 @@ self.addEventListener('fetch', event => {
     // Uygulama dosyaları: önce ağ (güncel sürüm), ağ yoksa önbellek
     if (url.origin === self.location.origin) {
         event.respondWith(
-            fetch(request)
+            // Tarayıcının HTTP önbelleğini atla, sunucuya her seferinde değişip değişmediğini sor
+            fetch(request, { cache: 'no-cache' })
                 .then(response => {
                     if (response.ok) {
                         const copy = response.clone();
