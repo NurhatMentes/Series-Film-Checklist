@@ -5104,9 +5104,11 @@ const settingsModal = document.getElementById('settingsModal');
 
 function openSettingsModal() {
     document.getElementById('tmdbKeyInput').value = getApiKey('tmdbKey');
-    document.getElementById('tmdbKey2Input').value = getApiKey('tmdbKey2');
+    const tmdbKey2El = document.getElementById('tmdbKey2Input'); // eski önbellekli HTML'de olmayabilir
+    if (tmdbKey2El) tmdbKey2El.value = getApiKey('tmdbKey2');
     document.getElementById('omdbKeyInput').value = getApiKey('omdbKey');
-    document.getElementById('collectKeyInput').value = getApiKey('collectKey');
+    const collectInputEl = document.getElementById('collectKeyInput'); // eski önbellekli HTML'de olmayabilir
+    if (collectInputEl) collectInputEl.value = getApiKey('collectKey');
     const savedCount = getTmdbKeys().length;
     document.getElementById('apiKeyStatus').innerHTML = savedCount
         ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>' +
@@ -5118,7 +5120,7 @@ function openSettingsModal() {
 document.getElementById('openSettings').addEventListener('click', openSettingsModal);
 document.getElementById('closeSettingsModal').addEventListener('click', () => closeModal(settingsModal));
 document.getElementById('toggleTmdbKey').addEventListener('click', () => {
-    const inputs = ['tmdbKeyInput', 'tmdbKey2Input', 'collectKeyInput'].map(id => document.getElementById(id));
+    const inputs = ['tmdbKeyInput', 'tmdbKey2Input', 'collectKeyInput'].map(id => document.getElementById(id)).filter(Boolean);
     const type = inputs[0].type === 'password' ? 'text' : 'password';
     inputs.forEach(input => { input.type = type; });
 });
@@ -5126,13 +5128,16 @@ document.getElementById('toggleTmdbKey').addEventListener('click', () => {
 document.getElementById('saveApiKeysBtn').addEventListener('click', async () => {
     const statusEl = document.getElementById('apiKeyStatus');
     const tmdbKey = document.getElementById('tmdbKeyInput').value.trim();
-    const tmdbKey2 = document.getElementById('tmdbKey2Input').value.trim();
+    const tmdbKey2Input = document.getElementById('tmdbKey2Input');
+    const collectInputEl = document.getElementById('collectKeyInput');
+    // Alan eski önbellekli HTML'de yoksa o anahtara dokunma
+    const tmdbKey2 = tmdbKey2Input ? tmdbKey2Input.value.trim() : getApiKey('tmdbKey2');
     const omdbKey = document.getElementById('omdbKeyInput').value.trim();
-    const collectKey = document.getElementById('collectKeyInput').value.trim();
+    const collectKey = collectInputEl ? collectInputEl.value.trim() : getApiKey('collectKey');
     if (tmdbKey) __origSetItem('tmdbKey', tmdbKey); else localStorage.removeItem('tmdbKey');
-    if (tmdbKey2) __origSetItem('tmdbKey2', tmdbKey2); else localStorage.removeItem('tmdbKey2');
+    if (tmdbKey2Input) { if (tmdbKey2) __origSetItem('tmdbKey2', tmdbKey2); else localStorage.removeItem('tmdbKey2'); }
     if (omdbKey) __origSetItem('omdbKey', omdbKey); else localStorage.removeItem('omdbKey');
-    if (collectKey) __origSetItem('collectKey', collectKey); else localStorage.removeItem('collectKey');
+    if (collectInputEl) { if (collectKey) __origSetItem('collectKey', collectKey); else localStorage.removeItem('collectKey'); }
     resetTmdbKeyCooldown();
 
     const messages = [];
