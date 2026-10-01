@@ -4218,8 +4218,30 @@ function getApiKey(name) {
     try { return (localStorage.getItem(name) || '').trim(); } catch (_) { return ''; }
 }
 
+// Birincil + yedek TMDB anahtarı (yedek isteğe bağlı)
+const TMDB_KEY_NAMES = ['tmdbKey', 'tmdbKey2'];
+
+function getTmdbKeys() {
+    const keys = TMDB_KEY_NAMES.map(getApiKey).filter(Boolean);
+    return keys.filter((k, i) => keys.indexOf(k) === i); // aynı anahtar iki kez girilmişse tekile indir
+}
+
 function hasTmdbKey() {
-    return !!getApiKey('tmdbKey');
+    return getTmdbKeys().length > 0;
+}
+
+// Sorun çıkaran anahtar bir süre dinlendirilir; sonraki istekler önce sağlam olanı dener
+const tmdbKeyCooldown = new Map(); // anahtar → bu zamana kadar (ms) sona kalan
+
+function tmdbFailureCooldownMs(status) {
+    if (status === 401 || status === 403) return 30 * 60 * 1000; // geçersiz/yetkisiz anahtar
+    if (status === 429) return 60 * 1000;                       // istek sınırı
+    return 20 * 1000;                                           // ağ / sunucu hatası
+}
+
+// Anahtar değiştiyse (ör. Ayarlar'dan kaydedildi) eski dinlendirmeleri sıfırla
+function resetTmdbKeyCooldown() {
+    tmdbKeyCooldown.clear();
 }
 
 // İstek sınırı (429) veya geçici ağ hatalarında kısa bekleyip tekrar dener
@@ -4246,9 +4268,9 @@ async function fetchJson(url, options, attempt = 0) {
     return res.json();
 }
 
-async function tmdbFetch(path, params = {}) {
-    const key = getApiKey('tmdbKey');
-    if (!key) throw new Error('TMDB anahtarı yok');
+// Tek bir anahtarla istek atar. retries=false ise 429/ağ hatasında beklemeden hemen hata verir
+// (yedek anahtara geçilecekse vakit kaybetmemek için).
+async function tmdbRequest(key, path, params = {}, retries = true) {
     const url = new URL('https://api.themoviedb.org/3' + path);
     Object.entries({ language: 'tr-TR', ...params }).forEach(([k, v]) => {
         if (v !== undefined && v !== null && v !== '') url.searchParams.set(k, v);
@@ -4256,13 +4278,46 @@ async function tmdbFetch(path, params = {}) {
     const headers = { accept: 'application/json' };
     if (key.startsWith('eyJ')) headers.Authorization = 'Bearer ' + key;
     else url.searchParams.set('api_key', key);
-    try {
-        return await fetchJson(url.toString(), { headers });
-    } catch (err) {
-        if (err.status === 401) throw new Error('TMDB anahtarı geçersiz. Ayarlar\'dan kontrol et.');
-        if (err.status === 429) throw new Error('TMDB istek sınırı aşıldı, biraz sonra tekrar dene.');
-        throw new Error('TMDB\'ye ulaşılamadı (' + err.message + ').');
+    return fetchJson(url.toString(), { headers }, retries ? 0 : 2);
+}
+
+function tmdbErrorMessage(err) {
+    if (err.status === 401) return 'TMDB anahtarı geçersiz. Ayarlar\'dan kontrol et.';
+    if (err.status === 429) return 'TMDB istek sınırı aşıldı, biraz sonra tekrar dene.';
+    return 'TMDB\'ye ulaşılamadı (' + err.message + ').';
+}
+
+// 404 gibi "anahtarla ilgisi olmayan" hatalarda yedek anahtara geçilmez
+function isTmdbKeyFailure(err) {
+    const s = err && err.status;
+    return !s || s === 401 || s === 403 || s === 429 || s >= 500;
+}
+
+// options.noRetry: son anahtarda da bekleyip tekrar denemez (başka bir yedek kaynak varsa vakit kaybetmemek için)
+async function tmdbFetch(path, params = {}, options = {}) {
+    const all = getTmdbKeys();
+    if (!all.length) throw new Error('TMDB anahtarı yok');
+    // Dinlenmede olmayanlar önce, sonra (son çare olarak) dinlenmedekiler
+    const now = Date.now();
+    const healthy = all.filter(k => (tmdbKeyCooldown.get(k) || 0) <= now);
+    const resting = all.filter(k => !healthy.includes(k));
+    const order = [...healthy, ...resting];
+
+    let lastErr;
+    for (let i = 0; i < order.length; i++) {
+        const key = order[i];
+        const isLast = i === order.length - 1;
+        try {
+            const data = await tmdbRequest(key, path, params, isLast && !options.noRetry);
+            tmdbKeyCooldown.delete(key);
+            return data;
+        } catch (err) {
+            lastErr = err;
+            if (!isTmdbKeyFailure(err)) break;
+            tmdbKeyCooldown.set(key, Date.now() + tmdbFailureCooldownMs(err.status));
+        }
     }
+    throw new Error(tmdbErrorMessage(lastErr));
 }
 
 function normalizeTitle(value) {
@@ -4390,31 +4445,46 @@ async function fetchOmdbRating(imdbId) {
 }
 
 // --- Arama ---
+async function searchTvmaze(query) {
+    const data = await fetchJson('https://api.tvmaze.com/search/shows?q=' + encodeURIComponent(query));
+    return (data || []).slice(0, 8).map(({ show }) => ({
+        source: 'tvmaze',
+        id: show.id,
+        title: show.name,
+        originalTitle: '',
+        year: (show.premiered || '').slice(0, 4),
+        poster: show.image ? safeUrl(show.image.medium) : '',
+        overview: stripHtml(show.summary)
+    }));
+}
+
 async function searchTitles(kind, query) {
     if (hasTmdbKey()) {
-        const data = await tmdbFetch(kind === 'series' ? '/search/tv' : '/search/movie', { query, include_adult: 'false' });
-        return (data.results || []).slice(0, 8).map(r => ({
-            source: 'tmdb',
-            id: r.id,
-            title: kind === 'series' ? r.name : r.title,
-            originalTitle: kind === 'series' ? r.original_name : r.original_title,
-            year: ((kind === 'series' ? r.first_air_date : r.release_date) || '').slice(0, 4),
-            poster: r.poster_path ? TMDB_IMG + 'w92' + r.poster_path : '',
-            overview: r.overview || ''
-        }));
+        try {
+            // Diziler için TVmaze yedek olduğundan TMDB'de beklemeden hata verilir
+            const data = await tmdbFetch(kind === 'series' ? '/search/tv' : '/search/movie', { query, include_adult: 'false' }, { noRetry: kind === 'series' });
+            return (data.results || []).slice(0, 8).map(r => ({
+                source: 'tmdb',
+                id: r.id,
+                title: kind === 'series' ? r.name : r.title,
+                originalTitle: kind === 'series' ? r.original_name : r.original_title,
+                year: ((kind === 'series' ? r.first_air_date : r.release_date) || '').slice(0, 4),
+                poster: r.poster_path ? TMDB_IMG + 'w92' + r.poster_path : '',
+                overview: r.overview || ''
+            }));
+        } catch (err) {
+            if (kind !== 'series') throw err;
+            // TMDB (tüm anahtarlar) yanıt vermedi: diziler için TVmaze'ye düş
+            try {
+                const results = await searchTvmaze(query);
+                results.forEach(r => { r.fallback = true; });
+                return results;
+            } catch (_) {
+                throw err; // yedek de çalışmadıysa asıl TMDB hatasını göster
+            }
+        }
     }
-    if (kind === 'series') {
-        const data = await fetchJson('https://api.tvmaze.com/search/shows?q=' + encodeURIComponent(query));
-        return (data || []).slice(0, 8).map(({ show }) => ({
-            source: 'tvmaze',
-            id: show.id,
-            title: show.name,
-            originalTitle: '',
-            year: (show.premiered || '').slice(0, 4),
-            poster: show.image ? safeUrl(show.image.medium) : '',
-            overview: stripHtml(show.summary)
-        }));
-    }
+    if (kind === 'series') return searchTvmaze(query);
     throw new Error('Film araması için TMDB anahtarı gerekli. Sağ üstteki ⚙ Ayarlar\'dan ekleyebilirsin (ücretsiz).');
 }
 
@@ -4427,12 +4497,33 @@ function stripHtml(html) {
 // --- Detaylar: formda kullanılacak ortak yapı ---
 async function fetchTitleDetails(kind, result) {
     if (result.source === 'tvmaze') return fetchTvmazeDetails(result.id);
+    try {
+        return await fetchTmdbTitleDetails(kind, result);
+    } catch (err) {
+        if (kind !== 'series') throw err;
+        // TMDB yanıt vermedi: diziyi adından TVmaze'de bulup oradan doldur
+        const names = [result.originalTitle, result.title].filter(Boolean);
+        const wanted = names.map(normalizeTitle);
+        let match = null;
+        try {
+            if (names.length) {
+                const found = await searchTvmaze(names[0]);
+                match = found.find(r => wanted.includes(normalizeTitle(r.title))) || null;
+            }
+        } catch (_) {}
+        if (!match) throw err; // güvenli eşleşme yoksa asıl TMDB hatasını göster
+        const info = await fetchTvmazeDetails(match.id);
+        info.fallback = true;
+        return info;
+    }
+}
 
+async function fetchTmdbTitleDetails(kind, result) {
     const path = kind === 'series' ? `/tv/${result.id}` : `/movie/${result.id}`;
     const append = kind === 'series'
         ? 'videos,external_ids,watch/providers'
         : 'videos,external_ids,watch/providers,release_dates';
-    const d = await tmdbFetch(path, { append_to_response: append, include_video_language: 'tr,en,null' });
+    const d = await tmdbFetch(path, { append_to_response: append, include_video_language: 'tr,en,null' }, { noRetry: kind === 'series' });
 
     let description = d.overview || '';
     if (!description) {
@@ -4615,9 +4706,11 @@ async function runAutoFillSearch(kind, query, { immediate } = {}) {
         if (seq !== state.requestSeq) return;
         renderAutoFillResults(kind, results);
         if (results.length === 0) setAutoFillStatus(kind, 'Sonuç bulunamadı. Farklı yazmayı veya orijinal adını denemeyi deneyebilirsin.');
-        else setAutoFillStatus(kind, results[0].source === 'tvmaze'
-            ? 'Doğru olanı seç. (Anahtarsız kaynak: açıklama İngilizce, fragman yok. TMDB anahtarı eklersen hepsi Türkçe gelir.)'
-            : 'Doğru olanı seç, bilgiler otomatik dolsun.');
+        else setAutoFillStatus(kind, results[0].fallback
+            ? 'TMDB şu an yanıt vermedi, yedek kaynak TVmaze kullanıldı. Doğru olanı seç. (Açıklama İngilizce, fragman yok.)'
+            : results[0].source === 'tvmaze'
+                ? 'Doğru olanı seç. (Anahtarsız kaynak: açıklama İngilizce, fragman yok. TMDB anahtarı eklersen hepsi Türkçe gelir.)'
+                : 'Doğru olanı seç, bilgiler otomatik dolsun.');
     } catch (err) {
         if (seq !== state.requestSeq) return;
         hideAutoFillResults(kind);
@@ -4825,9 +4918,12 @@ const settingsModal = document.getElementById('settingsModal');
 
 function openSettingsModal() {
     document.getElementById('tmdbKeyInput').value = getApiKey('tmdbKey');
+    document.getElementById('tmdbKey2Input').value = getApiKey('tmdbKey2');
     document.getElementById('omdbKeyInput').value = getApiKey('omdbKey');
-    document.getElementById('apiKeyStatus').innerHTML = hasTmdbKey()
-        ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>TMDB anahtarı kayıtlı.</span>'
+    const savedCount = getTmdbKeys().length;
+    document.getElementById('apiKeyStatus').innerHTML = savedCount
+        ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>' +
+          (savedCount > 1 ? '2 TMDB anahtarı kayıtlı (biri sorun çıkarırsa diğerine geçilir).' : 'TMDB anahtarı kayıtlı.') + '</span>'
         : '<span class="opacity-80">Henüz TMDB anahtarı eklenmedi.</span>';
     settingsModal.classList.add('active');
 }
@@ -4835,27 +4931,35 @@ function openSettingsModal() {
 document.getElementById('openSettings').addEventListener('click', openSettingsModal);
 document.getElementById('closeSettingsModal').addEventListener('click', () => closeModal(settingsModal));
 document.getElementById('toggleTmdbKey').addEventListener('click', () => {
-    const input = document.getElementById('tmdbKeyInput');
-    input.type = input.type === 'password' ? 'text' : 'password';
+    const inputs = ['tmdbKeyInput', 'tmdbKey2Input'].map(id => document.getElementById(id));
+    const type = inputs[0].type === 'password' ? 'text' : 'password';
+    inputs.forEach(input => { input.type = type; });
 });
 
 document.getElementById('saveApiKeysBtn').addEventListener('click', async () => {
     const statusEl = document.getElementById('apiKeyStatus');
     const tmdbKey = document.getElementById('tmdbKeyInput').value.trim();
+    const tmdbKey2 = document.getElementById('tmdbKey2Input').value.trim();
     const omdbKey = document.getElementById('omdbKeyInput').value.trim();
     if (tmdbKey) __origSetItem('tmdbKey', tmdbKey); else localStorage.removeItem('tmdbKey');
+    if (tmdbKey2) __origSetItem('tmdbKey2', tmdbKey2); else localStorage.removeItem('tmdbKey2');
     if (omdbKey) __origSetItem('omdbKey', omdbKey); else localStorage.removeItem('omdbKey');
+    resetTmdbKeyCooldown();
 
     const messages = [];
-    if (tmdbKey) {
+    if (tmdbKey || tmdbKey2) {
         statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Test ediliyor...';
-        try {
-            const data = await tmdbFetch('/search/movie', { query: 'Inception' });
-            messages.push(data && Array.isArray(data.results)
-                ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>TMDB anahtarı çalışıyor.</span>'
-                : '<span class="text-red-500">TMDB beklenmeyen yanıt verdi.</span>');
-        } catch (err) {
-            messages.push('<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>' + esc(err.message) + '</span>');
+        // Her anahtar ayrı ayrı test edilir (yedeğe geçiş testi bozmasın diye tmdbRequest ile)
+        const toTest = [['TMDB anahtarı', tmdbKey], ['Yedek TMDB anahtarı', tmdbKey2]].filter(([, k]) => k);
+        for (const [label, key] of toTest) {
+            try {
+                const data = await tmdbRequest(key, '/search/movie', { query: 'Inception' });
+                messages.push(data && Array.isArray(data.results)
+                    ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>' + label + ' çalışıyor.</span>'
+                    : '<span class="text-red-500">' + label + ': TMDB beklenmeyen yanıt verdi.</span>');
+            } catch (err) {
+                messages.push('<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>' + label + ': ' + esc(tmdbErrorMessage(err)) + '</span>');
+            }
         }
     } else {
         messages.push('<span class="opacity-80">TMDB anahtarı kaldırıldı.</span>');
@@ -4896,7 +5000,7 @@ async function findExactMatch(kind, item) {
 async function fillItem(kind, item, options) {
     let info;
     if (item.tmdbId && hasTmdbKey()) {
-        info = await fetchTitleDetails(kind, { source: 'tmdb', id: item.tmdbId });
+        info = await fetchTitleDetails(kind, { source: 'tmdb', id: item.tmdbId, title: item.name, originalTitle: item.originalName });
     } else if (item.tvmazeId && !hasTmdbKey() && kind === 'series') {
         info = await fetchTitleDetails(kind, { source: 'tvmaze', id: item.tvmazeId });
     } else {
