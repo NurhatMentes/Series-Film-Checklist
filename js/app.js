@@ -4281,6 +4281,7 @@ async function fetchJson(url, options, attempt = 0) {
     if (!res.ok) {
         const err = new Error('HTTP ' + res.status);
         err.status = res.status;
+        try { err.body = (await res.text()).slice(0, 300); } catch (_) { /* gövde okunamadı */ }
         throw err;
     }
     return res.json();
@@ -4564,29 +4565,41 @@ async function fetchOmdbDetails(imdbId) {
 }
 
 // --- CollectAPI IMDB API (OMDb verisi; ücretsiz planda ayda 1.000 istek) ---
-async function collectRequest(endpoint, params) {
+// minimal=true: sunucu tarafı "type" süzgeci ve content-type başlığı olmadan, yalnızca anahtar + sorgu ile istek
+async function collectRequest(endpoint, params, minimal = false) {
     const key = getApiKey('collectKey').replace(/^apikey\s+/i, ''); // başında "apikey" ile yapıştırılmış olabilir
     if (!key) throw new Error('CollectAPI anahtarı yok');
     const url = new URL('https://api.collectapi.com/imdb/' + endpoint);
-    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') url.searchParams.set(k, v); });
+    Object.entries(params).forEach(([k, v]) => {
+        if (minimal && k === 'type') return;
+        if (v !== undefined && v !== '') url.searchParams.set(k, v);
+    });
+    const headers = { authorization: 'apikey ' + key };
+    if (!minimal) headers['content-type'] = 'application/json';
     let data;
     try {
-        data = await fetchJson(url.toString(), {
-            headers: { authorization: 'apikey ' + key, 'content-type': 'application/json' },
-            timeoutMs: 8000
-        });
+        data = await fetchJson(url.toString(), { headers, timeoutMs: 8000 });
     } catch (err) {
         if (err.status === 401 || err.status === 403) throw new Error('CollectAPI anahtarı geçersiz veya aylık istek limiti doldu.');
-        throw new Error('CollectAPI\'ye ulaşılamadı (' + err.message + ').');
+        // Sunucu hatasında bir kez sade istekle dene (kimi sunucular fazladan parametre/başlıkta takılabiliyor)
+        if (err.status >= 500 && !minimal) return collectRequest(endpoint, params, true);
+        // Sunucunun kendi hata mesajını göster (JSON ise "message" alanı, değilse düz metin)
+        let detail = '';
+        if (err.body) {
+            try { const j = JSON.parse(err.body); detail = String(j.message || j.error || j.msg || '').trim(); } catch (_) { detail = String(err.body).replace(/<[^>]+>/g, ' ').trim(); }
+        }
+        throw new Error('CollectAPI\'ye ulaşılamadı (' + err.message + (detail ? ': ' + detail.slice(0, 120) : '') + ').');
     }
     if (!data || data.success === false) throw new Error('CollectAPI: ' + ((data && data.message) || 'yanıt alınamadı'));
     return data;
 }
 
 async function searchCollect(kind, query) {
-    const data = await collectRequest('imdbSearchByName', { query, type: kind === 'series' ? 'series' : 'movie' });
+    const wanted = kind === 'series' ? 'series' : 'movie';
+    const data = await collectRequest('imdbSearchByName', { query, type: wanted });
     const list = Array.isArray(data.result) ? data.result : [];
-    return list.slice(0, 8).map(m => mapOmdbSearchItem(m, 'collect'));
+    // Sunucu "type" süzgecini uygulamadıysa (sade istek) burada ayıkla
+    return list.filter(m => !m.Type || m.Type === wanted).slice(0, 8).map(m => mapOmdbSearchItem(m, 'collect'));
 }
 
 async function fetchCollectDetails(imdbId) {
