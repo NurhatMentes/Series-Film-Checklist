@@ -4521,24 +4521,27 @@ async function searchOmdb(query) {
         if (data && /not found|too many/i.test(data.Error || '')) return [];
         throw new Error('OMDb: ' + ((data && data.Error) || 'yanıt alınamadı'));
     }
-    return (data.Search || []).slice(0, 8).map(m => ({
-        source: 'omdb',
+    return (data.Search || []).slice(0, 8).map(m => mapOmdbSearchItem(m, 'omdb'));
+}
+
+// OMDb ve CollectAPI (OMDb verisini sarmalar) aynı kayıt biçimini kullanır
+function mapOmdbSearchItem(m, source) {
+    return {
+        source,
         id: m.imdbID,
         title: m.Title,
         originalTitle: '',
         year: String(m.Year || '').slice(0, 4),
         poster: m.Poster && m.Poster !== 'N/A' ? safeUrl(m.Poster) : '',
         overview: ''
-    }));
+    };
 }
 
-async function fetchOmdbDetails(imdbId) {
-    const d = await omdbRequest({ i: imdbId, plot: 'full' });
-    if (!d || d.Response !== 'True') throw new Error('OMDb: ' + ((d && d.Error) || 'yanıt alınamadı'));
+function mapOmdbRecord(d, imdbId, source) {
     const clean = v => (v && v !== 'N/A') ? String(v) : '';
     const rating = parseFloat(d.imdbRating);
     return {
-        source: 'omdb',
+        source,
         imdbId: d.imdbID || imdbId,
         name: clean(d.Title),
         originalName: clean(d.Title),
@@ -4554,17 +4557,89 @@ async function fetchOmdbDetails(imdbId) {
     };
 }
 
-// TMDB yanıt vermezse: diziler için TVmaze, filmler için (anahtar varsa) OMDb
-function hasFallbackSource(kind) {
-    return kind === 'series' || !!getApiKey('omdbKey');
+async function fetchOmdbDetails(imdbId) {
+    const d = await omdbRequest({ i: imdbId, plot: 'full' });
+    if (!d || d.Response !== 'True') throw new Error('OMDb: ' + ((d && d.Error) || 'yanıt alınamadı'));
+    return mapOmdbRecord(d, imdbId, 'omdb');
 }
 
-function searchFallback(kind, query) {
-    return kind === 'series' ? searchTvmaze(query) : searchOmdb(query);
+// --- CollectAPI IMDB API (OMDb verisi; ücretsiz planda ayda 1.000 istek) ---
+async function collectRequest(endpoint, params) {
+    const key = getApiKey('collectKey').replace(/^apikey\s+/i, ''); // başında "apikey" ile yapıştırılmış olabilir
+    if (!key) throw new Error('CollectAPI anahtarı yok');
+    const url = new URL('https://api.collectapi.com/imdb/' + endpoint);
+    Object.entries(params).forEach(([k, v]) => { if (v !== undefined && v !== '') url.searchParams.set(k, v); });
+    let data;
+    try {
+        data = await fetchJson(url.toString(), {
+            headers: { authorization: 'apikey ' + key, 'content-type': 'application/json' },
+            timeoutMs: 8000
+        });
+    } catch (err) {
+        if (err.status === 401 || err.status === 403) throw new Error('CollectAPI anahtarı geçersiz veya aylık istek limiti doldu.');
+        throw new Error('CollectAPI\'ye ulaşılamadı (' + err.message + ').');
+    }
+    if (!data || data.success === false) throw new Error('CollectAPI: ' + ((data && data.message) || 'yanıt alınamadı'));
+    return data;
+}
+
+async function searchCollect(kind, query) {
+    const data = await collectRequest('imdbSearchByName', { query, type: kind === 'series' ? 'series' : 'movie' });
+    const list = Array.isArray(data.result) ? data.result : [];
+    return list.slice(0, 8).map(m => mapOmdbSearchItem(m, 'collect'));
+}
+
+async function fetchCollectDetails(imdbId) {
+    const data = await collectRequest('imdbSearchById', { movieId: imdbId });
+    const d = data.result;
+    if (!d || Array.isArray(d) || d.Response === 'False') throw new Error('CollectAPI: kayıt bulunamadı');
+    return mapOmdbRecord(d, imdbId, 'collect');
+}
+
+// TMDB yanıt vermezse sırayla denenecek yedek kaynaklar:
+// diziler: TVmaze → CollectAPI, filmler: OMDb → CollectAPI (anahtarı kayıtlı olanlar)
+function fallbackSources(kind) {
+    const list = [];
+    if (kind === 'series') list.push('tvmaze');
+    if (kind === 'movie' && getApiKey('omdbKey')) list.push('omdb');
+    if (getApiKey('collectKey')) list.push('collect');
+    return list;
+}
+
+function hasFallbackSource(kind) {
+    return fallbackSources(kind).length > 0;
+}
+
+function searchFromSource(source, kind, query) {
+    if (source === 'tvmaze') return searchTvmaze(query);
+    if (source === 'omdb') return searchOmdb(query);
+    return searchCollect(kind, query);
+}
+
+function detailsFromSource(source, id) {
+    if (source === 'tvmaze') return fetchTvmazeDetails(id);
+    if (source === 'omdb') return fetchOmdbDetails(id);
+    return fetchCollectDetails(id);
+}
+
+// Kaynakları sırayla dener: sonuç veren ilkini döndürür; hepsi boşsa [], hepsi hata verdiyse son hata
+async function searchFallback(kind, query) {
+    let lastErr = null, anyEmpty = false;
+    for (const source of fallbackSources(kind)) {
+        try {
+            const results = await searchFromSource(source, kind, query);
+            if (results.length) return results;
+            anyEmpty = true;
+        } catch (err) {
+            lastErr = err;
+        }
+    }
+    if (anyEmpty || !lastErr) return [];
+    throw lastErr;
 }
 
 function fallbackSourceName(source) {
-    return source === 'omdb' ? 'OMDb' : 'TVmaze';
+    return { omdb: 'OMDb', collect: 'CollectAPI' }[source] || 'TVmaze';
 }
 
 async function searchTitles(kind, query) {
@@ -4593,8 +4668,7 @@ async function searchTitles(kind, query) {
             }
         }
     }
-    if (kind === 'series') return searchTvmaze(query);
-    if (getApiKey('omdbKey')) return searchOmdb(query);
+    if (hasFallbackSource(kind)) return searchFallback(kind, query);
     throw new Error('Film araması için TMDB anahtarı gerekli. Sağ üstteki ⚙ Ayarlar\'dan ekleyebilirsin (ücretsiz).');
 }
 
@@ -4606,26 +4680,27 @@ function stripHtml(html) {
 
 // --- Detaylar: formda kullanılacak ortak yapı ---
 async function fetchTitleDetails(kind, result) {
-    if (result.source === 'tvmaze') return fetchTvmazeDetails(result.id);
-    if (result.source === 'omdb') return fetchOmdbDetails(result.id);
+    if (['tvmaze', 'omdb', 'collect'].includes(result.source)) return detailsFromSource(result.source, result.id);
     try {
         return await fetchTmdbTitleDetails(kind, result);
     } catch (err) {
         if (!hasFallbackSource(kind)) throw err;
-        // TMDB yanıt vermedi: başlığı adından yedek kaynakta (dizi: TVmaze, film: OMDb) bulup oradan doldur
+        // TMDB yanıt vermedi: başlığı adından yedek kaynaklarda sırayla bulup oradan doldur
         const names = [result.originalTitle, result.title].filter(Boolean);
         const wanted = names.map(normalizeTitle);
-        let info = null;
-        try {
-            if (names.length) {
-                const found = await searchFallback(kind, names[0]);
-                const match = found.find(r => wanted.includes(normalizeTitle(r.title)));
-                if (match) info = kind === 'series' ? await fetchTvmazeDetails(match.id) : await fetchOmdbDetails(match.id);
+        if (names.length) {
+            for (const source of fallbackSources(kind)) {
+                try {
+                    const found = await searchFromSource(source, kind, names[0]);
+                    const match = found.find(r => wanted.includes(normalizeTitle(r.title)));
+                    if (!match) continue;
+                    const info = await detailsFromSource(source, match.id);
+                    info.fallback = true;
+                    return info;
+                } catch (_) { /* sıradaki kaynağı dene */ }
             }
-        } catch (_) {}
-        if (!info) throw err; // güvenli eşleşme yoksa asıl TMDB hatasını göster
-        info.fallback = true;
-        return info;
+        }
+        throw err; // güvenli eşleşme yoksa asıl TMDB hatasını göster
     }
 }
 
@@ -4776,7 +4851,7 @@ function resetAutoFill(kind) {
     state.requestSeq++;
     hideAutoFillResults(kind);
     const els = autoFillEls(kind);
-    const hint = hasTmdbKey() || kind === 'series' || getApiKey('omdbKey')
+    const hint = hasTmdbKey() || hasFallbackSource(kind)
         ? '<i class="fas fa-magic mr-1"></i>Adını yaz, çıkan listeden seç: bilgiler otomatik dolar.'
         : '<i class="fas fa-info-circle mr-1"></i>Otomatik doldurma için <button type="button" class="helper-link" data-open-settings>TMDB anahtarı ekle</button>.';
     setAutoFillStatus(kind, hint);
@@ -4819,7 +4894,7 @@ async function runAutoFillSearch(kind, query, { immediate } = {}) {
         if (results.length === 0) setAutoFillStatus(kind, 'Sonuç bulunamadı. Farklı yazmayı veya orijinal adını denemeyi deneyebilirsin.');
         else setAutoFillStatus(kind, results[0].fallback
             ? 'TMDB şu an yanıt vermedi, yedek kaynak ' + fallbackSourceName(results[0].source) + ' kullanıldı. Doğru olanı seç. (Açıklama İngilizce, fragman yok.)'
-            : (results[0].source === 'tvmaze' || results[0].source === 'omdb')
+            : results[0].source !== 'tmdb'
                 ? 'Doğru olanı seç. (' + fallbackSourceName(results[0].source) + ' kaynağı: açıklama İngilizce, fragman yok. TMDB anahtarı eklersen hepsi Türkçe gelir.)'
                 : 'Doğru olanı seç, bilgiler otomatik dolsun.');
     } catch (err) {
@@ -5031,6 +5106,7 @@ function openSettingsModal() {
     document.getElementById('tmdbKeyInput').value = getApiKey('tmdbKey');
     document.getElementById('tmdbKey2Input').value = getApiKey('tmdbKey2');
     document.getElementById('omdbKeyInput').value = getApiKey('omdbKey');
+    document.getElementById('collectKeyInput').value = getApiKey('collectKey');
     const savedCount = getTmdbKeys().length;
     document.getElementById('apiKeyStatus').innerHTML = savedCount
         ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>' +
@@ -5042,7 +5118,7 @@ function openSettingsModal() {
 document.getElementById('openSettings').addEventListener('click', openSettingsModal);
 document.getElementById('closeSettingsModal').addEventListener('click', () => closeModal(settingsModal));
 document.getElementById('toggleTmdbKey').addEventListener('click', () => {
-    const inputs = ['tmdbKeyInput', 'tmdbKey2Input'].map(id => document.getElementById(id));
+    const inputs = ['tmdbKeyInput', 'tmdbKey2Input', 'collectKeyInput'].map(id => document.getElementById(id));
     const type = inputs[0].type === 'password' ? 'text' : 'password';
     inputs.forEach(input => { input.type = type; });
 });
@@ -5052,9 +5128,11 @@ document.getElementById('saveApiKeysBtn').addEventListener('click', async () => 
     const tmdbKey = document.getElementById('tmdbKeyInput').value.trim();
     const tmdbKey2 = document.getElementById('tmdbKey2Input').value.trim();
     const omdbKey = document.getElementById('omdbKeyInput').value.trim();
+    const collectKey = document.getElementById('collectKeyInput').value.trim();
     if (tmdbKey) __origSetItem('tmdbKey', tmdbKey); else localStorage.removeItem('tmdbKey');
     if (tmdbKey2) __origSetItem('tmdbKey2', tmdbKey2); else localStorage.removeItem('tmdbKey2');
     if (omdbKey) __origSetItem('omdbKey', omdbKey); else localStorage.removeItem('omdbKey');
+    if (collectKey) __origSetItem('collectKey', collectKey); else localStorage.removeItem('collectKey');
     resetTmdbKeyCooldown();
 
     const messages = [];
@@ -5083,6 +5161,16 @@ document.getElementById('saveApiKeysBtn').addEventListener('click', async () => 
                 : '<span class="text-red-500">OMDb anahtarı geçersiz: ' + esc(data && data.Error) + '</span>');
         } catch (err) {
             messages.push('<span class="text-red-500">OMDb test edilemedi: ' + esc(err.message) + '</span>');
+        }
+    }
+    if (collectKey) {
+        try {
+            const results = await searchCollect('movie', 'Inception');
+            messages.push(results.length
+                ? '<span class="text-green-600"><i class="fas fa-check-circle mr-1"></i>CollectAPI anahtarı çalışıyor.</span>'
+                : '<span class="text-red-500">CollectAPI beklenmeyen (boş) yanıt verdi.</span>');
+        } catch (err) {
+            messages.push('<span class="text-red-500"><i class="fas fa-times-circle mr-1"></i>' + esc(err.message) + '</span>');
         }
     }
     statusEl.innerHTML = messages.join('<br>');
@@ -5114,8 +5202,8 @@ async function fillItem(kind, item, options) {
         info = await fetchTitleDetails(kind, { source: 'tmdb', id: item.tmdbId, title: item.name, originalTitle: item.originalName });
     } else if (item.tvmazeId && !hasTmdbKey() && kind === 'series') {
         info = await fetchTitleDetails(kind, { source: 'tvmaze', id: item.tvmazeId });
-    } else if (kind === 'movie' && !hasTmdbKey() && item.imdbId && getApiKey('omdbKey')) {
-        info = await fetchTitleDetails(kind, { source: 'omdb', id: item.imdbId });
+    } else if (kind === 'movie' && !hasTmdbKey() && item.imdbId && (getApiKey('omdbKey') || getApiKey('collectKey'))) {
+        info = await fetchTitleDetails(kind, { source: getApiKey('omdbKey') ? 'omdb' : 'collect', id: item.imdbId });
     } else {
         const match = await findExactMatch(kind, item);
         if (!match) return { status: 'nomatch' };
@@ -5132,7 +5220,7 @@ async function fillItem(kind, item, options) {
     fill('imageUrl', info.imageUrl, 'poster');
     fill('trailerUrl', info.trailerUrl, 'fragman');
     // Anahtarsız kaynağın açıklamaları İngilizce; Türkçe listeye toplu olarak yazma
-    if (info.source !== 'tvmaze' && info.source !== 'omdb' && !info.fallback) fill('description', info.description, 'açıklama');
+    if (info.source === 'tmdb') fill('description', info.description, 'açıklama');
     fill('imdbRating', info.imdbRating, 'puan');
     fill('releaseDate', info.releaseDate || null, 'tarih');
     if (kind === 'series' && (!item.platform || item.platform === 'Diğer') && info.platform) {
@@ -5171,12 +5259,12 @@ document.getElementById('startBulkFillBtn').addEventListener('click', async () =
     const addSeasons = document.getElementById('bulkFillAddSeasons').checked;
     const categories = document.getElementById('bulkFillCategories').checked;
     if (!hasTmdbKey()) {
-        if (!confirm('TMDB anahtarı yok. Diziler TVmaze ile, filmler (OMDb anahtarı varsa) OMDb ile; sınırlı (İngilizce) kaynakla tamamlanacak. Devam edilsin mi?')) return;
+        if (!confirm('TMDB anahtarı yok. Diziler TVmaze ile, filmler (OMDb veya CollectAPI anahtarı varsa) onlarla; sınırlı (İngilizce) kaynakla tamamlanacak. Devam edilsin mi?')) return;
     }
 
     const queue = [
         ...seriesData.filter(s => itemNeedsFill(s) || addSeasons).map(item => ({ kind: 'series', item })),
-        ...((hasTmdbKey() || getApiKey('omdbKey')) ? moviesData.filter(itemNeedsFill).map(item => ({ kind: 'movie', item })) : [])
+        ...((hasTmdbKey() || hasFallbackSource('movie')) ? moviesData.filter(itemNeedsFill).map(item => ({ kind: 'movie', item })) : [])
     ];
     if (queue.length === 0) {
         alert('Tamamlanacak eksik bilgi bulunamadı.');
