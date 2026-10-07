@@ -3212,7 +3212,7 @@ document.getElementById('importData').addEventListener('change', function (e) {
 const TABS = [
     { tab: seriesTab, content: seriesContent },
     { tab: moviesTab, content: moviesContent },
-    { tab: upcomingTab, content: upcomingContent, onShow: renderUpcomingReleases },
+    { tab: upcomingTab, content: upcomingContent, onShow: () => { renderUpcomingReleases(); renderNewReleases(false); } },
     { tab: categoriesTab, content: categoriesContent },
     { tab: tagsTab, content: tagsContent },
     { tab: trailersTab, content: trailersContent, onShow: renderTrailersTab },
@@ -5907,7 +5907,8 @@ function renderRecCard(rec, reason) {
                 ${rec.vote ? `<span class="rec-vote"><i class="fas fa-star"></i> ${esc(rec.vote)}</span>` : ''}
             </div>
             <div class="rec-body">
-                <div class="rec-title">${esc(rec.title)}${rec.year ? ` <span class="rec-year">(${esc(rec.year)})</span>` : ''}</div>
+                <div class="rec-title">${esc(rec.title)}${rec.year && !rec.date ? ` <span class="rec-year">(${esc(rec.year)})</span>` : ''}</div>
+                ${rec.date ? renderRecDate(rec.date) : ''}
                 ${reason ? `<div class="rec-reason"><i class="fas fa-heart mr-1"></i>${esc(reason)}</div>` : ''}
                 ${rec.overview ? `<p class="rec-overview">${esc(rec.overview)}</p>` : ''}
                 <div class="rec-actions">
@@ -6075,6 +6076,7 @@ async function renderDiscover(forceRefresh) {
 function setupRecommendations() {
     document.getElementById('closeRecsModal').addEventListener('click', () => closeModal(recsModal));
     document.getElementById('refreshDiscoverBtn').addEventListener('click', () => renderDiscover(true));
+    setupNewReleases();
     document.querySelectorAll('[data-discover-filter]').forEach(btn => {
         btn.addEventListener('click', () => {
             currentDiscoverFilter = btn.getAttribute('data-discover-filter');
@@ -6110,10 +6112,189 @@ function setupRecommendations() {
             const key = dismissBtn.getAttribute('data-rec-dismiss');
             dismissRec(key);
             const card = dismissBtn.closest('.rec-card');
+            if (card && card.closest('#newReleasesList')) {
+                renderNewReleasesList();
+                showToast('Bu yapım yeni çıkanlarda bir daha gösterilmeyecek.');
+                return;
+            }
             if (card) card.remove();
             showToast('Bu yapım bir daha önerilmeyecek.');
         }
     });
+}
+
+// =====================================================================
+// Yeni Çıkanlar: önümüzdeki 30 gün içinde çıkacak popüler yapımlar (TMDB discover)
+// =====================================================================
+const NEW_RELEASES_TTL = 6 * 60 * 60 * 1000; // 6 saat
+const NEW_RELEASES_DAYS = 30;
+const NEW_RELEASES_PER_KIND = 24;
+let newReleasesItems = [];
+let newReleasesLoading = false;
+let newReleasesPeriod = 'all'; // all | week | month
+let newReleasesKind = 'all'; // all | series | movies
+
+function isoLocalDate(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+function renderRecDate(dateString) {
+    const badge = getReleaseBadgeInfo(dateString);
+    if (!badge) return '';
+    const days = getDaysUntilRelease(dateString);
+    const extra = days > 1 && days <= 30 ? ` · ${days} gün kaldı` : (days === 1 ? ' · yarın' : (days === 0 ? ' · bugün' : ''));
+    return `<div class="rec-date ${badge.class === 'release-badge-soon' || badge.class === 'release-badge-today' ? 'is-soon' : ''}"><i class="fas fa-calendar-alt mr-1"></i>${esc(formatReleaseDate(dateString))}${esc(extra)}</div>`;
+}
+
+async function fetchNewReleases() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const end = new Date(today);
+    end.setDate(end.getDate() + NEW_RELEASES_DAYS);
+    const from = isoLocalDate(today);
+    const to = isoLocalDate(end);
+
+    const movieParams = page => ({
+        'primary_release_date.gte': from, 'primary_release_date.lte': to,
+        sort_by: 'popularity.desc', include_adult: 'false', page
+    });
+    // Talk-show, haber ve pembe dizileri ele: "yeni çıkan dizi" olarak ilgi çekmez
+    const tvParams = page => ({
+        'first_air_date.gte': from, 'first_air_date.lte': to,
+        sort_by: 'popularity.desc', include_null_first_air_dates: 'false',
+        without_genres: '10767,10763,10766', page
+    });
+
+    const jobs = [
+        ['movie', tmdbFetch('/discover/movie', movieParams(1))],
+        ['movie', tmdbFetch('/discover/movie', movieParams(2))],
+        ['series', tmdbFetch('/discover/tv', tvParams(1))],
+        ['series', tmdbFetch('/discover/tv', tvParams(2))]
+    ];
+    const settled = await Promise.allSettled(jobs.map(j => j[1]));
+    const failed = settled.filter(r => r.status === 'rejected');
+    if (failed.length === settled.length) throw failed[0].reason;
+
+    const items = [];
+    settled.forEach((res, i) => {
+        if (res.status !== 'fulfilled') return;
+        const kind = jobs[i][0];
+        (res.value.results || []).forEach(r => {
+            const rec = mapTmdbResult(kind, r);
+            rec.date = (kind === 'series' ? r.first_air_date : r.release_date) || '';
+            rec.popularity = r.popularity || 0;
+            if (rec.id && rec.title && rec.date && rec.poster) items.push(rec);
+        });
+    });
+
+    const seen = new Set();
+    const result = [];
+    ['movie', 'series'].forEach(kind => {
+        items.filter(r => r.kind === kind)
+            .sort((a, b) => b.popularity - a.popularity)
+            .filter(r => !seen.has(recKey(r.kind, r.id)) && seen.add(recKey(r.kind, r.id)))
+            .slice(0, NEW_RELEASES_PER_KIND)
+            .forEach(r => result.push(r));
+    });
+    return result;
+}
+
+function renderNewReleasesList() {
+    const listEl = document.getElementById('newReleasesList');
+    const statusEl = document.getElementById('newReleasesStatus');
+    if (!listEl) return;
+
+    const dismissed = getDismissedRecs();
+    const visible = newReleasesItems
+        .map(rec => ({ rec, days: getDaysUntilRelease(rec.date) }))
+        .filter(({ rec, days }) =>
+            days !== null && days >= 0 &&
+            !dismissed.has(recKey(rec.kind, rec.id)) &&
+            !isInMyList(rec.kind, rec) &&
+            (newReleasesKind === 'all' || (newReleasesKind === 'series') === (rec.kind === 'series')))
+        .sort((a, b) => (a.days - b.days) || (b.rec.popularity - a.rec.popularity));
+
+    document.querySelectorAll('[data-newrel-period]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-newrel-period') === newReleasesPeriod));
+    document.querySelectorAll('[data-newrel-kind]').forEach(btn => btn.classList.toggle('active', btn.getAttribute('data-newrel-kind') === newReleasesKind));
+
+    const week = visible.filter(v => v.days <= 7);
+    const month = visible.filter(v => v.days > 7);
+    const groups = [];
+    if (newReleasesPeriod !== 'month' && week.length) groups.push({ title: 'Bu Hafta', icon: 'fa-bolt', items: week });
+    if (newReleasesPeriod !== 'week' && month.length) groups.push({ title: 'Bu Ay', icon: 'fa-calendar-day', items: month });
+
+    if (!groups.length) {
+        listEl.innerHTML = '<p class="text-sm opacity-70">Bu aralıkta gösterilecek yeni yapım yok. Listendekiler ve "gösterme" dediklerin hariç tutulur.</p>';
+        return;
+    }
+    listEl.innerHTML = groups.map(g => `
+        <section class="newrel-group">
+            <h3 class="newrel-group-title"><i class="fas ${g.icon} mr-2"></i>${g.title}<span class="newrel-group-count">${g.items.length}</span></h3>
+            <div class="recs-grid">${g.items.map(({ rec }) => renderRecCard(rec, null)).join('')}</div>
+        </section>
+    `).join('');
+    if (statusEl && !newReleasesLoading) {
+        statusEl.textContent = `${visible.length} yapım listelendi.`;
+    }
+}
+
+async function renderNewReleases(forceRefresh) {
+    const statusEl = document.getElementById('newReleasesStatus');
+    const listEl = document.getElementById('newReleasesList');
+    if (!statusEl || !listEl) return;
+    if (!hasTmdbKey()) {
+        statusEl.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Yeni çıkanları görmek için TMDB anahtarı gerekli. <button type="button" class="helper-link" data-open-settings>Ayarlar\'dan ekle</button>.';
+        listEl.innerHTML = '';
+        return;
+    }
+    const today = isoLocalDate(new Date());
+    const cached = safeParse('newReleasesCache', null);
+    if (!forceRefresh && cached && cached.day === today && Array.isArray(cached.items) && Date.now() - cached.at < NEW_RELEASES_TTL) {
+        newReleasesItems = cached.items;
+        renderNewReleasesList();
+        return;
+    }
+    if (newReleasesLoading) return;
+    newReleasesLoading = true;
+    const refreshBtn = document.getElementById('refreshNewReleasesBtn');
+    if (refreshBtn) refreshBtn.disabled = true;
+    statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Yeni çıkanlar getiriliyor...';
+    try {
+        const items = await fetchNewReleases();
+        newReleasesItems = items;
+        try { __origSetItem('newReleasesCache', JSON.stringify({ at: Date.now(), day: today, items })); } catch (_) {}
+        newReleasesLoading = false;
+        renderNewReleasesList();
+    } catch (err) {
+        // Eski önbellek varsa onu göster, yoksa hatayı bildir
+        if (cached && Array.isArray(cached.items) && cached.items.length) {
+            newReleasesItems = cached.items;
+            newReleasesLoading = false;
+            renderNewReleasesList();
+            statusEl.textContent = err.message + ' Son kaydedilen liste gösteriliyor.';
+        } else {
+            statusEl.textContent = err.message;
+            listEl.innerHTML = '';
+        }
+    } finally {
+        newReleasesLoading = false;
+        if (refreshBtn) refreshBtn.disabled = false;
+    }
+}
+
+function setupNewReleases() {
+    const refreshBtn = document.getElementById('refreshNewReleasesBtn');
+    if (!refreshBtn) return;
+    refreshBtn.addEventListener('click', () => renderNewReleases(true));
+    document.querySelectorAll('[data-newrel-period]').forEach(btn => btn.addEventListener('click', () => {
+        newReleasesPeriod = btn.getAttribute('data-newrel-period');
+        renderNewReleasesList();
+    }));
+    document.querySelectorAll('[data-newrel-kind]').forEach(btn => btn.addEventListener('click', () => {
+        newReleasesKind = btn.getAttribute('data-newrel-kind');
+        renderNewReleasesList();
+    }));
 }
 
 // Sorting functions

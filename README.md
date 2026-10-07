@@ -24,6 +24,11 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - **Eksikleri Tamamla:** mevcut kayıtlardaki boş poster, fragman, açıklama, puan ve tarihleri toplu doldurur (dolu alanlara dokunmaz); isteğe bağlı olarak yeni çıkan sezonları ekler
 - TMDB anahtarı yokken diziler için sınırlı bir yedek kaynak (TVmaze, İngilizce) kullanılır
 
+### 🔥 Yeni Çıkanlar
+- **Yakında Çıkacaklar** sekmesinde, listende olmasa bile önümüzdeki 30 gün içinde çıkacak popüler dizi ve filmler **Bu Hafta / Bu Ay** gruplarıyla gösterilir (TMDB)
+- Dönem ve tür filtresi; **Listeme Ekle** ile ekleme formu tüm bilgilerle dolu açılır, istemediklerini gizleyebilirsin
+- Poster görselleri cihazda önbelleğe alınır; ağ yavaşken veya çevrimdışıyken de görünür
+
 ### 💡 Öneriler
 - Her kartta 💡 butonu: o yapıma **benzer dizi/filmler** (TMDB önerileri)
 - **Öneriler** sekmesi: puan verdiğiniz, bitirdiğiniz ve son izlediğiniz yapımlara göre **size özel öneriler**; birden fazla favorinizde ortak çıkanlar üstte, "X'i sevdiğin için" açıklamasıyla
@@ -121,7 +126,7 @@ icon.svg                Uygulama simgesi
 tests/app.test.mjs      jsdom ile uygulama testleri
 ```
 
-Derleme adımı yoktur; Tailwind, Font Awesome ve QR kütüphaneleri CDN'den yüklenir.
+Uygulama kodu için derleme adımı yoktur; Font Awesome ve QR kütüphaneleri CDN'den yüklenir. Tailwind stilleri `css/tailwind.css` olarak önceden derlenmiş gelir; `index.html` veya `js/app.js` içinde yeni bir Tailwind sınıfı kullanırsan `npm run build:css` çalıştırıp çıkan dosyayı da commit'le (CI bunu kontrol eder).
 
 ### Yerelde çalıştırma
 Service worker ve kamera `file://` altında çalışmadığı için basit bir sunucu kullanın:

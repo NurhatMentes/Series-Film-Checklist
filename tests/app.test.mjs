@@ -225,3 +225,55 @@ test('kartlarda çıkış yılı varsa başlığın yanında gösterilir', () =>
     assert.ok(titles.includes('Yılsız Film'));
     w.close();
 });
+
+test('yeni çıkanlar: tarih aralığıyla sorgulanır, haftalara ayrılır, listedekiler gizlenir', async () => {
+    const w = loadApp({
+        moviesData: [{ id: 1, name: 'Listedeki Film', createdAt: '2024-01-01T00:00:00Z', updatedAt: '2024-01-01T00:00:00Z' }]
+    });
+    w.localStorage.setItem('tmdbKey', 'test');
+    const day = n => { const d = new Date(); d.setDate(d.getDate() + n); const p = x => String(x).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+    const requested = [];
+    w.fetch = async url => {
+        const u = new URL(url);
+        requested.push(u);
+        const page = u.searchParams.get('page');
+        let results = [];
+        if (page === '1' && u.pathname.endsWith('/discover/movie')) {
+            results = [
+                { id: 11, title: 'Bu Hafta Filmi', release_date: day(2), poster_path: '/a.jpg', popularity: 50 },
+                { id: 12, title: 'Bu Ay Filmi', release_date: day(15), poster_path: '/b.jpg', popularity: 40 },
+                { id: 13, title: 'Listedeki Film', release_date: day(3), poster_path: '/c.jpg', popularity: 30 },
+                { id: 14, title: 'Afişsiz Film', release_date: day(4), poster_path: null, popularity: 20 }
+            ];
+        } else if (page === '1' && u.pathname.endsWith('/discover/tv')) {
+            results = [{ id: 21, name: 'Yeni Dizi', first_air_date: day(5), poster_path: '/d.jpg', popularity: 60 }];
+        }
+        return { ok: true, status: 200, json: async () => ({ results }) };
+    };
+
+    await w.renderNewReleases(true);
+
+    const movieReq = requested.find(u => u.pathname.endsWith('/discover/movie'));
+    assert.equal(movieReq.searchParams.get('primary_release_date.gte'), day(0));
+    assert.equal(movieReq.searchParams.get('primary_release_date.lte'), day(30));
+    const tvReq = requested.find(u => u.pathname.endsWith('/discover/tv'));
+    assert.equal(tvReq.searchParams.get('first_air_date.gte'), day(0));
+
+    const doc = w.document;
+    const titles = Array.from(doc.querySelectorAll('#newReleasesList .rec-title')).map(el => el.textContent.replace(/\s+/g, ' ').trim());
+    assert.deepEqual(titles.sort(), ['Bu Ay Filmi', 'Bu Hafta Filmi', 'Yeni Dizi']);
+    const groups = Array.from(doc.querySelectorAll('.newrel-group')).map(g => g.querySelector('.newrel-group-title').textContent.replace(/\d+$/, '').trim());
+    assert.deepEqual(groups, ['Bu Hafta', 'Bu Ay']);
+    assert.ok(doc.querySelector('#newReleasesList [data-rec-add="series:21"]'), 'dizi için "Listeme Ekle" olmalı');
+
+    // Sadece diziler
+    doc.querySelector('[data-newrel-kind="series"]').click();
+    assert.equal(doc.querySelectorAll('#newReleasesList .rec-card').length, 1);
+
+    // Ağ hatasında anlaşılır mesaj, önbellek varsa liste korunur
+    w.fetch = async () => { throw new TypeError('network'); };
+    await w.renderNewReleases(true);
+    assert.ok(doc.getElementById('newReleasesStatus').textContent.includes('Son kaydedilen liste'));
+    assert.ok(doc.querySelectorAll('#newReleasesList .rec-card').length >= 1);
+    w.close();
+});

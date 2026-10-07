@@ -12,11 +12,8 @@
     <link rel="manifest" href="manifest.webmanifest">
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icon.svg">
-    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
     <script>
         // Tailwind "dark:" sınıfları uygulamadaki tema butonunu takip etsin (işletim sistemini değil)
-        window.tailwind = window.tailwind || {};
-        window.tailwind.config = { darkMode: 'class' };
         try {
             if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
         } catch (_) {}
@@ -24,7 +21,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20260926-7">
+    <link rel="stylesheet" href="css/styles.css?v=20261007-2">
+    <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
+    <link rel="stylesheet" href="css/tailwind.css?v=20261007-2">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -50,59 +49,30 @@
             </div>
         </header>
 
-        <!-- Backup & Restore Section -->
-        <div class="card p-6 mb-8 bg-white/10 backdrop-blur-sm">
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div class="text-center">
-                    <h3 class="text-white font-semibold mb-2">Yedek Al</h3>
-                    <p class="text-purple-100 text-sm mb-3">Verilerinizi güvenli bir dosyaya kaydedin</p>
-                    <button id="exportData" class="btn btn-primary w-full">
-                        <i class="fas fa-download mr-2"></i> Yedek Al
-                    </button>
-                </div>
-                <div class="text-center border-l border-r border-white/20 px-4">
-                    <h3 class="text-white font-semibold mb-2">Geri Yükle</h3>
-                    <p class="text-purple-100 text-sm mb-3">Kayıp verilerinizi kurtarın</p>
-                    <div class="relative">
-                        <input type="file" id="importData" class="hidden" accept=".json">
-                        <label for="importData" class="btn btn-primary w-full cursor-pointer">
-                            <i class="fas fa-upload mr-2"></i> Dosya Yükle
-                        </label>
-                    </div>
-                </div>
-                <div class="text-center">
-                    <h3 class="text-white font-semibold mb-3">İstatistikler</h3>
-                    <div class="grid grid-cols-2 gap-4 mb-2">
-                        <div class="text-center">
-                            <div class="text-xl font-bold text-white mb-1" id="seriesStats">0</div>
-                            <p class="text-purple-100 text-xs">Dizi</p>
-                        </div>
-                        <div class="text-center">
-                            <div class="text-xl font-bold text-white mb-1" id="moviesStats">0</div>
-                            <p class="text-purple-100 text-xs">Film</p>
-                        </div>
-                    </div>
-                    <!-- Sade özet satırları -->
-                    <div class="space-y-1 mb-2">
-                        <p class="text-purple-100 text-xs">
-                            <span class="text-white font-semibold">Filmler:</span>
-                            <span id="moviesStatusSummary">İzlenen 0 / İzlenmeyen 0</span>
-                        </p>
-                        <p class="text-purple-100 text-xs">
-                            <span class="text-white font-semibold">Diziler:</span>
-                            <span id="seriesStatusSummary">Tamamlanan 0 / İzlenen 0 / Planlanan 0</span>
-                        </p>
-                    </div>
-                    <div class="border-t border-white/20 pt-2">
-                        <div class="text-2xl font-bold text-white mb-1" id="totalStats">0</div>
-                        <p class="text-purple-100 text-sm">Toplam İçerik</p>
-                    </div>
+        <!-- Özet ve yedekleme -->
+        <section class="summary-bar" aria-label="Özet ve yedekleme">
+            <div class="summary-stats">
+                <div class="stat-chip"><i class="fas fa-tv"></i><b id="seriesStats">0</b><span>Dizi</span></div>
+                <div class="stat-chip"><i class="fas fa-film"></i><b id="moviesStats">0</b><span>Film</span></div>
+                <div class="stat-chip stat-chip-total"><i class="fas fa-layer-group"></i><b id="totalStats">0</b><span>Toplam</span></div>
+                <div class="summary-lines">
+                    <p><strong>Diziler:</strong> <span id="seriesStatusSummary">Tamamlanan 0 / İzlenen 0 / Planlanan 0</span></p>
+                    <p><strong>Filmler:</strong> <span id="moviesStatusSummary">İzlenen 0 / İzlenmeyen 0</span></p>
                 </div>
             </div>
-        </div>
+            <div class="summary-actions">
+                <button id="exportData" class="btn btn-secondary btn-sm" title="Verilerinizi güvenli bir dosyaya kaydedin">
+                    <i class="fas fa-download mr-2"></i> Yedek Al
+                </button>
+                <input type="file" id="importData" class="hidden" accept=".json">
+                <label for="importData" class="btn btn-secondary btn-sm cursor-pointer" title="Kayıp verilerinizi yedek dosyasından kurtarın">
+                    <i class="fas fa-upload mr-2"></i> Geri Yükle
+                </label>
+            </div>
+        </section>
 
         <!-- Tabs -->
-        <div class="tabs-container flex bg-white/10 backdrop-blur-sm rounded-xl p-2 mb-8 justify-center">
+        <div class="tabs-container flex rounded-xl p-2 mb-8">
             <button id="seriesTab" class="tab-button px-6 py-3 font-medium text-white border-none active">
                 <i class="fas fa-tv mr-2"></i> Diziler
             </button>
@@ -164,12 +134,12 @@
                                 </select>
                             </div>
                             <div class="flex items-center gap-2 mr-2">
-                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Yerleşim:</span>
-                                <select id="layoutModeSelectSeries" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                <span class="hidden">Yerleşim:</span>
+                                <select id="layoutModeSelectSeries" class="hidden" aria-hidden="true" tabindex="-1">
                                     <option value="grid">Grid</option>
                                     <option value="masonry">Masonry</option>
                                 </select>
-                                <div class="layout-toggle ml-2">
+                                <div class="layout-toggle">
                                     <button id="layoutToggleGridSeries" class="layout-toggle-btn" data-mode="grid"><i class="fas fa-th mr-1"></i> Grid</button>
                                     <button id="layoutToggleMasonrySeries" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
                                 </div>
@@ -289,12 +259,12 @@
                                 </select>
                             </div>
                             <div class="flex items-center gap-2 mr-2">
-                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Yerleşim:</span>
-                                <select id="layoutModeSelectMovies" class="form-control text-sm py-1 px-2 min-w-[140px]">
+                                <span class="hidden">Yerleşim:</span>
+                                <select id="layoutModeSelectMovies" class="hidden" aria-hidden="true" tabindex="-1">
                                     <option value="grid">Grid</option>
                                     <option value="masonry">Masonry</option>
                                 </select>
-                                <div class="layout-toggle ml-2">
+                                <div class="layout-toggle">
                                     <button id="layoutToggleGridMovies" class="layout-toggle-btn" data-mode="grid"><i class="fas fa-th mr-1"></i> Grid</button>
                                     <button id="layoutToggleMasonryMovies" class="layout-toggle-btn" data-mode="masonry"><i class="fas fa-grip-vertical mr-1"></i> Masonry</button>
                                 </div>
@@ -450,6 +420,28 @@
                     </div>
                 </div>
             </div>
+
+        <div id="newReleasesCard" class="card p-6 mb-6">
+            <div class="flex flex-wrap items-center justify-between gap-3 mb-2">
+                <h2 class="text-2xl font-bold flex items-center"><i class="fas fa-fire mr-3 text-orange-400"></i>Yeni Çıkanlar</h2>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" class="filter-btn active" data-newrel-period="all">Tümü</button>
+                    <button type="button" class="filter-btn" data-newrel-period="week">Bu Hafta</button>
+                    <button type="button" class="filter-btn" data-newrel-period="month">Bu Ay</button>
+                    <span class="newrel-sep" aria-hidden="true"></span>
+                    <button type="button" class="filter-btn active" data-newrel-kind="all"><i class="fas fa-list mr-1"></i> Tümü</button>
+                    <button type="button" class="filter-btn" data-newrel-kind="series"><i class="fas fa-tv mr-1"></i> Diziler</button>
+                    <button type="button" class="filter-btn" data-newrel-kind="movies"><i class="fas fa-film mr-1"></i> Filmler</button>
+                    <button type="button" id="refreshNewReleasesBtn" class="btn btn-primary btn-sm" title="Listeyi yenile"><i class="fas fa-sync-alt mr-1"></i> Yenile</button>
+                </div>
+            </div>
+            <p class="text-sm opacity-80 mb-4">
+                Önümüzdeki 30 gün içinde çıkacak popüler dizi ve filmler (ilk çıkış tarihine göre). Listende olmayanlar tek tıkla eklenebilir.
+            </p>
+            <div id="newReleasesStatus" class="text-sm mb-4"></div>
+            <div id="newReleasesList"></div>
+        </div>
+
         </div>
 
         <!-- Categories Tab Content -->
@@ -1136,7 +1128,7 @@
 
 
 
-    <script src="js/app.js?v=20260926-7"></script>
+    <script src="js/app.js?v=20261007-2"></script>
 </body>
 
 </html>

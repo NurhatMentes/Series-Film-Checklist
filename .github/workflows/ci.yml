@@ -20,6 +20,8 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Check JavaScript syntax
         run: node --check js/app.js && node --check sw.js
+      - name: Check compiled Tailwind CSS is up to date
+        run: npm run build:css && git diff --exit-code css/tailwind.css
       - name: Run tests
         run: npm test
       - name: Run htmlhint

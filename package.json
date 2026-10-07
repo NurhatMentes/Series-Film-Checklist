@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "description": "Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı dostu bir web uygulaması. Yerel depolama ile çalışır, verileriniz güvende kalır ve istediğiniz zaman yedek alıp geri yükleyebilirsiniz.",
   "scripts": {
-    "test": "node --test tests/app.test.mjs"
+    "test": "node --test tests/app.test.mjs",
+    "build:css": "tailwindcss -c tailwind.config.js -i tailwind.input.css -o css/tailwind.css --minify"
   },
   "repository": {
     "type": "git",
