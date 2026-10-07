@@ -277,3 +277,44 @@ test('yeni çıkanlar: tarih aralığıyla sorgulanır, haftalara ayrılır, lis
     assert.ok(doc.querySelectorAll('#newReleasesList .rec-card').length >= 1);
     w.close();
 });
+
+test('yedek: posterler yedeğe gömülür ve geri yüklemede görsel önbelleğine yazılır', async () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Dizi', imageUrl: 'https://img.example/a.jpg', seasons: [{ season: 1, totalEpisodes: 1, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' }],
+        moviesData: [
+            { id: 2, name: 'Film', imageUrl: 'https://img.example/b.jpg', createdAt: '2024-01-01T00:00:00Z' },
+            { id: 3, name: 'Bozuk', imageUrl: 'https://img.example/yok.jpg', createdAt: '2024-01-01T00:00:00Z' },
+            { id: 4, name: 'Aynı', imageUrl: 'https://img.example/a.jpg', createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const stores = new Map();
+    w.caches = { open: async name => {
+        if (!stores.has(name)) stores.set(name, new Map());
+        const m = stores.get(name);
+        return { match: async u => m.get(u), put: async (u, r) => { m.set(u, r); } };
+    } };
+    w.Response = class { constructor(body, init) { this.body = body; this.headers = init.headers; } };
+    const fetched = [];
+    w.fetch = async url => {
+        fetched.push(url);
+        if (url.startsWith('data:')) {
+            const [head, b64] = url.split(',');
+            return { ok: true, blob: async () => new w.Blob([Buffer.from(b64, 'base64')], { type: head.slice(5, head.indexOf(';')) }) };
+        }
+        if (url.endsWith('yok.jpg')) return { ok: false, status: 404 };
+        return { ok: true, blob: async () => new w.Blob([Buffer.from('fake-image-bytes')], { type: 'image/png' }) };
+    };
+
+    const result = await w.buildPosterBackup();
+    assert.equal(result.total, 3, 'aynı poster tek sayılır');
+    assert.equal(result.failed, 1);
+    assert.deepEqual(Object.keys(result.posters).sort(), ['https://img.example/a.jpg', 'https://img.example/b.jpg']);
+    assert.ok(result.posters['https://img.example/a.jpg'].startsWith('data:image/'));
+
+    const restored = await w.restorePosters({ ...result.posters, 'javascript:alert(1)': 'data:image/png;base64,AAAA', 'https://img.example/c.jpg': 'data:text/html;base64,AAAA' });
+    assert.equal(restored, 2, 'sadece geçerli adres + görsel verisi yazılır');
+    const cache = await w.caches.open('izleme-takip-posters-v1');
+    assert.ok(await cache.match('https://img.example/a.jpg'));
+    assert.ok(!(await cache.match('https://img.example/c.jpg')));
+    w.close();
+});

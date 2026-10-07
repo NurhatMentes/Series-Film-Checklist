@@ -28,6 +28,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - **Yakında Çıkacaklar** sekmesinde, listende olmasa bile önümüzdeki 30 gün içinde çıkacak popüler dizi ve filmler **Bu Hafta / Bu Ay** gruplarıyla gösterilir (TMDB)
 - Dönem ve tür filtresi; **Listeme Ekle** ile ekleme formu tüm bilgilerle dolu açılır, istemediklerini gizleyebilirsin
 - Poster görselleri cihazda önbelleğe alınır; ağ yavaşken veya çevrimdışıyken de görünür
+- **Yedek Al** varsayılan olarak posterleri de yedek dosyasına ekler (küçültülmüş JPEG, "Posterleri ekle" kutusundan kapatılabilir); **Geri Yükle** posterleri yeni cihazın önbelleğine de yazar
 
 ### 💡 Öneriler
 - Her kartta 💡 butonu: o yapıma **benzer dizi/filmler** (TMDB önerileri)

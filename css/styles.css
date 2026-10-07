@@ -847,7 +847,9 @@ body.dark-theme {
 .stat-chip-total { background: rgba(255, 255, 255, 0.22); }
 .summary-lines { font-size: 0.75rem; line-height: 1.5; color: rgba(255, 255, 255, 0.8); margin-left: 6px; }
 .summary-lines strong { color: #fff; }
-.summary-actions { display: flex; gap: 8px; }
+.summary-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.summary-check { display: inline-flex; align-items: center; gap: 6px; font-size: 0.8rem; color: rgba(255, 255, 255, 0.9); cursor: pointer; }
+.summary-check input { width: 16px; height: 16px; border-radius: 4px; }
 @media (max-width: 640px) {
     .summary-bar { padding: 10px 12px; }
     .summary-actions { width: 100%; }

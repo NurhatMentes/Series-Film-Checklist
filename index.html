@@ -21,9 +21,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261007-2">
+    <link rel="stylesheet" href="css/styles.css?v=20261007-3">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261007-2">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261007-3">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -64,6 +64,9 @@
                 <button id="exportData" class="btn btn-secondary btn-sm" title="Verilerinizi güvenli bir dosyaya kaydedin">
                     <i class="fas fa-download mr-2"></i> Yedek Al
                 </button>
+                <label class="summary-check" title="Poster görselleri küçültülüp yedek dosyasına eklenir; geri yüklerken cihaza kaydedilir (dosya büyür)">
+                    <input type="checkbox" id="backupIncludePosters" checked> Posterleri ekle
+                </label>
                 <input type="file" id="importData" class="hidden" accept=".json">
                 <label for="importData" class="btn btn-secondary btn-sm cursor-pointer" title="Kayıp verilerinizi yedek dosyasından kurtarın">
                     <i class="fas fa-upload mr-2"></i> Geri Yükle
@@ -1128,7 +1131,7 @@
 
 
 
-    <script src="js/app.js?v=20261007-2"></script>
+    <script src="js/app.js?v=20261007-3"></script>
 </body>
 
 </html>

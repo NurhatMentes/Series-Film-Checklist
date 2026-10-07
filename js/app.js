@@ -3131,8 +3131,110 @@ function getTagsFromContainer(containerId) {
     return tags;
 }
 
+// Poster yedekleme: görseller küçültülüp (JPEG) yedek dosyasına gömülür; geri yüklemede
+// service worker'ın görsel önbelleğine (sw.js'deki IMG_CACHE ile aynı ad) konur.
+const POSTER_CACHE_NAME = 'izleme-takip-posters-v1';
+const POSTER_BACKUP_WIDTH = 342;
+const POSTER_BACKUP_CONCURRENCY = 6;
+
+function collectPosterUrls() {
+    const urls = new Set();
+    [...seriesData, ...moviesData].forEach(item => {
+        const url = safeUrl(item.imageUrl);
+        if (url) urls.add(url);
+    });
+    return Array.from(urls);
+}
+
+function blobToDataUrl(blob) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = () => reject(reader.error || new Error('okunamadı'));
+        reader.readAsDataURL(blob);
+    });
+}
+
+// Görseli en çok POSTER_BACKUP_WIDTH piksel genişliğe indirip JPEG data URL'e çevirir
+async function posterBlobToDataUrl(blob) {
+    if (typeof createImageBitmap !== 'function') return blobToDataUrl(blob);
+    try {
+        const bmp = await createImageBitmap(blob);
+        const scale = Math.min(1, POSTER_BACKUP_WIDTH / bmp.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(bmp.width * scale));
+        canvas.height = Math.max(1, Math.round(bmp.height * scale));
+        canvas.getContext('2d').drawImage(bmp, 0, 0, canvas.width, canvas.height);
+        if (bmp.close) bmp.close();
+        return canvas.toDataURL('image/jpeg', 0.82);
+    } catch (_) {
+        return blobToDataUrl(blob); // çözülemeyen biçim: olduğu gibi sakla
+    }
+}
+
+async function fetchPosterBlob(url) {
+    try {
+        if (typeof caches !== 'undefined') {
+            const hit = await (await caches.open(POSTER_CACHE_NAME)).match(url);
+            if (hit) return await hit.blob();
+        }
+    } catch (_) { /* önbellek yoksa ağdan al */ }
+    const response = await fetch(url, { mode: 'cors', credentials: 'omit' });
+    if (!response.ok) throw new Error('HTTP ' + response.status);
+    return response.blob();
+}
+
+// { url: dataUrl } döndürür; alınamayanlar atlanır
+async function buildPosterBackup(onProgress) {
+    const urls = collectPosterUrls();
+    const posters = {};
+    let done = 0;
+    let failed = 0;
+    let next = 0;
+    async function worker() {
+        while (next < urls.length) {
+            const url = urls[next++];
+            try {
+                const dataUrl = await posterBlobToDataUrl(await fetchPosterBlob(url));
+                if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) posters[url] = dataUrl;
+                else failed++;
+            } catch (_) { failed++; }
+            done++;
+            if (onProgress) onProgress(done, urls.length);
+        }
+    }
+    await Promise.all(Array.from({ length: Math.min(POSTER_BACKUP_CONCURRENCY, urls.length) }, worker));
+    return { posters, failed, total: urls.length };
+}
+
+// Yedekteki posterleri görsel önbelleğine yazar; yazılan sayıyı döndürür
+async function restorePosters(posters) {
+    if (!posters || typeof posters !== 'object' || typeof caches === 'undefined') return 0;
+    let cache;
+    try { cache = await caches.open(POSTER_CACHE_NAME); } catch (_) { return 0; }
+    let restored = 0;
+    for (const [url, dataUrl] of Object.entries(posters)) {
+        if (!safeUrl(url) || typeof dataUrl !== 'string' || !/^data:image\/(jpeg|png|webp|gif);base64,/i.test(dataUrl)) continue;
+        try {
+            const blob = await (await fetch(dataUrl)).blob();
+            await cache.put(url, new Response(blob, { headers: { 'content-type': blob.type } }));
+            restored++;
+        } catch (_) { /* tek görsel bozuksa diğerlerine devam */ }
+    }
+    return restored;
+}
+
 // Export data
-document.getElementById('exportData').addEventListener('click', function () {
+const backupPostersCheckbox = document.getElementById('backupIncludePosters');
+if (backupPostersCheckbox) {
+    try { backupPostersCheckbox.checked = localStorage.getItem('backupPosters') !== '0'; } catch (_) {}
+    backupPostersCheckbox.addEventListener('change', () => {
+        try { localStorage.setItem('backupPosters', backupPostersCheckbox.checked ? '1' : '0'); } catch (_) {}
+    });
+}
+
+document.getElementById('exportData').addEventListener('click', async function () {
+    const button = this;
     const data = {
         dataVersion: 2,
         exportedAt: new Date().toISOString(),
@@ -3142,7 +3244,24 @@ document.getElementById('exportData').addEventListener('click', function () {
         tags: tagsData
     };
 
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    if (backupPostersCheckbox && backupPostersCheckbox.checked && collectPosterUrls().length) {
+        button.disabled = true;
+        const label = button.innerHTML;
+        try {
+            const result = await buildPosterBackup((done, total) => {
+                button.textContent = `Posterler ${done}/${total}`;
+            });
+            if (Object.keys(result.posters).length) data.posters = result.posters;
+            if (result.failed) showToast(`${result.failed} posterin görseli alınamadı, yedekte yok.`);
+        } catch (err) {
+            showToast('Posterler yedeğe eklenemedi: ' + err.message);
+        } finally {
+            button.disabled = false;
+            button.innerHTML = label;
+        }
+    }
+
+    const blob = new Blob([JSON.stringify(data)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const stamp = new Date().toISOString().slice(0, 10);
     const linkElement = document.createElement('a');
@@ -3202,7 +3321,16 @@ document.getElementById('importData').addEventListener('change', function (e) {
         localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
 
         refreshAll();
+        const restoring = data.posters ? restorePosters(data.posters) : null;
         alert('Veriler başarıyla yüklendi!');
+        if (restoring) {
+            restoring.then(count => {
+                if (count) {
+                    showToast(`${count} poster cihaza geri yüklendi.`);
+                    document.querySelectorAll('img[src^="http"]').forEach(img => { const src = img.src; img.src = ''; img.src = src; });
+                }
+            });
+        }
     };
     reader.readAsText(file);
 });
