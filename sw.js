@@ -1,9 +1,9 @@
 // İzleme Takip - service worker (çevrimdışı çalışma)
-const CACHE = 'izleme-takip-20261008-1';
+const CACHE = 'izleme-takip-20261008-2';
 // Posterler ayrı bir önbellekte tutulur: uygulama sürümü değişince silinmez
 const IMG_CACHE = 'izleme-takip-posters-v1';
 const IMG_CACHE_MAX = 800; // en çok bu kadar görsel saklanır (eskiler silinir)
-const APP_SHELL = ['./', './index.html', './css/styles.css?v=20261008-1', './css/tailwind.css?v=20261008-1', './js/app.js?v=20261008-1', './manifest.webmanifest', './icon.svg'];
+const APP_SHELL = ['./', './index.html', './css/styles.css?v=20261008-2', './css/tailwind.css?v=20261008-2', './js/app.js?v=20261008-2', './manifest.webmanifest', './icon.svg'];
 const CDN_HOSTS = ['cdnjs.cloudflare.com', 'cdn.jsdelivr.net', 'unpkg.com', 'fonts.googleapis.com', 'fonts.gstatic.com'];
 // CORS izni vermediği anlaşılan görsel sunucuları (bu oturum boyunca tekrar denenmez)
 const noCorsHosts = new Set();

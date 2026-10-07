@@ -34,6 +34,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 💡 Öneriler
 - Her kartta 💡 butonu: o yapıma **benzer dizi/filmler** (TMDB önerileri)
 - **Öneriler** sekmesi: puan verdiğiniz, bitirdiğiniz ve son izlediğiniz yapımlara göre **size özel öneriler**; birden fazla favorinizde ortak çıkanlar üstte, "X'i sevdiğin için" açıklamasıyla
+- Her önerinin posterindeki ▶ düğmesi **fragmanı** açar
 - **Listeme Ekle** ile ekleme formu tüm bilgilerle dolu açılır
 - Listenizde olanlar gösterilmez, "İlgilenmiyorum" dedikleriniz bir daha önerilmez
 

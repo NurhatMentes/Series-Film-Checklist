@@ -6031,7 +6031,7 @@ function renderRecCard(rec, reason) {
         <div class="rec-card" data-rec-key="${esc(key)}">
             <div class="rec-poster">
                 ${poster ? `<img src="${esc(poster)}" alt="${esc(rec.title)}" loading="lazy" onerror="handleImageError(this)">` : '<div class="rec-noposter"><i class="fas fa-image"></i></div>'}
-                ${rec.date ? `<button type="button" class="rec-play" data-rec-trailer="${esc(key)}" title="Fragmanı izle" aria-label="${esc(rec.title)} fragmanını izle"><i class="fas fa-play"></i></button>` : ''}
+                <button type="button" class="rec-play" data-rec-trailer="${esc(key)}" title="Fragmanı izle" aria-label="${esc(rec.title)} fragmanını izle"><i class="fas fa-play"></i></button>
                 <span class="rec-type">${typeText}</span>
                 ${rec.vote ? `<span class="rec-vote"><i class="fas fa-star"></i> ${esc(rec.vote)}</span>` : ''}
             </div>
@@ -6425,12 +6425,21 @@ async function resolveRecTrailer(rec) {
         language: 'en-US', include_video_language: 'tr,en'
     });
     rec.trailerUrl = pickTrailer(vids);
-    try {
-        const cached = safeParse('newReleasesCache', null);
-        if (cached && Array.isArray(cached.items) && newReleasesItems.length) {
-            __origSetItem('newReleasesCache', JSON.stringify({ ...cached, items: newReleasesItems }));
-        }
-    } catch (_) {}
+    // Bulunan fragmanı, bu yapımı tutan önbelleklere de yaz (yeni çıkanlar ve öneriler)
+    const patch = (cacheKey, listKey, getRec) => {
+        try {
+            const cached = safeParse(cacheKey, null);
+            if (!cached || !Array.isArray(cached[listKey])) return;
+            let changed = false;
+            cached[listKey].forEach(entry => {
+                const r = getRec(entry);
+                if (r && r.kind === rec.kind && r.id === rec.id && r.trailerUrl !== rec.trailerUrl) { r.trailerUrl = rec.trailerUrl; changed = true; }
+            });
+            if (changed) __origSetItem(cacheKey, JSON.stringify(cached));
+        } catch (_) {}
+    };
+    patch('newReleasesCache', 'items', r => r);
+    patch('discoverCache', 'results', e => e && e.rec);
     return rec.trailerUrl;
 }
 

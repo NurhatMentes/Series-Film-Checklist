@@ -361,3 +361,26 @@ test('yeni çıkanlar: poster üstündeki oynat düğmesi fragmanı bulup açar,
     assert.ok(doc.getElementById('toastContainer').textContent.includes('henüz fragman yok'));
     w.close();
 });
+
+test('öneriler: kartlardaki oynat düğmesi fragmanı açar ve öneri önbelleğine yazar', async () => {
+    const w = loadApp({});
+    w.localStorage.setItem('tmdbKey', 'test');
+    const rec = { kind: 'movie', id: 77, title: 'Önerilen Film', originalTitle: 'Rec', year: '2020', poster: 'https://img/p.jpg', overview: '', vote: 7.5, voteCount: 100 };
+    w.localStorage.setItem('discoverCache', JSON.stringify({ at: Date.now(), results: [{ rec, reason: 'X sevdiğin için' }] }));
+    w.fetch = async url => {
+        const u = new URL(url);
+        const body = u.pathname.endsWith('/movie/77/videos')
+            ? { results: [{ site: 'YouTube', key: 'rec77KEYabc', type: 'Trailer', iso_639_1: 'tr', published_at: '2026-01-01T00:00:00Z' }] }
+            : { results: [] };
+        return { ok: true, status: 200, json: async () => body };
+    };
+    w.renderDiscoverList(JSON.parse(w.localStorage.getItem('discoverCache')).results);
+    const btn = w.document.querySelector('#discoverList [data-rec-trailer="movie:77"]');
+    assert.ok(btn, 'öneri kartında oynat düğmesi olmalı');
+    btn.click();
+    await new Promise(r => setTimeout(r, 20));
+    assert.ok(w.document.body.innerHTML.includes('rec77KEYabc'), 'fragman penceresi açılmalı');
+    const saved = JSON.parse(w.localStorage.getItem('discoverCache')).results[0].rec.trailerUrl;
+    assert.equal(saved, 'https://www.youtube.com/watch?v=rec77KEYabc');
+    w.close();
+});
