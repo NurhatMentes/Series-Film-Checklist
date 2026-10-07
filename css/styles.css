@@ -2202,6 +2202,32 @@ body.dark-theme {
 .upcoming-card .upcoming-footer { grid-column: 1 / -1; }
 .upcoming-card .badge-overlay { top: 6px; left: 6px; right: 6px; }
 .upcoming-card .badge-overlay .release-badge { font-size: 0.6rem; padding: 0.2rem 0.4rem; }
+/* Poster üstünde fragman oynat düğmesi */
+.rec-play {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 999px;
+    border: 2px solid rgba(255, 255, 255, 0.85);
+    background: rgba(15, 23, 42, 0.6);
+    color: #fff;
+    font-size: 0.9rem;
+    padding-left: 3px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    opacity: 0.9;
+    transition: transform 0.15s ease, background 0.15s ease, opacity 0.15s ease;
+}
+.rec-play:hover,
+.rec-play:focus-visible { background: #dc2626; border-color: #fff; opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
+.rec-play.is-loading { opacity: 0.6; cursor: progress; }
+.rec-play.is-loading i { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
 .rec-actions .btn-sm { padding: 6px 12px; font-size: 13px; }
 .rec-actions [data-rec-dismiss] { padding: 6px 10px; }
 

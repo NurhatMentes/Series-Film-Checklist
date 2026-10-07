@@ -318,3 +318,46 @@ test('yedek: posterler yedeğe gömülür ve geri yüklemede görsel önbelleği
     assert.ok(!(await cache.match('https://img.example/c.jpg')));
     w.close();
 });
+
+test('yeni çıkanlar: poster üstündeki oynat düğmesi fragmanı bulup açar, yoksa bildirir', async () => {
+    const w = loadApp({});
+    w.localStorage.setItem('tmdbKey', 'test');
+    const day = n => { const d = new Date(); d.setDate(d.getDate() + n); const p = x => String(x).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+    const requested = [];
+    w.fetch = async url => {
+        const u = new URL(url);
+        requested.push(u);
+        let body = { results: [] };
+        if (u.pathname.endsWith('/discover/movie')) body = { results: [
+            { id: 11, title: 'Fragmanlı Film', release_date: day(2), poster_path: '/a.jpg', popularity: 50 },
+            { id: 12, title: 'Fragmansız Film', release_date: day(3), poster_path: '/b.jpg', popularity: 40 }
+        ] };
+        if (u.pathname.endsWith('/movie/11/videos')) body = { results: [
+            { site: 'YouTube', key: 'abc123XYZ_-', type: 'Trailer', official: true, iso_639_1: 'en', published_at: '2026-01-01T00:00:00Z' },
+            { site: 'Vimeo', key: 'nope', type: 'Trailer' }
+        ] };
+        return { ok: true, status: 200, json: async () => body };
+    };
+    await w.renderNewReleases(true);
+    const doc = w.document;
+
+    doc.querySelector('[data-rec-trailer="movie:11"]').click();
+    await new Promise(r => setTimeout(r, 20));
+    const videoReq = requested.find(u => u.pathname.endsWith('/movie/11/videos'));
+    assert.ok(videoReq, 'videolar TMDB’den istenmeli');
+    assert.equal(videoReq.searchParams.get('include_video_language'), 'tr,en');
+    assert.ok(doc.querySelector('.close-trailer-btn'), 'fragman penceresi açılmalı');
+    assert.ok(doc.body.innerHTML.includes('abc123XYZ_-'));
+    // Sonuç önbelleğe yazılır: ikinci tıklamada yeniden istek atılmaz
+    const before = requested.length;
+    doc.querySelector('.close-trailer-btn').click();
+    doc.querySelector('[data-rec-trailer="movie:11"]').click();
+    await new Promise(r => setTimeout(r, 20));
+    assert.equal(requested.length, before);
+    assert.equal(JSON.parse(w.localStorage.getItem('newReleasesCache')).items.find(i => i.id === 11).trailerUrl, 'https://www.youtube.com/watch?v=abc123XYZ_-');
+
+    doc.querySelector('[data-rec-trailer="movie:12"]').click();
+    await new Promise(r => setTimeout(r, 20));
+    assert.ok(doc.getElementById('toastContainer').textContent.includes('henüz fragman yok'));
+    w.close();
+});

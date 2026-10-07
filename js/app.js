@@ -6031,6 +6031,7 @@ function renderRecCard(rec, reason) {
         <div class="rec-card" data-rec-key="${esc(key)}">
             <div class="rec-poster">
                 ${poster ? `<img src="${esc(poster)}" alt="${esc(rec.title)}" loading="lazy" onerror="handleImageError(this)">` : '<div class="rec-noposter"><i class="fas fa-image"></i></div>'}
+                ${rec.date ? `<button type="button" class="rec-play" data-rec-trailer="${esc(key)}" title="Fragmanı izle" aria-label="${esc(rec.title)} fragmanını izle"><i class="fas fa-play"></i></button>` : ''}
                 <span class="rec-type">${typeText}</span>
                 ${rec.vote ? `<span class="rec-vote"><i class="fas fa-star"></i> ${esc(rec.vote)}</span>` : ''}
             </div>
@@ -6235,6 +6236,12 @@ function setupRecommendations() {
             return;
         }
 
+        const trailerBtn = target.closest('[data-rec-trailer]');
+        if (trailerBtn) {
+            playRecTrailer(trailerBtn);
+            return;
+        }
+
         const dismissBtn = target.closest('[data-rec-dismiss]');
         if (dismissBtn) {
             const key = dismissBtn.getAttribute('data-rec-dismiss');
@@ -6408,6 +6415,39 @@ async function renderNewReleases(forceRefresh) {
     } finally {
         newReleasesLoading = false;
         if (refreshBtn) refreshBtn.disabled = false;
+    }
+}
+
+// Bir yapımın fragmanını TMDB'den bul (önbellekli) ve fragman penceresinde aç
+async function resolveRecTrailer(rec) {
+    if (typeof rec.trailerUrl === 'string') return rec.trailerUrl; // '' = fragman yok (daha önce soruldu)
+    const vids = await tmdbFetch(`/${rec.kind === 'series' ? 'tv' : 'movie'}/${rec.id}/videos`, {
+        language: 'en-US', include_video_language: 'tr,en'
+    });
+    rec.trailerUrl = pickTrailer(vids);
+    try {
+        const cached = safeParse('newReleasesCache', null);
+        if (cached && Array.isArray(cached.items) && newReleasesItems.length) {
+            __origSetItem('newReleasesCache', JSON.stringify({ ...cached, items: newReleasesItems }));
+        }
+    } catch (_) {}
+    return rec.trailerUrl;
+}
+
+async function playRecTrailer(button) {
+    const rec = recsIndex.get(button.getAttribute('data-rec-trailer'));
+    if (!rec || button.disabled) return;
+    button.disabled = true;
+    button.classList.add('is-loading');
+    try {
+        const url = await resolveRecTrailer(rec);
+        if (url) showTrailerModal(url, rec.title);
+        else showToast(`"${rec.title}" için henüz fragman yok.`);
+    } catch (err) {
+        showToast(err.message);
+    } finally {
+        button.disabled = false;
+        button.classList.remove('is-loading');
     }
 }
 
