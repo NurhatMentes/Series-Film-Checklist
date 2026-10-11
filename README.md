@@ -3,15 +3,10 @@
 Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı dostu bir web uygulaması. Adını yazmanız yeterli: poster, açıklama, fragman, sezonlar ve daha fazlası internetten otomatik gelir. Verileriniz tarayıcınızda kalır; isterseniz cihazlarınız arasında otomatik senkronize edilir.
 
 **Canlı sürüm:** https://nurhatmentes.github.io/Series-Film-Checklist/
-
-<img width="732" height="901" alt="image" src="https://github.com/user-attachments/assets/66d9bd6a-389d-4780-a6a0-1b1a156e9b44" />
-<img width="970" height="689" alt="image" src="https://github.com/user-attachments/assets/b0ad58e0-dd0d-44ab-87c1-30bf02219310" />
-<img width="929" height="737" alt="image" src="https://github.com/user-attachments/assets/a034289d-5271-4afa-973a-e329d5f5c1f8" />
-
-
-
-<img width="1389" height="751" alt="image" src="https://github.com/user-attachments/assets/f7abef3d-21c3-4f9b-b877-35af573e4a82" />
-
+<img width="708" height="821" alt="image" src="https://github.com/user-attachments/assets/d6ea50df-6f56-4518-a710-34b6c6a63b96" />
+<img width="1063" height="879" alt="image" src="https://github.com/user-attachments/assets/63d6b8ad-0031-43b3-ab61-2e45c33f42c5" />
+<img width="1066" height="840" alt="image" src="https://github.com/user-attachments/assets/374bf97f-e90a-400c-8f89-2b2882a1a2bc" />
+<img width="1407" height="847" alt="image" src="https://github.com/user-attachments/assets/51c6b4f7-fa95-4c9d-9f2c-f7fe6c522ec0" />
 
 
 ## Özellikler
