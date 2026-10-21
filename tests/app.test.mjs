@@ -461,3 +461,207 @@ test('takvim: çıkışlar doğru güne düşer ve .ics geçerli üretilir', () 
     assert.ok(!/[^\r]\n/.test(ics), 'satırlar CRLF ile biter');
     w.close();
 });
+
+test('sezonu bitir / geri al: toplu işaretleme ve tek tıkla geri alma', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Dizi', platform: 'Netflix', categories: [], runtime: 40, seasons: [
+            { season: 1, totalEpisodes: 6, watchedEpisodes: 2 },
+            { season: 2, totalEpisodes: 4, watchedEpisodes: 0 }
+        ], createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+    const watched = () => JSON.parse(JSON.stringify(w.eval('seriesData[0].seasons.map(s => s.watchedEpisodes)')));
+
+    // Sıradaki bölüm satırındaki "Sezonu bitir" 1. sezonu tamamlar
+    doc.querySelector('.next-episode .complete-season').click();
+    assert.deepEqual(watched(), [6, 0]);
+    const log = JSON.parse(w.localStorage.getItem('watchLog'));
+    assert.equal(log[0].n, 4, 'günlüğe 4 bölüm yazılır');
+    assert.equal(log[0].m, 160, '4 x 40 dk');
+
+    // Toast üzerindeki "Geri Al" eski haline döndürür
+    const undo = Array.from(doc.querySelectorAll('#toastContainer button')).find(b => b.textContent === 'Geri Al');
+    assert.ok(undo, 'geri al düğmesi olmalı');
+    undo.click();
+    assert.deepEqual(watched(), [2, 0]);
+
+    // Sıradaki satırındaki geri alma düğmesi son bölümü düşer
+    doc.querySelector('.next-episode .undo-episode').click();
+    assert.deepEqual(watched(), [1, 0]);
+
+    // Sezon panelindeki "sıfırla"
+    doc.querySelector('.season-item .reset-season').click();
+    assert.deepEqual(watched(), [0, 0]);
+    assert.equal(w.eval('seriesData[0].seasons[0].lastWatchedAt'), null);
+    w.close();
+});
+
+test('platform filtresi: seçenekler veriden üretilir ve liste süzülür', () => {
+    const w = loadApp({
+        seriesData: [
+            { id: 1, name: 'Netflix Dizi', platform: 'Netflix', categories: [], seasons: [{ season: 1, totalEpisodes: 2, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Max Dizi', platform: 'Max', categories: [], seasons: [{ season: 1, totalEpisodes: 2, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        moviesData: [
+            { id: 3, name: 'Netflix Film', platform: 'Netflix', categories: [], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 4, name: 'Platformsuz Film', categories: [], createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    const seriesSelect = doc.getElementById('seriesPlatformFilter');
+    assert.deepEqual(
+        JSON.parse(JSON.stringify(Array.from(seriesSelect.options).map(o => o.textContent))),
+        ['Tümü (2)', 'Max (1)', 'Netflix (1)']
+    );
+    const movieSelect = doc.getElementById('moviesPlatformFilter');
+    assert.ok(Array.from(movieSelect.options).some(o => o.textContent === 'Diğer (1)'), 'platformsuz film "Diğer" sayılır');
+
+    seriesSelect.value = 'Netflix';
+    seriesSelect.dispatchEvent(new w.Event('change'));
+    const shown = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('#seriesList .card-title')).map(e => e.textContent.trim())));
+    assert.deepEqual(shown(), ['Netflix Dizi']);
+    assert.equal(w.localStorage.getItem('seriesPlatformFilter'), 'Netflix');
+
+    // Son Netflix dizisi silinince filtre kendini temizler
+    w.eval("removeSeries(1)");
+    assert.equal(doc.getElementById('seriesPlatformFilter').value, '');
+    assert.equal(shown().length, 1);
+    w.close();
+});
+
+test('yıllık özet: günlükten sayar, eski kayıtları iki kez saymaz', () => {
+    const w = loadApp({
+        categoriesData: [{ id: 1, name: 'Gerilim', color: '#ff0000' }, { id: 2, name: 'Komedi', color: '#00ff00' }],
+        seriesData: [
+            // Günlüğü olan dizi: yalnızca günlükteki bölümler sayılır
+            { id: 1, name: 'Günlüklü Dizi', platform: 'Netflix', categories: [1], runtime: 50,
+              seasons: [{ season: 1, totalEpisodes: 10, watchedEpisodes: 10, lastWatchedAt: '2026-02-01T00:00:00Z' }],
+              lastWatchedAt: '2026-02-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' },
+            // Günlük öncesi dizi: son izleme tarihine göre sayılır
+            { id: 2, name: 'Eski Dizi', platform: 'Max', categories: [1, 2], myRating: 9,
+              seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4, lastWatchedAt: '2026-05-01T00:00:00Z' }],
+              lastWatchedAt: '2026-05-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' },
+            // Başka yıl: sayılmaz
+            { id: 3, name: 'Geçen Yıl', platform: 'Max', categories: [],
+              seasons: [{ season: 1, totalEpisodes: 3, watchedEpisodes: 3, lastWatchedAt: '2025-05-01T00:00:00Z' }],
+              lastWatchedAt: '2025-05-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        moviesData: [{ id: 10, name: 'Eski Film', platform: 'Netflix', watched: true, runtime: 120, categories: [2],
+            lastWatchedAt: '2026-06-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' }],
+        watchLog: [
+            { t: '2026-02-01T10:00:00Z', k: 'series', id: 1, n: 3, m: 150 },
+            { t: '2025-12-01T10:00:00Z', k: 'series', id: 1, n: 2, m: 100 }
+        ]
+    });
+
+    const s2026 = JSON.parse(JSON.stringify(w.buildYearSummary(2026)));
+    assert.equal(s2026.episodes, 3 + 4, 'günlükteki 3 bölüm + günlüksüz dizinin 4 bölümü');
+    assert.equal(s2026.movies, 1);
+    assert.equal(s2026.minutes, 150 + 4 * 45 + 120, 'süresi bilinmeyen dizi bölüm başına 45 dk sayılır');
+    assert.equal(s2026.titles, 3);
+    assert.equal(s2026.estimated, 2, 'günlük öncesi iki kayıt tahmini');
+    assert.equal(s2026.categories[0].name, 'Gerilim');
+    assert.equal(s2026.topRated[0].item.name, 'Eski Dizi');
+
+    const s2025 = JSON.parse(JSON.stringify(w.buildYearSummary(2025)));
+    assert.equal(s2025.episodes, 2 + 3, 'günlükteki 2 bölüm + o yıl izlenen dizi');
+
+    const doc = w.document;
+    doc.getElementById('statsTab').click();
+    assert.ok(doc.getElementById('yearSummaryBody').textContent.includes('İzlenen bölüm'));
+    const years = JSON.parse(JSON.stringify(Array.from(doc.getElementById('yearSummarySelect').options).map(o => o.value)));
+    assert.ok(years.includes('2026') && years.includes('2025'));
+    w.close();
+});
+
+test('bakım: yinelenenleri birleştirir, kopuk bağları temizler, kopya alır', () => {
+    const w = loadApp({
+        categoriesData: [{ id: 1, name: 'Dram', color: '#111111' }],
+        tagsData: [{ id: 5, name: 'Kullanılmayan' }],
+        seriesData: [
+            { id: 1, name: 'Aynı Dizi', platform: 'Diğer', categories: [1], tags: ['Gizem'], imageUrl: 'https://img/a.jpg',
+              seasons: [{ season: 1, totalEpisodes: 8, watchedEpisodes: 5 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'aynı dizi', platform: 'Netflix', categories: [99], tags: [], description: 'Açıklama', myRating: 8,
+              seasons: [{ season: 1, totalEpisodes: 8, watchedEpisodes: 2 }, { season: 2, totalEpisodes: 6, watchedEpisodes: 6 }], createdAt: '2024-02-01T00:00:00Z' },
+            { id: 3, name: 'Sayısız Sezon', platform: 'Max', categories: [], tags: [],
+              seasons: [{ season: 1, totalEpisodes: 0, watchedEpisodes: 9 }], createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        moviesData: []
+    });
+    const doc = w.document;
+    doc.getElementById('openMaintenance').click();
+    const titles = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('.maintenance-issue-title')).map(e => e.textContent.trim())));
+    assert.ok(titles().some(t => t.includes('yinelenen kayıt')));
+    assert.ok(titles().some(t => t.includes('silinmiş kategori')));
+    assert.ok(titles().some(t => t.includes('etiket listede yok')));
+    assert.ok(titles().some(t => t.includes('kullanılmayan etiket')));
+    assert.ok(titles().some(t => t.includes('bölüm sayısı eksik')));
+
+    const fixByText = text => {
+        const row = Array.from(doc.querySelectorAll('.maintenance-issue'))
+            .find(el => el.querySelector('.maintenance-issue-title').textContent.includes(text));
+        assert.ok(row, 'sorun bulunamadı: ' + text);
+        row.querySelector('[data-issue-fix]').click();
+    };
+
+    fixByText('yinelenen kayıt');
+    const series = JSON.parse(JSON.stringify(w.eval('seriesData')));
+    assert.equal(series.length, 2, 'yinelenen kayıt silindi');
+    // Daha çok alanı dolu olan (açıklama + puan) kayıt korunur
+    const merged = series.find(s => s.id === 2);
+    assert.ok(merged, 'daha dolu olan kayıt korunur');
+    assert.equal(merged.platform, 'Netflix');
+    assert.equal(merged.imageUrl, 'https://img/a.jpg', 'eksik poster diğerinden alınır');
+    assert.deepEqual(JSON.parse(JSON.stringify(merged.tags)), ['Gizem'], 'etiketler birleşir');
+    assert.equal(merged.seasons.length, 2);
+    assert.equal(merged.seasons[0].watchedEpisodes, 5, 'izleme ilerlemesinde yüksek olan kalır');
+    assert.deepEqual(JSON.parse(JSON.stringify(merged.categories)), [99, 1]);
+
+    fixByText('silinmiş kategori');
+    assert.deepEqual(JSON.parse(JSON.stringify(w.eval('seriesData.find(s => s.id === 2).categories'))), [1]);
+
+    fixByText('bölüm sayısı eksik');
+    assert.equal(w.eval('seriesData.find(s => s.id === 3).seasons[0].totalEpisodes'), 9);
+
+    fixByText('etiket listede yok');
+    assert.ok(JSON.parse(JSON.stringify(w.eval('tagsData'))).some(t => t.name === 'Gizem'));
+
+    // Her düzeltmeden önce kopya alındı, geçmişten geri yüklenebilir
+    const snapshots = JSON.parse(w.localStorage.getItem('dataSnapshots'));
+    assert.ok(snapshots.length >= 4 && snapshots.length <= 5, 'en çok 5 kopya saklanır');
+    assert.ok(doc.querySelector('[data-snapshot-restore]'));
+    const oldest = snapshots[0];
+    assert.equal(oldest.counts.series, 3);
+
+    w.eval(`applySnapshot(${JSON.stringify(snapshots[0])})`);
+    assert.equal(w.eval('seriesData.length'), 3, 'kopyadan geri yükleme eski hali getirir');
+
+    // Sorun kalmayınca olumlu mesaj
+    w.eval("seriesData = []; moviesData = []; tagsData = []; renderMaintenance();");
+    assert.ok(doc.querySelector('.maintenance-ok'));
+    w.close();
+});
+
+test('yedek hatırlatması: hiç yedek yoksa uyarır, yedek alınınca kaybolur', () => {
+    const w = loadApp({ moviesData: [{ id: 1, name: 'Film', createdAt: '2024-01-01T00:00:00Z' }] });
+    const doc = w.document;
+    const banner = doc.getElementById('backupBanner');
+    assert.ok(!banner.classList.contains('hidden'), 'hiç yedek alınmamışken uyarı görünür');
+    assert.ok(banner.textContent.includes('henüz hiç yedek almadın'));
+
+    // Erteleme uyarıyı gizler
+    banner.querySelector('[data-backup-snooze]').click();
+    assert.ok(banner.classList.contains('hidden'));
+
+    // Eski bir yedek tarihi tekrar uyarı çıkarır
+    w.localStorage.removeItem('backupReminderSnoozedAt');
+    w.localStorage.setItem('lastBackupAt', new Date(Date.now() - 45 * 86400000).toISOString());
+    w.eval('renderBackupReminder()');
+    assert.ok(doc.getElementById('backupBanner').textContent.includes('45 gün geçti'));
+
+    // Yedek alınınca uyarı kalkar
+    w.eval('markBackupTaken()');
+    assert.ok(doc.getElementById('backupBanner').classList.contains('hidden'));
+    assert.equal(JSON.parse(JSON.stringify(w.eval('backupStatus().state'))), 'ok');
+    w.close();
+});

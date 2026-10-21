@@ -21,9 +21,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261021-1">
+    <link rel="stylesheet" href="css/styles.css?v=20261021-2">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261021-1">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261021-2">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -70,12 +70,17 @@
                 <label class="summary-check" title="Poster görselleri küçültülüp yedek dosyasına eklenir; geri yüklerken cihaza kaydedilir (dosya büyür)">
                     <input type="checkbox" id="backupIncludePosters" checked> Posterleri ekle
                 </label>
+                <button type="button" id="openMaintenance" class="btn btn-secondary btn-sm" title="Yinelenen kayıtlar, eksik bilgiler ve sürüm geçmişi">
+                    <i class="fas fa-screwdriver-wrench mr-2"></i> Bakım
+                </button>
                 <input type="file" id="importData" class="hidden" accept=".json">
                 <label for="importData" class="btn btn-secondary btn-sm cursor-pointer" title="Kayıp verilerinizi yedek dosyasından kurtarın">
                     <i class="fas fa-upload mr-2"></i> Geri Yükle
                 </label>
             </div>
         </section>
+
+        <div id="backupBanner" class="backup-banner hidden" role="status"></div>
 
         <!-- Tabs -->
         <div class="tabs-container flex rounded-xl p-2 mb-8">
@@ -184,6 +189,10 @@
                             </div>
                             
                             <div class="sort-row flex items-center gap-2 ml-auto">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Platform:</span>
+                                <select id="seriesPlatformFilter" class="form-control text-sm py-1 px-2 min-w-[120px]">
+                                    <option value="">Tümü</option>
+                                </select>
                                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
                                 <select id="seriesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
                                     <option value="recent">Son İzlenen</option>
@@ -300,6 +309,10 @@
                             </div>
                             
                             <div class="sort-row flex items-center gap-2 ml-auto">
+                                <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Platform:</span>
+                                <select id="moviesPlatformFilter" class="form-control text-sm py-1 px-2 min-w-[120px]">
+                                    <option value="">Tümü</option>
+                                </select>
                                 <span class="text-sm font-medium text-gray-600 dark:text-gray-300">Sıralama:</span>
                                 <select id="moviesSortSelect" class="form-control text-sm py-1 px-2 min-w-[140px]">
                                     <option value="recent">Son İzlenen</option>
@@ -562,6 +575,17 @@
             <div class="card p-6 mb-6">
                 <h2 class="text-2xl font-bold mb-6 flex items-center"><i class="fas fa-chart-bar mr-3 text-purple-400"></i>İstatistikler</h2>
                 <div id="statsKpis" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6"></div>
+
+                <section class="year-summary mb-6">
+                    <div class="year-summary-head">
+                        <h3><i class="fas fa-calendar-check mr-2 text-emerald-400"></i>Yıllık Özet</h3>
+                        <label class="year-summary-pick">
+                            <span class="sr-only">Yıl seç</span>
+                            <select id="yearSummarySelect" class="form-control text-sm py-1 px-2"></select>
+                        </label>
+                    </div>
+                    <div id="yearSummaryBody"></div>
+                </section>
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     <div class="stats-panel"><h3>Dizi Durumları</h3><div id="statsSeriesStatus"></div></div>
                     <div class="stats-panel"><h3>Kategoriler</h3><div id="statsCategories"></div></div>
@@ -822,6 +846,24 @@
                 </div>
 
                 <div class="form-group">
+                    <label for="moviePlatform">Platform</label>
+                    <select id="moviePlatform" name="moviePlatform" class="form-control">
+                        <option value="Netflix">Netflix</option>
+                        <option value="Disney+">Disney+</option>
+                        <option value="Amazon Prime">Amazon Prime</option>
+                        <option value="HBO Max">HBO Max</option>
+                        <option value="Gain">Gain</option>
+                        <option value="Exxen">Exxen</option>
+                        <option value="BluTV">BluTV</option>
+                        <option value="Tabii">Tabii</option>
+                        <option value="TOD">TOD</option>
+                        <option value="Apple TV+">Apple TV+</option>
+                        <option value="Sinema">Sinema</option>
+                        <option value="Diğer">Diğer</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
                     <label for="movieTrailerUrl">YouTube Fragman Linki</label>
                     <input type="url" id="movieTrailerUrl" name="movieTrailerUrl" class="form-control" 
                            placeholder="https://www.youtube.com/watch?v=...">
@@ -1069,6 +1111,28 @@
         </div>
     </div>
 
+    <!-- Veri bakımı -->
+    <div id="maintenanceModal" class="modal">
+        <div class="modal-content maintenance-modal-content">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <h2 class="text-xl font-bold"><i class="fas fa-screwdriver-wrench mr-2 text-indigo-500"></i>Veri Bakımı</h2>
+                <button type="button" id="closeMaintenanceModal" class="close-trailer-btn !text-current" aria-label="Kapat">&times;</button>
+            </div>
+
+            <div id="backupReminder" class="backup-reminder hidden"></div>
+
+            <h3 class="maintenance-heading">Bulunan sorunlar</h3>
+            <div id="maintenanceIssues" class="maintenance-issues"></div>
+
+            <h3 class="maintenance-heading">Sürüm geçmişi</h3>
+            <p class="text-sm opacity-75 mb-3">
+                Toplu veya geri alınamayan işlemlerden önce verinin bir kopyası bu cihaza kaydedilir. Son
+                <span id="snapshotLimit">5</span> kopya saklanır.
+            </p>
+            <div id="snapshotList" class="snapshot-list"></div>
+        </div>
+    </div>
+
     <!-- Ne izlesem? -->
     <div id="pickModal" class="modal">
         <div class="modal-content pick-modal-content">
@@ -1205,7 +1269,7 @@
 
 
 
-    <script src="js/app.js?v=20261021-1"></script>
+    <script src="js/app.js?v=20261021-2"></script>
 </body>
 
 </html>

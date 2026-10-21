@@ -199,6 +199,7 @@ function normalizeMovie(movie) {
         id: movie.id != null ? movie.id : newId(),
         name: String(movie.name || '').trim(),
         watched: !!movie.watched,
+        platform: movie.platform || 'Diğer',
         categories: normalizeIdList(movie.categories),
         tags: normalizeTagList(movie.tags),
         trailerUrl: movie.trailerUrl || '',
@@ -621,12 +622,19 @@ function initApp() {
     setupModalClosing();
     setupPickForMe();
     setupUpcomingCalendar();
+    setupPlatformFilters();
+    setupMaintenance();
+    setupBackupReminder();
+    const yearSelect = document.getElementById('yearSummarySelect');
+    if (yearSelect) yearSelect.addEventListener('change', renderYearSummary);
 
     refreshAll();
 }
 
 // Tüm görünümleri mevcut veriye göre yeniden çiz (tekrar tekrar çağrılabilir)
 function refreshAll() {
+    refreshPlatformFilters();
+    if (typeof renderBackupReminder === 'function') renderBackupReminder();
     filterSeries();
     filterMovies();
     renderCategoriesList();
@@ -741,6 +749,35 @@ function setupEventDelegation() {
         const deleteBtn = target.closest('.delete-icon');
         if (deleteBtn && seriesCard) { removeSeries(deleteBtn.getAttribute('data-id')); return; }
         if (deleteBtn && movieCard) { removeMovie(deleteBtn.getAttribute('data-id')); return; }
+
+        const seasonSetBtn = target.closest('.complete-season, .reset-season, .undo-episode');
+        if (seasonSetBtn && seriesCard) {
+            e.stopPropagation();
+            const seriesId = seasonSetBtn.getAttribute('data-series-id');
+            const seasonId = seasonSetBtn.getAttribute('data-season-id');
+            const series = findSeries(seriesId);
+            const season = series && series.seasons.find(x => String(x.id) === String(seasonId));
+            if (!season) return;
+            const before = season.watchedEpisodes;
+            const target_ = seasonSetBtn.classList.contains('complete-season') ? season.totalEpisodes
+                : seasonSetBtn.classList.contains('reset-season') ? 0
+                : before - 1;
+            if (setSeasonWatched(seriesId, seasonId, target_)) {
+                if (seasonSetBtn.closest('.season-item')) openSeasonIds.add(String(seasonId));
+                filterSeries();
+                updateTotalStats();
+                const diff = Math.abs(season.watchedEpisodes - before);
+                showToast(
+                    season.watchedEpisodes > before
+                        ? `S${season.season}: ${diff} bölüm izlendi olarak işaretlendi.`
+                        : `S${season.season}: ${diff} bölüm geri alındı.`,
+                    { actionLabel: 'Geri Al', onAction: () => {
+                        if (setSeasonWatched(seriesId, seasonId, before)) { filterSeries(); updateTotalStats(); }
+                    }, duration: 7000 }
+                );
+            }
+            return;
+        }
 
         const episodeBtn = target.closest('.increase-episode, .decrease-episode');
         if (episodeBtn && seriesCard) {
@@ -1204,6 +1241,7 @@ function setupBulkEditing() {
                 return;
             }
 
+            createSnapshot(`Toplu düzenleme öncesi (${selectedBulkKeys.size} kayıt)`);
             bulkAddTagNames.forEach(n => ensureTagExists(n));
 
             selectedBulkKeys.forEach(key => {
@@ -1292,7 +1330,9 @@ function getSeriesTotals(series) {
     let status = total > 0 && watched >= total ? 'completed' : watched > 0 ? 'watching' : 'planning';
     if ((series.userStatus === 'paused' || series.userStatus === 'dropped') && status !== 'completed') status = series.userStatus;
     const next = seasons.find(s => s.watchedEpisodes < s.totalEpisodes) || null;
-    return { total, watched, status, progress: total > 0 ? (watched / total) * 100 : 0, next };
+    // Son işaretlenen bölümün bulunduğu sezon: "geri al" bunu hedefler
+    const prev = [...seasons].reverse().find(s => s.watchedEpisodes > 0) || null;
+    return { total, watched, status, progress: total > 0 ? (watched / total) * 100 : 0, next, prev };
 }
 
 // Update total stats
@@ -1895,7 +1935,13 @@ function renderSeriesList() {
                                     <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${seasonProgress}%"></div>
                                 </div>
                             </div>
-                            <div class="flex justify-end space-x-2 mt-4">
+                            <div class="flex flex-wrap justify-end gap-2 mt-4">
+                                ${season.watchedEpisodes > 0 ? `<button class="btn btn-secondary btn-sm reset-season" data-series-id="${esc(series.id)}" data-season-id="${esc(season.id)}" title="Bu sezonu izlenmedi yap">
+                                    <i class="fas fa-eraser"></i>
+                                </button>` : ''}
+                                ${season.totalEpisodes > 0 && season.watchedEpisodes < season.totalEpisodes ? `<button class="btn btn-secondary btn-sm complete-season" data-series-id="${esc(series.id)}" data-season-id="${esc(season.id)}" title="Sezonun tamamını izledim">
+                                    <i class="fas fa-forward-fast mr-1"></i> Sezonu bitir
+                                </button>` : ''}
                                 <button class="btn btn-secondary btn-sm decrease-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(season.id)}" title="Bir bölüm geri al">
                                     <i class="fas fa-minus"></i>
                                 </button>
@@ -1911,13 +1957,21 @@ function renderSeriesList() {
 
         const categoryBadges = renderCategoryBadges(series.categories);
         const tags = renderTagBadges(series.tags);
-        const next = getSeriesTotals(series).next;
+        const { next, prev } = getSeriesTotals(series);
         const nextEpisodeHtml = next && status !== 'dropped' ? `
             <div class="next-episode">
                 <span><i class="fas fa-forward mr-1 text-indigo-500"></i>Sıradaki: <strong>S${esc(next.season)} · B${next.watchedEpisodes + 1}</strong></span>
-                <button class="btn btn-primary btn-sm increase-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(next.id)}" title="Bu bölümü izledim">
-                    <i class="fas fa-check mr-1"></i> İzledim
-                </button>
+                <div class="next-episode-actions">
+                    ${prev ? `<button class="btn btn-secondary btn-sm undo-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(prev.id)}" title="Son işaretlediğin bölümü geri al (S${esc(prev.season)} · B${prev.watchedEpisodes})">
+                        <i class="fas fa-rotate-left"></i>
+                    </button>` : ''}
+                    <button class="btn btn-primary btn-sm increase-episode" data-series-id="${esc(series.id)}" data-season-id="${esc(next.id)}" title="Bu bölümü izledim">
+                        <i class="fas fa-check mr-1"></i> İzledim
+                    </button>
+                    <button class="btn btn-secondary btn-sm complete-season" data-series-id="${esc(series.id)}" data-season-id="${esc(next.id)}" title="${esc(next.totalEpisodes - next.watchedEpisodes)} bölümü birden izledim olarak işaretle">
+                        <i class="fas fa-forward-fast mr-1"></i> Sezonu bitir
+                    </button>
+                </div>
             </div>` : '';
 
         return `
@@ -2031,6 +2085,7 @@ function renderMoviesList() {
                     </div>
                     <div class="text-gray-600 dark:text-gray-300 mb-2">
                         <span class="status-badge ${statusClass}">${statusText}</span>
+                        ${movie.platform && movie.platform !== 'Diğer' ? `<span class="ml-2">${esc(movie.platform)}</span>` : ''}
                         ${movie.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(movie.imdbRating)}</span>` : ''}
                         ${movie.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(movie.myRating)}</span>` : ''}
                     </div>
@@ -2738,11 +2793,57 @@ function filterSeries() {
         if (!matchesSearchTerm(series, searchTerm)) return false;
         if (currentSeriesFilter !== 'all' && getSeriesStatus(series) !== currentSeriesFilter) return false;
         if (currentSeriesCategory && !(series.categories || []).includes(currentSeriesCategory)) return false;
+        if (currentSeriesPlatform && (series.platform || 'Diğer') !== currentSeriesPlatform) return false;
         return true;
     });
 
     const seriesSortSelect = document.getElementById('seriesSortSelect');
     sortSeries(seriesSortSelect ? seriesSortSelect.value : 'recent');
+}
+
+// --- Platform filtresi ---
+let currentSeriesPlatform = '';
+let currentMoviesPlatform = '';
+try {
+    currentSeriesPlatform = localStorage.getItem('seriesPlatformFilter') || '';
+    currentMoviesPlatform = localStorage.getItem('moviesPlatformFilter') || '';
+} catch (_) { /* depolama kapalıysa filtresiz başla */ }
+
+// Seçenekleri mevcut verideki platformlardan üret; seçili platform artık yoksa filtreyi temizle
+function refreshPlatformFilters() {
+    [
+        { id: 'seriesPlatformFilter', list: seriesData, current: currentSeriesPlatform, set: v => { currentSeriesPlatform = v; } },
+        { id: 'moviesPlatformFilter', list: moviesData, current: currentMoviesPlatform, set: v => { currentMoviesPlatform = v; } }
+    ].forEach(({ id, list, current, set }) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        const counts = new Map();
+        list.forEach(item => {
+            const name = item.platform || 'Diğer';
+            counts.set(name, (counts.get(name) || 0) + 1);
+        });
+        const names = Array.from(counts.keys()).sort((a, b) => a.localeCompare(b, 'tr'));
+        if (current && !counts.has(current)) {
+            set('');
+            current = '';
+        }
+        select.innerHTML = `<option value="">Tümü (${list.length})</option>` +
+            names.map(n => `<option value="${esc(n)}">${esc(n)} (${counts.get(n)})</option>`).join('');
+        select.value = current;
+    });
+}
+
+function setupPlatformFilters() {
+    const bind = (id, storageKey, apply) => {
+        const select = document.getElementById(id);
+        if (!select) return;
+        select.addEventListener('change', () => {
+            apply(select.value);
+            try { localStorage.setItem(storageKey, select.value); } catch (_) {}
+        });
+    };
+    bind('seriesPlatformFilter', 'seriesPlatformFilter', value => { currentSeriesPlatform = value; filterSeries(); });
+    bind('moviesPlatformFilter', 'moviesPlatformFilter', value => { currentMoviesPlatform = value; filterMovies(); });
 }
 
 // Filter movies
@@ -2754,6 +2855,7 @@ function filterMovies() {
         if (currentMoviesFilter === 'watched' && !movie.watched) return false;
         if (currentMoviesFilter === 'not-watched' && movie.watched) return false;
         if (currentMoviesCategory && !(movie.categories || []).includes(currentMoviesCategory)) return false;
+        if (currentMoviesPlatform && (movie.platform || 'Diğer') !== currentMoviesPlatform) return false;
         return true;
     });
 
@@ -2845,6 +2947,7 @@ function addMovie(prefillName) {
     document.getElementById('movieModalTitle').textContent = 'Film Ekle';
     document.getElementById('movieId').value = '';
     document.getElementById('movieName').value = typeof prefillName === 'string' ? prefillName : '';
+    setPlatformValue('moviePlatform', 'Netflix');
     setSelectedCategories('movieCategorySelector', []);
     setTagsInContainer('movieTagsContainer', 'movieTagsInput', []);
     if (typeof resetAutoFill === 'function') resetAutoFill('movie');
@@ -2868,6 +2971,7 @@ function editMovie(id) {
     document.getElementById('movieReleaseDate').value = movie.releaseDate || '';
     document.getElementById('movieMyRating').value = movie.myRating != null ? movie.myRating : '';
     document.getElementById('movieNotes').value = movie.notes || '';
+    setPlatformValue('moviePlatform', movie.platform || 'Diğer');
     setSelectedCategories('movieCategorySelector', movie.categories);
     setTagsInContainer('movieTagsContainer', 'movieTagsInput', movie.tags);
     if (typeof resetAutoFill === 'function') resetAutoFill('movie');
@@ -3457,7 +3561,8 @@ document.getElementById('exportData').addEventListener('click', async function (
         series: seriesData,
         movies: moviesData,
         categories: categoriesData,
-        tags: tagsData
+        tags: tagsData,
+        watchLog: getWatchLog()
     };
 
     if (backupPostersCheckbox && backupPostersCheckbox.checked && collectPosterUrls().length) {
@@ -3487,6 +3592,7 @@ document.getElementById('exportData').addEventListener('click', async function (
     linkElement.click();
     linkElement.remove();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
+    markBackupTaken();
 });
 
 // Import data
@@ -3522,6 +3628,7 @@ document.getElementById('importData').addEventListener('change', function (e) {
         try {
             __origSetItem('importBackup', JSON.stringify({ savedAt: new Date().toISOString(), ...getAllDataPayload() }));
         } catch (_) {}
+        createSnapshot('Yedekten geri yükleme öncesi');
 
         seriesData = nextSeries;
         moviesData = nextMovies;
@@ -3535,6 +3642,7 @@ document.getElementById('importData').addEventListener('change', function (e) {
         localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
         localStorage.setItem('tagsData', JSON.stringify(tagsData));
         localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+        if (Array.isArray(data.watchLog)) saveWatchLog(data.watchLog.filter(e => e && e.t));
 
         refreshAll();
         const restoring = data.posters ? restorePosters(data.posters) : null;
@@ -4333,6 +4441,7 @@ document.getElementById('movieForm').addEventListener('submit', function (e) {
     const id = document.getElementById('movieId').value;
     const name = document.getElementById('movieName').value.trim();
     const watched = document.getElementById('movieWatched').checked;
+    const platform = document.getElementById('moviePlatform').value;
     const categories = getSelectedCategories('movieCategorySelector');
     const tags = getTagsFromContainer('movieTagsContainer');
     const trailerUrl = document.getElementById('movieTrailerUrl').value.trim();
@@ -4366,6 +4475,7 @@ document.getElementById('movieForm').addEventListener('submit', function (e) {
                 ...(typeof getAutoFillExtras === 'function' ? getAutoFillExtras('movie') : {}),
                 name,
                 watched,
+                platform,
                 categories,
                 tags,
                 trailerUrl,
@@ -4387,6 +4497,7 @@ document.getElementById('movieForm').addEventListener('submit', function (e) {
             id: newId(),
             name,
             watched,
+            platform,
             categories,
             tags,
             trailerUrl,
@@ -5323,9 +5434,10 @@ async function applyAutoFillResult(kind, result) {
     const trailerFilled = setField(els.trailer, info.trailerUrl);
     updateImagePreview(els.image, els.preview);
 
-    if (kind === 'series' && info.platform) {
-        setPlatformValue('seriesPlatform', info.platform);
-        markAutofilled(document.getElementById('seriesPlatform'));
+    if (info.platform) {
+        const platformId = kind === 'series' ? 'seriesPlatform' : 'moviePlatform';
+        setPlatformValue(platformId, info.platform);
+        markAutofilled(document.getElementById(platformId));
     }
 
     // Kategoriler ve etiketler: mevcut seçime ekle
@@ -5590,7 +5702,7 @@ async function fillItem(kind, item, options) {
     fill('imdbRating', info.imdbRating, 'puan');
     fill('releaseDate', info.releaseDate || null, 'tarih');
     fill('runtime', normalizeRuntime(info.runtime), 'süre');
-    if (kind === 'series' && (!item.platform || item.platform === 'Diğer') && info.platform) {
+    if ((!item.platform || item.platform === 'Diğer') && info.platform) {
         item.platform = info.platform;
         filled.push('platform');
     }
@@ -5638,6 +5750,7 @@ document.getElementById('startBulkFillBtn').addEventListener('click', async () =
         return;
     }
 
+    createSnapshot('Eksikleri tamamlama öncesi');
     bulkFillRunning = true;
     bulkFillStop = false;
     const startBtn = document.getElementById('startBulkFillBtn');
@@ -5742,7 +5855,7 @@ function renderStats() {
     );
 
     const platformCounts = {};
-    seriesData.forEach(s => { const p = s.platform || 'Diğer'; platformCounts[p] = (platformCounts[p] || 0) + 1; });
+    [...seriesData, ...moviesData].forEach(x => { const p = x.platform || 'Diğer'; platformCounts[p] = (platformCounts[p] || 0) + 1; });
     document.getElementById('statsPlatforms').innerHTML = renderBarRows(
         Object.entries(platformCounts).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count)
     );
@@ -5764,6 +5877,8 @@ function renderStats() {
     document.getElementById('statsRecent').innerHTML = recent.length
         ? recent.map(x => `<div class="stats-list-item"><span>${esc(x.name)} <span class="opacity-60 text-xs">${x.type}</span></span><span class="opacity-70">${esc(new Date(x.ts).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }))}</span></div>`).join('')
         : '<p class="text-sm opacity-70">Henüz izleme kaydı yok.</p>';
+
+    renderYearSummary();
 }
 
 // =====================================================================
@@ -6038,6 +6153,575 @@ function setSeasonWatchedPlusOne(seriesId, seasonId) {
     const season = series.seasons.find(s => String(s.id) === String(seasonId));
     if (!season) return false;
     return setSeasonWatched(seriesId, seasonId, season.watchedEpisodes + 1);
+}
+
+// =====================================================================
+// Yıllık özet
+// =====================================================================
+
+// Günlük tutulmaya başlamadan önceki kayıtlar için son izleme tarihine bakılır.
+// Günlükte geçen kayıtlar bu yoldan ikinci kez sayılmaz.
+function buildYearSummary(year) {
+    const log = getWatchLog();
+    const loggedIds = new Set(log.map(e => e.k + ':' + e.id));
+    const inYear = ts => ts && new Date(ts).getFullYear() === year;
+
+    let episodes = 0;
+    let movies = 0;
+    let minutes = 0;
+    const touched = new Map(); // "kind:id" -> kayıt
+
+    const addItem = (kind, id) => {
+        const item = kind === 'series'
+            ? seriesData.find(x => String(x.id) === String(id))
+            : moviesData.find(x => String(x.id) === String(id));
+        if (item) touched.set(kind + ':' + id, { kind, item });
+    };
+
+    log.forEach(entry => {
+        if (!inYear(entry.t)) return;
+        const n = Number(entry.n) || 0;
+        minutes += Number(entry.m) || 0;
+        if (entry.k === 'series') episodes += n; else movies += n;
+        if (n > 0) addItem(entry.k, entry.id);
+    });
+
+    let estimated = 0;
+    seriesData.forEach(series => {
+        if (loggedIds.has('series:' + series.id) || !inYear(series.lastWatchedAt)) return;
+        const watched = getSeriesTotals(series).watched;
+        if (!watched) return;
+        episodes += watched;
+        minutes += watched * episodeMinutes(series);
+        estimated++;
+        touched.set('series:' + series.id, { kind: 'series', item: series });
+    });
+    moviesData.forEach(movie => {
+        if (loggedIds.has('movie:' + movie.id) || !movie.watched || !inYear(movie.lastWatchedAt)) return;
+        movies += 1;
+        minutes += movieMinutes(movie);
+        estimated++;
+        touched.set('movie:' + movie.id, { kind: 'movie', item: movie });
+    });
+
+    const items = Array.from(touched.values());
+    const tally = (pairs) => {
+        const counts = new Map();
+        pairs.forEach(name => counts.set(name, (counts.get(name) || 0) + 1));
+        return Array.from(counts.entries()).map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count);
+    };
+    const categories = tally(items.flatMap(({ item }) => (item.categories || [])
+        .map(id => (categoriesData.find(c => c.id === id) || {}).name)
+        .filter(Boolean)));
+    const platforms = tally(items.map(({ item }) => item.platform || 'Diğer'));
+    const topRated = items
+        .filter(({ item }) => item.myRating != null)
+        .sort((a, b) => b.item.myRating - a.item.myRating)
+        .slice(0, 5);
+
+    return {
+        year,
+        episodes: Math.max(0, episodes),
+        movies: Math.max(0, movies),
+        minutes: Math.max(0, minutes),
+        titles: items.length,
+        categories,
+        platforms,
+        topRated,
+        estimated
+    };
+}
+
+function summaryYears() {
+    const years = new Set();
+    getWatchLog().forEach(e => {
+        const y = new Date(e.t).getFullYear();
+        if (Number.isFinite(y)) years.add(y);
+    });
+    [...seriesData, ...moviesData].forEach(item => {
+        const ts = item.lastWatchedAt;
+        if (!ts) return;
+        const y = new Date(ts).getFullYear();
+        if (Number.isFinite(y)) years.add(y);
+    });
+    years.add(new Date().getFullYear());
+    return Array.from(years).sort((a, b) => b - a);
+}
+
+function formatHours(minutes) {
+    const hours = Math.floor(minutes / 60);
+    const rest = Math.round(minutes % 60);
+    if (!hours) return `${rest} dk`;
+    return rest ? `${hours} sa ${rest} dk` : `${hours} sa`;
+}
+
+function renderYearSummary() {
+    const body = document.getElementById('yearSummaryBody');
+    const select = document.getElementById('yearSummarySelect');
+    if (!body || !select) return;
+
+    const years = summaryYears();
+    const wanted = Number(select.value) || new Date().getFullYear();
+    const year = years.includes(wanted) ? wanted : years[0];
+    select.innerHTML = years.map(y => `<option value="${y}">${y}</option>`).join('');
+    select.value = String(year);
+
+    const summary = buildYearSummary(year);
+    if (!summary.titles && !summary.episodes && !summary.movies) {
+        body.innerHTML = `<p class="text-sm opacity-70">${year} yılında işaretlenmiş izleme yok.</p>`;
+        return;
+    }
+
+    const kpis = [
+        { label: 'İzlenen bölüm', value: summary.episodes },
+        { label: 'İzlenen film', value: summary.movies },
+        { label: 'Toplam süre', value: formatHours(summary.minutes), small: true },
+        { label: 'Farklı yapım', value: summary.titles }
+    ];
+    const list = (title, rows, empty) => `
+        <div class="year-list">
+            <h4>${esc(title)}</h4>
+            ${rows.length ? rows.slice(0, 5).map(r => `<div class="stats-list-item"><span>${esc(r.name)}</span><span class="opacity-70">${esc(r.count)}</span></div>`).join('')
+                : `<p class="text-sm opacity-60">${esc(empty)}</p>`}
+        </div>`;
+
+    body.innerHTML = `
+        <div class="year-kpis">
+            ${kpis.map(k => `<div class="stats-kpi"><div class="value${k.small ? ' value-sm' : ''}">${esc(k.value)}</div><div class="label">${esc(k.label)}</div></div>`).join('')}
+        </div>
+        <div class="year-lists">
+            ${list('En çok izlediğin türler', summary.categories, 'Kategori atanmış yapım yok.')}
+            ${list('Platformlar', summary.platforms, 'Platform bilgisi yok.')}
+            <div class="year-list">
+                <h4>Yılın favorileri</h4>
+                ${summary.topRated.length
+                    ? summary.topRated.map(({ item }) => `<div class="stats-list-item"><span>${esc(item.name)}</span><span class="text-pink-500"><i class="fas fa-heart"></i> ${esc(item.myRating)}</span></div>`).join('')
+                    : '<p class="text-sm opacity-60">Bu yıl izlediklerine puan vermemişsin.</p>'}
+            </div>
+        </div>
+        <p class="year-note">
+            <i class="fas fa-circle-info mr-1"></i>Süreler, bilinmeyen durumlarda bölüm başına ${DEFAULT_EPISODE_MINUTES} dk ve film başına ${DEFAULT_MOVIE_MINUTES} dk varsayılarak hesaplanır.
+            ${summary.estimated ? `${summary.estimated} yapım, bölüm bölüm kayıt tutulmadan önce izlendiği için son izleme tarihine göre bu yıla sayıldı.` : ''}
+            İzleme günlüğü yalnızca bu cihazda tutulur; yedek dosyasına dahildir.
+        </p>`;
+}
+
+// =====================================================================
+// Yedek hatırlatması
+// =====================================================================
+const BACKUP_WARN_DAYS = 30;
+const BACKUP_SNOOZE_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function markBackupTaken() {
+    try {
+        localStorage.setItem('lastBackupAt', new Date().toISOString());
+        localStorage.removeItem('backupReminderSnoozedAt');
+    } catch (_) {}
+    renderBackupReminder();
+}
+
+// { state: 'ok' | 'never' | 'stale' | 'nodata', days }
+function backupStatus() {
+    if (seriesData.length + moviesData.length === 0) return { state: 'nodata', days: 0 };
+    let last = null;
+    try { last = localStorage.getItem('lastBackupAt'); } catch (_) {}
+    const ts = getTimestamp(last);
+    if (!ts) return { state: 'never', days: 0 };
+    const days = Math.floor((Date.now() - ts) / DAY_MS);
+    return { state: days >= BACKUP_WARN_DAYS ? 'stale' : 'ok', days };
+}
+
+function backupMessage(status) {
+    if (status.state === 'never') return 'Verilerin yalnızca bu tarayıcıda duruyor ve henüz hiç yedek almadın.';
+    if (status.state === 'stale') return `Son yedeğinin üzerinden ${status.days} gün geçti.`;
+    return '';
+}
+
+function renderBackupReminder() {
+    const status = backupStatus();
+    const message = backupMessage(status);
+
+    // Pencere içindeki uyarı: ertelemeden bağımsız, her zaman güncel durumu gösterir
+    const modalBox = document.getElementById('backupReminder');
+    if (modalBox) {
+        modalBox.classList.toggle('hidden', !message);
+        if (message) {
+            modalBox.innerHTML = `<i class="fas fa-shield-halved mr-2"></i>${esc(message)} <button type="button" class="helper-link" data-backup-now>Şimdi yedek al</button>`;
+        }
+    }
+
+    const banner = document.getElementById('backupBanner');
+    if (!banner) return;
+    let snoozed = 0;
+    try { snoozed = getTimestamp(localStorage.getItem('backupReminderSnoozedAt')); } catch (_) {}
+    const isSnoozed = snoozed && Date.now() - snoozed < BACKUP_SNOOZE_DAYS * DAY_MS;
+    if (!message || isSnoozed) {
+        banner.classList.add('hidden');
+        banner.innerHTML = '';
+        return;
+    }
+    banner.classList.remove('hidden');
+    banner.innerHTML = `
+        <span><i class="fas fa-shield-halved mr-2"></i>${esc(message)} Tarayıcı verisi silinirse geri dönüşü yok.</span>
+        <span class="backup-banner-actions">
+            <button type="button" class="btn btn-primary btn-sm" data-backup-now><i class="fas fa-download mr-1"></i>Yedek al</button>
+            <button type="button" class="btn btn-secondary btn-sm" data-backup-snooze>${BACKUP_SNOOZE_DAYS} gün sonra hatırlat</button>
+        </span>`;
+}
+
+function setupBackupReminder() {
+    document.addEventListener('click', e => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+        if (target.closest('[data-backup-now]')) {
+            const exportBtn = document.getElementById('exportData');
+            if (exportBtn) exportBtn.click();
+            return;
+        }
+        if (target.closest('[data-backup-snooze]')) {
+            try { localStorage.setItem('backupReminderSnoozedAt', new Date().toISOString()); } catch (_) {}
+            renderBackupReminder();
+        }
+    });
+    renderBackupReminder();
+}
+
+// =====================================================================
+// Sürüm geçmişi (geri alınamayan işlemlerden önce otomatik kopya)
+// =====================================================================
+const SNAPSHOT_KEY = 'dataSnapshots';
+const SNAPSHOT_MAX = 5;
+const SNAPSHOT_CHARS_MAX = 1200000; // ~1.2 MB: localStorage kotasını zorlamamak için
+
+function getSnapshots() {
+    const list = safeParse(SNAPSHOT_KEY, []);
+    return Array.isArray(list) ? list.filter(x => x && x.at && x.data) : [];
+}
+
+function storeSnapshots(list) {
+    // Kota dolarsa en eskiden başlayarak at
+    let current = list.slice(-SNAPSHOT_MAX);
+    while (current.length) {
+        const text = JSON.stringify(current);
+        if (text.length <= SNAPSHOT_CHARS_MAX) {
+            try {
+                __origSetItem(SNAPSHOT_KEY, text);
+                return true;
+            } catch (_) { /* kota: bir eskiyi daha at */ }
+        }
+        current = current.slice(1);
+    }
+    try { __origSetItem(SNAPSHOT_KEY, '[]'); } catch (_) {}
+    return false;
+}
+
+function createSnapshot(label) {
+    const snapshot = {
+        at: new Date().toISOString(),
+        label: String(label || 'Değişiklik'),
+        counts: { series: seriesData.length, movies: moviesData.length },
+        data: {
+            series: seriesData,
+            movies: moviesData,
+            categories: categoriesData,
+            tags: tagsData
+        }
+    };
+    return storeSnapshots([...getSnapshots(), snapshot]);
+}
+
+function applySnapshot(snapshot) {
+    const data = snapshot && snapshot.data;
+    if (!data) return false;
+    seriesData = normalizeSeriesList(data.series);
+    moviesData = normalizeMoviesList(data.movies);
+    categoriesData = normalizeCategoriesList(data.categories) || categoriesData;
+    tagsData = normalizeTagsData(data.tags);
+    // Kopyadan sonra silinenlerin mezar taşları, geri getirileni tekrar silmesin
+    deletedItems = normalizeDeleted(null);
+    selectedBulkKeys = new Set();
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    localStorage.setItem('categoriesData', JSON.stringify(categoriesData));
+    localStorage.setItem('tagsData', JSON.stringify(tagsData));
+    localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+    refreshAll();
+    return true;
+}
+
+function renderSnapshots() {
+    const listEl = document.getElementById('snapshotList');
+    const limitEl = document.getElementById('snapshotLimit');
+    if (!listEl) return;
+    if (limitEl) limitEl.textContent = String(SNAPSHOT_MAX);
+    const snapshots = getSnapshots().slice().reverse();
+    if (!snapshots.length) {
+        listEl.innerHTML = '<p class="text-sm opacity-70">Henüz kayıtlı kopya yok. İlk toplu işlemde otomatik oluşur.</p>';
+        return;
+    }
+    listEl.innerHTML = snapshots.map((snap, index) => `
+        <div class="snapshot-item">
+            <div class="min-w-0">
+                <div class="snapshot-label">${esc(snap.label)}</div>
+                <div class="snapshot-meta">${esc(new Date(snap.at).toLocaleString('tr-TR'))} · ${esc(snap.counts ? snap.counts.series : '?')} dizi, ${esc(snap.counts ? snap.counts.movies : '?')} film</div>
+            </div>
+            <button type="button" class="btn btn-secondary btn-sm" data-snapshot-restore="${index}"><i class="fas fa-clock-rotate-left mr-1"></i>Geri Yükle</button>
+        </div>`).join('');
+}
+
+function restoreSnapshotAt(reverseIndex) {
+    const snapshots = getSnapshots().slice().reverse();
+    const snapshot = snapshots[reverseIndex];
+    if (!snapshot) return;
+    const when = new Date(snapshot.at).toLocaleString('tr-TR');
+    if (!confirm(`${when} tarihli kopya geri yüklenecek (${snapshot.counts.series} dizi, ${snapshot.counts.movies} film).\n\nŞu anki verilerin "Geri yükleme öncesi" adıyla kopyalanacak. Devam edilsin mi?`)) return;
+    createSnapshot('Geri yükleme öncesi');
+    if (applySnapshot(snapshot)) {
+        renderSnapshots();
+        showToast('Veriler seçilen kopyadan geri yüklendi.');
+    }
+}
+
+// =====================================================================
+// Veri bakımı: yinelenen kayıtlar, eksikler, kopuk bağlantılar
+// =====================================================================
+
+function fieldScore(item) {
+    return ['imageUrl', 'description', 'trailerUrl', 'imdbRating', 'releaseDate', 'runtime', 'notes', 'myRating']
+        .filter(f => !isEmptyField(item[f])).length;
+}
+
+function duplicateGroups(list) {
+    const byName = new Map();
+    list.forEach(item => {
+        const key = normalizeTitle(item.name);
+        if (!key) return;
+        if (!byName.has(key)) byName.set(key, []);
+        byName.get(key).push(item);
+    });
+    return Array.from(byName.values()).filter(group => group.length > 1);
+}
+
+// Aynı adlı kayıtları en dolu olanda birleştirir, diğerlerini siler
+function mergeDuplicateGroup(kind, group) {
+    const sorted = [...group].sort((a, b) => (fieldScore(b) - fieldScore(a)) || (getTimestamp(a.createdAt) - getTimestamp(b.createdAt)));
+    const primary = sorted[0];
+    const others = sorted.slice(1);
+
+    others.forEach(other => {
+        ['imageUrl', 'description', 'trailerUrl', 'imdbRating', 'releaseDate', 'runtime', 'notes', 'tmdbId', 'tmdbType', 'imdbId', 'tvmazeId', 'originalName'].forEach(field => {
+            if (isEmptyField(primary[field]) && !isEmptyField(other[field])) primary[field] = other[field];
+        });
+        if (primary.platform === 'Diğer' && other.platform && other.platform !== 'Diğer') primary.platform = other.platform;
+        primary.categories = Array.from(new Set([...(primary.categories || []), ...(other.categories || [])]));
+        primary.tags = Array.from(new Set([...(primary.tags || []), ...(other.tags || [])]));
+        if (other.myRating != null && (primary.myRating == null || other.myRating > primary.myRating)) primary.myRating = other.myRating;
+
+        if (kind === 'series') {
+            (other.seasons || []).forEach(season => {
+                const existing = (primary.seasons || []).find(x => x.season === season.season);
+                if (!existing) {
+                    primary.seasons.push(normalizeSeason({ ...season, id: newId() }));
+                    return;
+                }
+                existing.totalEpisodes = Math.max(existing.totalEpisodes || 0, season.totalEpisodes || 0);
+                existing.watchedEpisodes = Math.max(existing.watchedEpisodes || 0, season.watchedEpisodes || 0);
+                if (!existing.releaseDate && season.releaseDate) existing.releaseDate = season.releaseDate;
+                if (getTimestamp(season.lastWatchedAt) > getTimestamp(existing.lastWatchedAt)) existing.lastWatchedAt = season.lastWatchedAt;
+            });
+            primary.seasons.sort((a, b) => a.season - b.season);
+            refreshSeriesLastWatched(primary);
+        } else {
+            if (other.watched) primary.watched = true;
+            if (getTimestamp(other.lastWatchedAt) > getTimestamp(primary.lastWatchedAt)) primary.lastWatchedAt = other.lastWatchedAt;
+        }
+    });
+
+    primary.updatedAt = new Date().toISOString();
+    const removeIds = new Set(others.map(o => String(o.id)));
+    removeIds.forEach(id => markDeleted(kind === 'series' ? 'series' : 'movies', id));
+    if (kind === 'series') seriesData = seriesData.filter(x => !removeIds.has(String(x.id)));
+    else moviesData = moviesData.filter(x => !removeIds.has(String(x.id)));
+    return others.length;
+}
+
+function findDataIssues() {
+    const issues = [];
+    const allItems = [...seriesData, ...moviesData];
+
+    const dupSeries = duplicateGroups(seriesData);
+    const dupMovies = duplicateGroups(moviesData);
+    const dupCount = dupSeries.concat(dupMovies).reduce((sum, g) => sum + g.length - 1, 0);
+    if (dupCount) {
+        const names = dupSeries.concat(dupMovies).map(g => g[0].name).slice(0, 5);
+        issues.push({
+            id: 'duplicates',
+            title: `${dupCount} yinelenen kayıt`,
+            detail: `Aynı ada sahip kayıtlar: ${names.join(', ')}${dupSeries.length + dupMovies.length > 5 ? ' …' : ''}. Birleştirme, en dolu kaydı tutup diğerlerindeki eksik bilgileri, kategorileri, etiketleri ve izleme ilerlemesini ona taşır.`,
+            fixLabel: 'Birleştir',
+            fix: () => {
+                let removed = 0;
+                dupSeries.forEach(group => { removed += mergeDuplicateGroup('series', group); });
+                dupMovies.forEach(group => { removed += mergeDuplicateGroup('movie', group); });
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+                return `${removed} yinelenen kayıt birleştirildi.`;
+            }
+        });
+    }
+
+    const missing = allItems.filter(itemNeedsFill);
+    if (missing.length) {
+        issues.push({
+            id: 'missing',
+            title: `${missing.length} kayıtta eksik bilgi`,
+            detail: 'Posteri, fragmanı, açıklaması, puanı, çıkış tarihi veya süresi boş olan kayıtlar var. "Eksikleri Tamamla" bunları internetten doldurmayı dener.',
+            fixLabel: 'Eksikleri Tamamla',
+            fix: () => {
+                closeModal(document.getElementById('maintenanceModal'));
+                const settings = document.getElementById('settingsModal');
+                if (settings) {
+                    openModal(settings);
+                    const target = document.getElementById('startBulkFillBtn');
+                    if (target && target.scrollIntoView) target.scrollIntoView({ block: 'center' });
+                }
+                return null; // ayrı bir akışa geçildi
+            }
+        });
+    }
+
+    const categoryIds = new Set(categoriesData.map(c => c.id));
+    const orphanItems = allItems.filter(item => (item.categories || []).some(id => !categoryIds.has(id)));
+    if (orphanItems.length) {
+        issues.push({
+            id: 'orphanCategories',
+            title: `${orphanItems.length} kayıtta silinmiş kategori`,
+            detail: 'Bu kayıtlar artık var olmayan kategorilere bağlı. Temizleme yalnızca kopuk bağlantıları siler.',
+            fixLabel: 'Temizle',
+            fix: () => {
+                orphanItems.forEach(item => { item.categories = (item.categories || []).filter(id => categoryIds.has(id)); });
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                localStorage.setItem('moviesData', JSON.stringify(moviesData));
+                return `${orphanItems.length} kayıttaki kopuk kategori bağlantısı silindi.`;
+            }
+        });
+    }
+
+    const knownTags = new Set(tagsData.map(t => t.name));
+    const usedTags = new Set(allItems.flatMap(item => item.tags || []));
+    const unknownTags = Array.from(usedTags).filter(name => !knownTags.has(name));
+    if (unknownTags.length) {
+        issues.push({
+            id: 'unknownTags',
+            title: `${unknownTags.length} etiket listede yok`,
+            detail: `Kayıtlarda kullanılan ama etiket listesinde olmayan etiketler: ${unknownTags.slice(0, 8).join(', ')}${unknownTags.length > 8 ? ' …' : ''}`,
+            fixLabel: 'Listeye ekle',
+            fix: () => {
+                unknownTags.forEach(name => tagsData.push({ id: newId(), name }));
+                tagsData = normalizeTagsData(tagsData);
+                localStorage.setItem('tagsData', JSON.stringify(tagsData));
+                return `${unknownTags.length} etiket listeye eklendi.`;
+            }
+        });
+    }
+
+    const unusedTags = tagsData.filter(t => !usedTags.has(t.name));
+    if (unusedTags.length) {
+        issues.push({
+            id: 'unusedTags',
+            title: `${unusedTags.length} kullanılmayan etiket`,
+            detail: `Hiçbir kayıtta kullanılmayan etiketler: ${unusedTags.map(t => t.name).slice(0, 8).join(', ')}${unusedTags.length > 8 ? ' …' : ''}`,
+            fixLabel: 'Kaldır',
+            fix: () => {
+                const remove = new Set(unusedTags.map(t => String(t.id)));
+                remove.forEach(id => markDeleted('tags', id));
+                tagsData = tagsData.filter(t => !remove.has(String(t.id)));
+                localStorage.setItem('tagsData', JSON.stringify(tagsData));
+                localStorage.setItem('deletedItems', JSON.stringify(deletedItems));
+                return `${unusedTags.length} etiket kaldırıldı.`;
+            }
+        });
+    }
+
+    // Bölüm sayısı girilmemiş ama izlenmiş sezonlar: ilerleme yüzdesi hesaplanamaz
+    const badSeasons = [];
+    seriesData.forEach(series => {
+        (series.seasons || []).forEach(season => {
+            if (!season.totalEpisodes && season.watchedEpisodes > 0) badSeasons.push({ series, season });
+        });
+    });
+    if (badSeasons.length) {
+        const names = Array.from(new Set(badSeasons.map(b => b.series.name))).slice(0, 5);
+        issues.push({
+            id: 'seasons',
+            title: `${badSeasons.length} sezonda bölüm sayısı eksik`,
+            detail: `İzlenmiş görünen ama toplam bölüm sayısı girilmemiş sezonlar var (${names.join(', ')}); bu dizilerin ilerlemesi hesaplanamıyor. Düzeltme, toplam bölümü izlenen sayıya eşitleyip sezonu tamamlanmış sayar. Gerçek bölüm sayısını internetten almak için "Eksikleri Tamamla"yı kullan.`,
+            fixLabel: 'Düzelt',
+            fix: () => {
+                badSeasons.forEach(({ season }) => { season.totalEpisodes = season.watchedEpisodes; });
+                localStorage.setItem('seriesData', JSON.stringify(seriesData));
+                return `${badSeasons.length} sezonun bölüm sayısı düzeltildi.`;
+            }
+        });
+    }
+
+    return issues;
+}
+
+let maintenanceIssues = [];
+
+function renderMaintenance() {
+    const listEl = document.getElementById('maintenanceIssues');
+    if (!listEl) return;
+    maintenanceIssues = findDataIssues();
+    listEl.innerHTML = maintenanceIssues.length
+        ? maintenanceIssues.map((issue, index) => `
+            <div class="maintenance-issue">
+                <div class="min-w-0">
+                    <div class="maintenance-issue-title"><i class="fas fa-triangle-exclamation mr-2 text-amber-500"></i>${esc(issue.title)}</div>
+                    <p class="maintenance-issue-detail">${esc(issue.detail)}</p>
+                </div>
+                <button type="button" class="btn btn-primary btn-sm" data-issue-fix="${index}">${esc(issue.fixLabel)}</button>
+            </div>`).join('')
+        : '<p class="maintenance-ok"><i class="fas fa-circle-check mr-2 text-emerald-500"></i>Veride düzeltilmesi gereken bir şey bulunamadı.</p>';
+    renderSnapshots();
+    renderBackupReminder();
+}
+
+function setupMaintenance() {
+    const modal = document.getElementById('maintenanceModal');
+    const openBtn = document.getElementById('openMaintenance');
+    if (!modal || !openBtn) return;
+    openBtn.addEventListener('click', () => {
+        renderMaintenance();
+        openModal(modal);
+    });
+    const closeBtn = document.getElementById('closeMaintenanceModal');
+    if (closeBtn) closeBtn.addEventListener('click', () => closeModal(modal));
+
+    modal.addEventListener('click', e => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const fixBtn = target.closest('[data-issue-fix]');
+        if (fixBtn) {
+            const issue = maintenanceIssues[Number(fixBtn.getAttribute('data-issue-fix'))];
+            if (!issue) return;
+            createSnapshot('Bakım: ' + issue.title);
+            const message = issue.fix();
+            if (message) {
+                refreshAll();
+                renderMaintenance();
+                showToast(message);
+            }
+            return;
+        }
+
+        const restoreBtn = target.closest('[data-snapshot-restore]');
+        if (restoreBtn) restoreSnapshotAt(Number(restoreBtn.getAttribute('data-snapshot-restore')));
+    });
 }
 
 // --- Klavye kısayolları ---
