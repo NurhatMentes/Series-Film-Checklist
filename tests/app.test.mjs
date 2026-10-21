@@ -384,3 +384,80 @@ test('öneriler: kartlardaki oynat düğmesi fragmanı açar ve öneri önbelle�
     assert.equal(saved, 'https://www.youtube.com/watch?v=rec77KEYabc');
     w.close();
 });
+
+test('ne izlesem: bitmemiş yapımlardan seçer, filtreler ve izledim işaretler', () => {
+    const w = loadApp({
+        seriesData: [
+            { id: 1, name: 'Biten Dizi', platform: 'Netflix', categories: [1], seasons: [{ season: 1, totalEpisodes: 2, watchedEpisodes: 2 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Devam Eden', platform: 'Netflix', categories: [1], runtime: 50, seasons: [{ season: 1, totalEpisodes: 10, watchedEpisodes: 3 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 3, name: 'Bırakılan', platform: 'Max', userStatus: 'dropped', categories: [], seasons: [{ season: 1, totalEpisodes: 10, watchedEpisodes: 1 }], createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        moviesData: [
+            { id: 10, name: 'İzlenmemiş Film', platform: 'Max', watched: false, runtime: 130, categories: [], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 11, name: 'İzlenmiş Film', platform: 'Max', watched: true, categories: [], createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    doc.getElementById('pickForMeBtn').click();
+    assert.ok(doc.getElementById('pickModal').classList.contains('active'));
+
+    const names = () => JSON.parse(JSON.stringify(w.pickCandidates().map(e => e.item.name).sort()));
+    assert.deepEqual(names(), ['Devam Eden', 'İzlenmemiş Film'], 'biten, bırakılan ve izlenmiş olanlar aday değil');
+
+    doc.getElementById('pickKind').value = 'series';
+    assert.deepEqual(names(), ['Devam Eden']);
+
+    doc.getElementById('pickKind').value = 'all';
+    doc.getElementById('pickDuration').value = 'long';
+    assert.deepEqual(names(), ['İzlenmemiş Film'], '120 dk üstü sadece film');
+
+    doc.getElementById('pickDuration').value = '';
+    doc.getElementById('pickPlatform').value = 'Netflix';
+    assert.deepEqual(names(), ['Devam Eden']);
+
+    // Sonuç kartından "bu bölümü izledim"
+    doc.getElementById('pickRollBtn').click();
+    const watchBtn = doc.querySelector('#pickResult [data-pick-watch]');
+    assert.ok(watchBtn, 'izledim düğmesi olmalı');
+    watchBtn.click();
+    assert.equal(w.eval('seriesData.find(s => s.id === 2).seasons[0].watchedEpisodes'), 4);
+    const log = JSON.parse(w.localStorage.getItem('watchLog'));
+    assert.equal(log.length, 1);
+    assert.equal(log[0].m, 50, 'günlüğe bölüm süresi yazılır');
+    w.close();
+});
+
+test('takvim: çıkışlar doğru güne düşer ve .ics geçerli üretilir', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Dizi; Virgüllü, Ad', platform: 'Netflix', categories: [], seasons: [
+            { season: 1, totalEpisodes: 8, watchedEpisodes: 0, releaseDate: '2026-03-05' },
+            { season: 2, totalEpisodes: 8, watchedEpisodes: 0, releaseDate: '2026-03-20' }
+        ], createdAt: '2024-01-01T00:00:00Z' }],
+        moviesData: [{ id: 2, name: 'Mart Filmi', releaseDate: '2026-03-20', createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+    doc.getElementById('upcomingTab').click();
+    doc.getElementById('upcomingViewCalendar').click();
+    assert.ok(!doc.getElementById('upcomingCalendar').classList.contains('hidden'));
+    assert.ok(doc.getElementById('upcomingList').classList.contains('view-hidden'), 'takvimde liste gizlenir');
+
+    w.eval('calendarMonth = new Date(2026, 2, 1); renderCalendar();');
+    assert.equal(doc.getElementById('calendarTitle').textContent, 'Mart 2026');
+    const cells = Array.from(doc.querySelectorAll('.calendar-cell:not(.is-empty)'));
+    assert.equal(cells.length, 31);
+    // 1 Mart 2026 pazar: önünde 6 boş hücre olmalı
+    assert.equal(doc.querySelectorAll('.calendar-cell.is-empty').length, 6);
+    const day5 = cells[4].textContent.replace(/\s+/g, ' ');
+    assert.ok(day5.includes('Dizi; Virgüllü, Ad') && day5.includes('Sezon 1'));
+    const day20 = cells[19].querySelectorAll('.calendar-chip');
+    assert.equal(day20.length, 2, '20 Mart\'ta hem sezon hem film var');
+
+    const ics = w.buildIcs(JSON.parse(JSON.stringify(w.getDatedReleases())));
+    assert.ok(ics.startsWith('BEGIN:VCALENDAR\r\n') && ics.trimEnd().endsWith('END:VCALENDAR'));
+    assert.equal((ics.match(/BEGIN:VEVENT/g) || []).length, 3);
+    assert.ok(ics.includes('DTSTART;VALUE=DATE:20260305'));
+    assert.ok(ics.includes('DTEND;VALUE=DATE:20260306'), 'tüm gün etkinliği ertesi gün biter');
+    assert.ok(ics.includes('SUMMARY:Dizi\; Virgüllü\\, Ad — Sezon 1'), 'noktalı virgül ve virgül kaçışlanır');
+    assert.ok(!/[^\r]\n/.test(ics), 'satırlar CRLF ile biter');
+    w.close();
+});

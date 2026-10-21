@@ -21,9 +21,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261008-2">
+    <link rel="stylesheet" href="css/styles.css?v=20261021-1">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261008-2">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261021-1">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -61,6 +61,9 @@
                 </div>
             </div>
             <div class="summary-actions">
+                <button type="button" id="pickForMeBtn" class="btn btn-primary btn-sm" title="Listenden sana bir yapım seçsin">
+                    <i class="fas fa-dice mr-2"></i> Ne izlesem?
+                </button>
                 <button id="exportData" class="btn btn-secondary btn-sm" title="Verilerinizi güvenli bir dosyaya kaydedin">
                     <i class="fas fa-download mr-2"></i> Yedek Al
                 </button>
@@ -357,6 +360,16 @@
                             <span id="upcomingCount">0</span> içerik
                         </div>
                         <div class="flex flex-wrap gap-2">
+                            <button type="button" id="upcomingViewList" class="filter-btn active" data-upcoming-view="list">
+                                <i class="fas fa-list-ul mr-1"></i> Liste
+                            </button>
+                            <button type="button" id="upcomingViewCalendar" class="filter-btn" data-upcoming-view="calendar">
+                                <i class="fas fa-calendar-days mr-1"></i> Takvim
+                            </button>
+                            <button type="button" id="exportIcsBtn" class="btn btn-secondary btn-sm" title="Çıkış tarihlerini telefon/bilgisayar takvimine aktar">
+                                <i class="fas fa-calendar-plus mr-1"></i> Takvime aktar
+                            </button>
+                            <span class="newrel-sep" aria-hidden="true"></span>
                             <button id="upcomingFilterAll" class="filter-btn active" data-filter="all">
                                 <i class="fas fa-list mr-1"></i> Tümü
                             </button>
@@ -401,6 +414,17 @@
                             </div>
                         </div>
                     </div>
+                </div>
+
+                <!-- Takvim görünümü -->
+                <div id="upcomingCalendar" class="upcoming-calendar hidden">
+                    <div class="calendar-head">
+                        <button type="button" id="calendarPrev" class="btn btn-secondary btn-sm" aria-label="Önceki ay"><i class="fas fa-chevron-left"></i></button>
+                        <h3 id="calendarTitle" class="calendar-title"></h3>
+                        <button type="button" id="calendarNext" class="btn btn-secondary btn-sm" aria-label="Sonraki ay"><i class="fas fa-chevron-right"></i></button>
+                        <button type="button" id="calendarToday" class="btn btn-secondary btn-sm">Bugün</button>
+                    </div>
+                    <div class="calendar-grid" id="calendarGrid"></div>
                 </div>
 
                 <!-- Upcoming Content List -->
@@ -1045,6 +1069,56 @@
         </div>
     </div>
 
+    <!-- Ne izlesem? -->
+    <div id="pickModal" class="modal">
+        <div class="modal-content pick-modal-content">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <h2 class="text-xl font-bold"><i class="fas fa-dice mr-2 text-indigo-500"></i>Ne izlesem?</h2>
+                <button type="button" id="closePickModal" class="close-trailer-btn !text-current" aria-label="Kapat">&times;</button>
+            </div>
+            <p class="text-sm opacity-80 mb-4">Listendeki bitirmediğin yapımlardan birini seçer. Filtreleri daraltıp tekrar deneyebilirsin.</p>
+
+            <div class="pick-filters">
+                <label class="pick-filter">
+                    <span>Tür</span>
+                    <select id="pickKind" class="form-control">
+                        <option value="all">Dizi veya film</option>
+                        <option value="series">Sadece dizi</option>
+                        <option value="movie">Sadece film</option>
+                    </select>
+                </label>
+                <label class="pick-filter">
+                    <span>Kategori</span>
+                    <select id="pickCategory" class="form-control"><option value="">Farketmez</option></select>
+                </label>
+                <label class="pick-filter">
+                    <span>Platform</span>
+                    <select id="pickPlatform" class="form-control"><option value="">Farketmez</option></select>
+                </label>
+                <label class="pick-filter">
+                    <span>Süre</span>
+                    <select id="pickDuration" class="form-control">
+                        <option value="">Farketmez</option>
+                        <option value="short">Kısa (45 dk ve altı)</option>
+                        <option value="medium">Orta (45-120 dk)</option>
+                        <option value="long">Uzun (120 dk üstü)</option>
+                    </select>
+                </label>
+                <label class="pick-filter pick-filter-check">
+                    <input type="checkbox" id="pickOnlyStarted">
+                    <span>Sadece başladıklarım</span>
+                </label>
+            </div>
+
+            <div id="pickResult" class="pick-result" aria-live="polite"></div>
+
+            <div class="flex flex-wrap gap-2 mt-4">
+                <button type="button" id="pickRollBtn" class="btn btn-primary"><i class="fas fa-dice mr-2"></i>Bana bir şey seç</button>
+                <button type="button" id="pickAgainBtn" class="btn btn-secondary hidden"><i class="fas fa-rotate mr-2"></i>Başka ver</button>
+            </div>
+        </div>
+    </div>
+
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
 
@@ -1131,7 +1205,7 @@
 
 
 
-    <script src="js/app.js?v=20261008-2"></script>
+    <script src="js/app.js?v=20261021-1"></script>
 </body>
 
 </html>

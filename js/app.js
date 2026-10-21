@@ -98,6 +98,12 @@ function normalizeSeason(season) {
     };
 }
 
+// Süre dakika cinsinden; saçma değerler (0, negatif, 12 saatten uzun) yok sayılır
+function normalizeRuntime(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 && n <= 720 ? Math.round(n) : null;
+}
+
 function normalizeSeriesItem(item) {
     const seasons = (Array.isArray(item.seasons) ? item.seasons : [])
         .filter(s => s && typeof s === 'object')
@@ -119,6 +125,7 @@ function normalizeSeriesItem(item) {
         description: item.description || '',
         imageUrl: item.imageUrl || '',
         releaseDate: item.releaseDate || null,
+        runtime: normalizeRuntime(item.runtime),
         createdAt: item.createdAt || item.updatedAt || null,
         updatedAt: item.updatedAt || item.createdAt || null,
         lastWatchedAt: lastWatched > 0 ? new Date(lastWatched).toISOString() : null,
@@ -201,6 +208,7 @@ function normalizeMovie(movie) {
         description: movie.description || '',
         imageUrl: movie.imageUrl || '',
         releaseDate: movie.releaseDate || null,
+        runtime: normalizeRuntime(movie.runtime),
         createdAt: movie.createdAt || movie.updatedAt || null,
         updatedAt: movie.updatedAt || movie.createdAt || null,
         lastWatchedAt: movie.watched ? (movie.lastWatchedAt || null) : null
@@ -352,6 +360,7 @@ function updateSeriesWatchProgress(seriesId, seasonId, delta) {
     series.updatedAt = now;
     refreshSeriesLastWatched(series);
     localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    logWatch({ k: 'series', id: series.id, n: delta, m: delta * episodeMinutes(series) });
     return true;
 }
 
@@ -610,6 +619,8 @@ function initApp() {
     setupEventDelegation();
     setupBulkEditing();
     setupModalClosing();
+    setupPickForMe();
+    setupUpcomingCalendar();
 
     refreshAll();
 }
@@ -1435,6 +1446,211 @@ function renderUpcomingReleases() {
             </div>
         `;
     }).join('');
+}
+
+// =====================================================================
+// Takvim görünümü ve .ics dışa aktarma
+// =====================================================================
+let upcomingView = 'list';
+let calendarMonth = null; // Date, ayın 1'i
+
+// Listedeki tarihli her şey (geçmiş dahil): dizi sezonları, dizi ve film çıkışları
+function getDatedReleases() {
+    const entries = [];
+    seriesData.forEach(series => {
+        (series.seasons || []).forEach(season => {
+            if (season.releaseDate) {
+                entries.push({ date: season.releaseDate, name: series.name, type: 'series', label: `Sezon ${season.season}`, id: series.id });
+            }
+        });
+        // Sezon tarihi yoksa dizinin kendi çıkış tarihini kullan
+        if (series.releaseDate && !(series.seasons || []).some(s => s.releaseDate === series.releaseDate)) {
+            entries.push({ date: series.releaseDate, name: series.name, type: 'series', label: '', id: series.id });
+        }
+    });
+    moviesData.forEach(movie => {
+        if (movie.releaseDate) entries.push({ date: movie.releaseDate, name: movie.name, type: 'movie', label: '', id: movie.id });
+    });
+    return entries.filter(e => parseLocalDate(e.date)).sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function monthTitle(date) {
+    const months = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    return `${months[date.getMonth()]} ${date.getFullYear()}`;
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendarGrid');
+    const title = document.getElementById('calendarTitle');
+    if (!grid || !title) return;
+    if (!calendarMonth) {
+        const now = new Date();
+        calendarMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    title.textContent = monthTitle(calendarMonth);
+
+    const byDay = new Map();
+    getDatedReleases().forEach(entry => {
+        const d = parseLocalDate(entry.date);
+        if (d.getFullYear() === calendarMonth.getFullYear() && d.getMonth() === calendarMonth.getMonth()) {
+            const key = d.getDate();
+            if (!byDay.has(key)) byDay.set(key, []);
+            byDay.get(key).push(entry);
+        }
+    });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1);
+    const daysInMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 0).getDate();
+    // Hafta pazartesi başlar
+    const lead = (first.getDay() + 6) % 7;
+
+    const weekDays = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+    const cells = weekDays.map(d => `<div class="calendar-weekday">${d}</div>`);
+    for (let i = 0; i < lead; i++) cells.push('<div class="calendar-cell is-empty"></div>');
+    for (let day = 1; day <= daysInMonth; day++) {
+        const date = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), day);
+        const items = byDay.get(day) || [];
+        const isToday = date.getTime() === today.getTime();
+        const isPast = date < today;
+        cells.push(`
+            <div class="calendar-cell${isToday ? ' is-today' : ''}${isPast ? ' is-past' : ''}${items.length ? ' has-items' : ''}">
+                <span class="calendar-day">${day}</span>
+                ${items.map(entry => `
+                    <button type="button" class="calendar-chip ${entry.type}" data-calendar-open="${esc(entry.type)}:${esc(entry.id)}" title="${esc(entry.name)}${entry.label ? ' — ' + esc(entry.label) : ''}">
+                        <i class="fas ${entry.type === 'series' ? 'fa-tv' : 'fa-film'}"></i>
+                        <span>${esc(entry.name)}${entry.label ? ` <span class="opacity-70">${esc(entry.label)}</span>` : ''}</span>
+                    </button>`).join('')}
+            </div>`);
+    }
+    grid.innerHTML = cells.join('');
+}
+
+function setUpcomingView(view) {
+    upcomingView = view === 'calendar' ? 'calendar' : 'list';
+    try { localStorage.setItem('upcomingView', upcomingView); } catch (_) {}
+    const calendar = document.getElementById('upcomingCalendar');
+    const isCalendar = upcomingView === 'calendar';
+    if (calendar) calendar.classList.toggle('hidden', !isCalendar);
+    document.querySelectorAll('[data-upcoming-view]').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-upcoming-view') === upcomingView);
+    });
+    // Liste ve boş durum yalnızca liste görünümünde
+    ['upcomingList', 'upcomingEmpty'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('view-hidden', isCalendar);
+    });
+    if (isCalendar) renderCalendar(); else renderUpcomingReleases();
+}
+
+// --- .ics dışa aktarma ---
+function icsEscape(text) {
+    return String(text || '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+}
+
+function icsDate(date) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
+}
+
+function buildIcs(entries) {
+    const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+    const lines = [
+        'BEGIN:VCALENDAR',
+        'VERSION:2.0',
+        'PRODID:-//Izleme Takip//TR',
+        'CALSCALE:GREGORIAN',
+        'METHOD:PUBLISH',
+        'X-WR-CALNAME:İzleme Takip'
+    ];
+    entries.forEach((entry, index) => {
+        const start = parseLocalDate(entry.date);
+        if (!start) return;
+        const end = new Date(start);
+        end.setDate(end.getDate() + 1); // tüm gün etkinliği: bitiş ertesi gün
+        const summary = `${entry.name}${entry.label ? ' — ' + entry.label : ''}`;
+        lines.push(
+            'BEGIN:VEVENT',
+            `UID:izleme-takip-${entry.type}-${entry.id}-${icsDate(start)}-${index}@nurhatmentes.github.io`,
+            `DTSTAMP:${stamp}`,
+            `DTSTART;VALUE=DATE:${icsDate(start)}`,
+            `DTEND;VALUE=DATE:${icsDate(end)}`,
+            `SUMMARY:${icsEscape(summary)}`,
+            `DESCRIPTION:${icsEscape(entry.type === 'series' ? 'Dizi' : 'Film')} · İzleme Takip`,
+            'BEGIN:VALARM',
+            'TRIGGER:-P1D',
+            'ACTION:DISPLAY',
+            `DESCRIPTION:${icsEscape(summary + ' yarın çıkıyor')}`,
+            'END:VALARM',
+            'END:VEVENT'
+        );
+    });
+    lines.push('END:VCALENDAR');
+    // RFC 5545: satırlar CRLF ile ayrılır
+    return lines.join('\r\n') + '\r\n';
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function exportUpcomingIcs() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entries = getDatedReleases().filter(e => {
+        const d = parseLocalDate(e.date);
+        return d && d >= today;
+    });
+    if (!entries.length) {
+        showToast('Takvime aktarılacak, tarihi gelecekte olan bir kayıt yok.');
+        return;
+    }
+    downloadBlob(new Blob([buildIcs(entries)], { type: 'text/calendar;charset=utf-8' }), 'izleme-takip-cikislar.ics');
+    showToast(`${entries.length} çıkış tarihi .ics dosyasına aktarıldı.`);
+}
+
+function setupUpcomingCalendar() {
+    const shiftMonth = delta => {
+        if (!calendarMonth) calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+        calendarMonth = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + delta, 1);
+        renderCalendar();
+    };
+    const prev = document.getElementById('calendarPrev');
+    const next = document.getElementById('calendarNext');
+    const todayBtn = document.getElementById('calendarToday');
+    if (prev) prev.addEventListener('click', () => shiftMonth(-1));
+    if (next) next.addEventListener('click', () => shiftMonth(1));
+    if (todayBtn) todayBtn.addEventListener('click', () => {
+        const now = new Date();
+        calendarMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+        renderCalendar();
+    });
+    document.querySelectorAll('[data-upcoming-view]').forEach(btn => {
+        btn.addEventListener('click', () => setUpcomingView(btn.getAttribute('data-upcoming-view')));
+    });
+    const icsBtn = document.getElementById('exportIcsBtn');
+    if (icsBtn) icsBtn.addEventListener('click', exportUpcomingIcs);
+
+    const grid = document.getElementById('calendarGrid');
+    if (grid) grid.addEventListener('click', e => {
+        const chip = e.target.closest('[data-calendar-open]');
+        if (!chip) return;
+        const [type, id] = chip.getAttribute('data-calendar-open').split(':');
+        if (type === 'series') editSeries(id); else editMovie(id);
+    });
+
+    try {
+        const saved = localStorage.getItem('upcomingView');
+        if (saved === 'calendar') setUpcomingView('calendar');
+    } catch (_) {}
 }
 
 function getAllTrailerItems() {
@@ -3340,7 +3556,7 @@ document.getElementById('importData').addEventListener('change', function (e) {
 const TABS = [
     { tab: seriesTab, content: seriesContent },
     { tab: moviesTab, content: moviesContent },
-    { tab: upcomingTab, content: upcomingContent, onShow: () => { renderUpcomingReleases(); renderNewReleases(false); } },
+    { tab: upcomingTab, content: upcomingContent, onShow: () => { if (upcomingView === 'calendar') renderCalendar(); else renderUpcomingReleases(); renderNewReleases(false); } },
     { tab: categoriesTab, content: categoriesContent },
     { tab: tagsTab, content: tagsContent },
     { tab: trailersTab, content: trailersContent, onShow: renderTrailersTab },
@@ -4882,6 +5098,9 @@ async function fetchTmdbTitleDetails(kind, result) {
         trailerUrl: pickTrailer(d.videos),
         releaseDate: kind === 'series' ? (d.first_air_date || '') : pickTrReleaseDate(d),
         platform: pickPlatform(d),
+        runtime: normalizeRuntime(kind === 'series'
+            ? (Array.isArray(d.episode_run_time) ? d.episode_run_time[0] : null)
+            : d.runtime),
         genres,
         countries,
         seasons: []
@@ -5123,6 +5342,7 @@ async function applyAutoFillResult(kind, result) {
     if (kind === 'series' && info.seasons.length) mergeSeasonsIntoForm(info.seasons);
 
     state.extras = {
+        runtime: normalizeRuntime(info.runtime) || undefined,
         tmdbId: info.tmdbId || undefined,
         tmdbType: info.tmdbType || undefined,
         tvmazeId: info.tvmazeId || undefined,
@@ -5333,7 +5553,7 @@ function isEmptyField(value) {
 }
 
 function itemNeedsFill(item) {
-    return ['imageUrl', 'trailerUrl', 'description', 'imdbRating', 'releaseDate'].some(f => isEmptyField(item[f]));
+    return ['imageUrl', 'trailerUrl', 'description', 'imdbRating', 'releaseDate', 'runtime'].some(f => isEmptyField(item[f]));
 }
 
 async function findExactMatch(kind, item) {
@@ -5369,6 +5589,7 @@ async function fillItem(kind, item, options) {
     if (info.source === 'tmdb') fill('description', info.description, 'açıklama');
     fill('imdbRating', info.imdbRating, 'puan');
     fill('releaseDate', info.releaseDate || null, 'tarih');
+    fill('runtime', normalizeRuntime(info.runtime), 'süre');
     if (kind === 'series' && (!item.platform || item.platform === 'Diğer') && info.platform) {
         item.platform = info.platform;
         filled.push('platform');
@@ -5543,6 +5764,280 @@ function renderStats() {
     document.getElementById('statsRecent').innerHTML = recent.length
         ? recent.map(x => `<div class="stats-list-item"><span>${esc(x.name)} <span class="opacity-60 text-xs">${x.type}</span></span><span class="opacity-70">${esc(new Date(x.ts).toLocaleDateString('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }))}</span></div>`).join('')
         : '<p class="text-sm opacity-70">Henüz izleme kaydı yok.</p>';
+}
+
+// =====================================================================
+// İzleme günlüğü (yıllık özet için) — yalnızca bu cihazda tutulur, yedeğe girer
+// =====================================================================
+const WATCH_LOG_KEY = 'watchLog';
+const WATCH_LOG_MAX = 3000;
+const DEFAULT_EPISODE_MINUTES = 45;
+const DEFAULT_MOVIE_MINUTES = 110;
+
+function getWatchLog() {
+    const list = safeParse(WATCH_LOG_KEY, []);
+    return Array.isArray(list) ? list.filter(e => e && e.t) : [];
+}
+
+function saveWatchLog(list) {
+    try {
+        const trimmed = list.length > WATCH_LOG_MAX ? list.slice(list.length - WATCH_LOG_MAX) : list;
+        __origSetItem(WATCH_LOG_KEY, JSON.stringify(trimmed));
+    } catch (_) { /* kota dolduysa günlük tutulmaz, uygulama çalışmaya devam eder */ }
+}
+
+// entry: { k:'series'|'movie', id, n: bölüm sayısı (geri almada negatif), m: dakika }
+function logWatch(entry) {
+    const log = getWatchLog();
+    log.push({ t: new Date().toISOString(), ...entry });
+    saveWatchLog(log);
+}
+
+function episodeMinutes(series) {
+    return normalizeRuntime(series && series.runtime) || DEFAULT_EPISODE_MINUTES;
+}
+
+function movieMinutes(movie) {
+    return normalizeRuntime(movie && movie.runtime) || DEFAULT_MOVIE_MINUTES;
+}
+
+// =====================================================================
+// İzleme işlemleri (kart, "Ne izlesem?" ve toplu işlemler ortak kullanır)
+// =====================================================================
+
+// Bir sezonun izlenen bölüm sayısını doğrudan ayarla. Değişim olduysa true döner.
+function setSeasonWatched(seriesId, seasonId, count) {
+    const series = findSeries(seriesId);
+    if (!series) return false;
+    const season = series.seasons.find(s => String(s.id) === String(seasonId));
+    if (!season) return false;
+    const target = Math.max(0, Math.min(Number(count) || 0, season.totalEpisodes || 0));
+    const delta = target - season.watchedEpisodes;
+    if (delta === 0) return false;
+
+    const now = new Date().toISOString();
+    season.watchedEpisodes = target;
+    season.lastWatchedAt = target > 0 ? now : null;
+    season.updatedAt = now;
+    series.updatedAt = now;
+    refreshSeriesLastWatched(series);
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    logWatch({ k: 'series', id: series.id, n: delta, m: delta * episodeMinutes(series) });
+    return true;
+}
+
+function setMovieWatched(movieId, watched) {
+    const movie = moviesData.find(m => String(m.id) === String(movieId));
+    if (!movie || !!movie.watched === !!watched) return false;
+    const now = new Date().toISOString();
+    movie.watched = !!watched;
+    movie.lastWatchedAt = watched ? now : null;
+    movie.updatedAt = now;
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    logWatch({ k: 'movie', id: movie.id, n: watched ? 1 : -1, m: (watched ? 1 : -1) * movieMinutes(movie) });
+    return true;
+}
+
+// =====================================================================
+// "Ne izlesem?" — listedeki bitmemiş yapımlardan birini seçer
+// =====================================================================
+const pickModal = document.getElementById('pickModal');
+let lastPickKey = '';
+
+function pickCandidates() {
+    const kind = (document.getElementById('pickKind') || {}).value || 'all';
+    const category = Number((document.getElementById('pickCategory') || {}).value) || null;
+    const platform = (document.getElementById('pickPlatform') || {}).value || '';
+    const duration = (document.getElementById('pickDuration') || {}).value || '';
+    const onlyStarted = !!(document.getElementById('pickOnlyStarted') || {}).checked;
+
+    const inDuration = minutes => {
+        if (!duration) return true;
+        if (!minutes) return false; // süresi bilinmeyenler süre filtresinde elenir
+        if (duration === 'short') return minutes <= 45;
+        if (duration === 'medium') return minutes > 45 && minutes <= 120;
+        return minutes > 120;
+    };
+    const matchesCommon = item => (!category || (item.categories || []).includes(category)) &&
+        (!platform || (item.platform || 'Diğer') === platform);
+
+    const list = [];
+    if (kind !== 'movie') {
+        seriesData.forEach(series => {
+            const totals = getSeriesTotals(series);
+            if (totals.status === 'completed' || totals.status === 'dropped') return;
+            if (!totals.next) return;
+            if (onlyStarted && totals.watched === 0) return;
+            if (!matchesCommon(series)) return;
+            if (!inDuration(normalizeRuntime(series.runtime))) return;
+            list.push({ kind: 'series', item: series, totals });
+        });
+    }
+    if (kind !== 'series') {
+        moviesData.forEach(movie => {
+            if (movie.watched) return;
+            if (onlyStarted) return; // filmlerde "başlanmış" durumu yok
+            if (!matchesCommon(movie)) return;
+            if (!inDuration(normalizeRuntime(movie.runtime))) return;
+            list.push({ kind: 'movie', item: movie });
+        });
+    }
+    return list;
+}
+
+// Puanı yüksek ve yarıda bırakılmış yapımlar biraz daha sık çıksın
+function pickWeight(entry) {
+    let weight = 1;
+    const rating = entry.item.myRating != null ? entry.item.myRating : entry.item.imdbRating;
+    if (rating != null) weight += Math.max(0, (Number(rating) - 5) / 5);
+    if (entry.kind === 'series' && entry.totals && entry.totals.watched > 0) weight += 0.8;
+    return weight;
+}
+
+function weightedPick(list) {
+    const total = list.reduce((sum, e) => sum + pickWeight(e), 0);
+    let roll = Math.random() * total;
+    for (const entry of list) {
+        roll -= pickWeight(entry);
+        if (roll <= 0) return entry;
+    }
+    return list[list.length - 1];
+}
+
+function pickReason(entry) {
+    const reasons = [];
+    if (entry.kind === 'series') {
+        const t = entry.totals;
+        if (t.watched === 0) reasons.push('Henüz başlamadın');
+        else reasons.push(`${t.watched}/${t.total} bölüm bitti, sıradaki S${t.next.season} · B${t.next.watchedEpisodes + 1}`);
+    } else {
+        reasons.push('İzleme listende bekliyor');
+    }
+    const minutes = normalizeRuntime(entry.item.runtime);
+    if (minutes) reasons.push(entry.kind === 'series' ? `bölüm başı ~${minutes} dk` : `~${minutes} dk`);
+    if (entry.item.platform && entry.item.platform !== 'Diğer') reasons.push(entry.item.platform);
+    return reasons.join(' · ');
+}
+
+function renderPickResult(entry) {
+    const resultEl = document.getElementById('pickResult');
+    const againBtn = document.getElementById('pickAgainBtn');
+    const rollBtn = document.getElementById('pickRollBtn');
+    if (!resultEl) return;
+
+    if (!entry) {
+        resultEl.innerHTML = '<p class="pick-empty"><i class="fas fa-circle-info mr-1"></i>Bu filtrelere uyan, bitirmediğin bir yapım yok. Filtreleri gevşetmeyi dene.</p>';
+        if (againBtn) againBtn.classList.add('hidden');
+        if (rollBtn) rollBtn.classList.remove('hidden');
+        return;
+    }
+
+    const item = entry.item;
+    const poster = safeUrl(item.imageUrl);
+    const next = entry.kind === 'series' ? entry.totals.next : null;
+    resultEl.innerHTML = `
+        <div class="pick-card">
+            <div class="pick-poster">
+                ${poster ? `<img src="${esc(poster)}" alt="${esc(item.name)}" loading="lazy" onerror="handleImageError(this)">` : '<div class="pick-noposter"><i class="fas fa-image"></i></div>'}
+            </div>
+            <div class="pick-body">
+                <div class="pick-title">${esc(item.name)}${renderYearBadge(item.releaseDate)}</div>
+                <div class="pick-reason">${esc(pickReason(entry))}</div>
+                ${item.description ? `<p class="pick-overview">${esc(item.description)}</p>` : ''}
+                <div class="pick-actions">
+                    ${next ? `<button type="button" class="btn btn-primary btn-sm" data-pick-watch="series:${esc(item.id)}:${esc(next.id)}"><i class="fas fa-check mr-1"></i>Bu bölümü izledim</button>` : ''}
+                    ${entry.kind === 'movie' ? `<button type="button" class="btn btn-primary btn-sm" data-pick-watch="movie:${esc(item.id)}"><i class="fas fa-check mr-1"></i>İzledim</button>` : ''}
+                    ${item.trailerUrl ? `<button type="button" class="btn btn-secondary btn-sm trailer-btn" data-trailer-url="${esc(item.trailerUrl)}" data-title="${esc(item.name)}"><i class="fab fa-youtube mr-1"></i>Fragman</button>` : ''}
+                    <button type="button" class="btn btn-secondary btn-sm" data-pick-open="${esc(entry.kind)}:${esc(item.id)}"><i class="fas fa-edit mr-1"></i>Kartı aç</button>
+                </div>
+            </div>
+        </div>`;
+    if (againBtn) againBtn.classList.remove('hidden');
+    if (rollBtn) rollBtn.classList.add('hidden');
+}
+
+function rollPick() {
+    const list = pickCandidates();
+    if (!list.length) {
+        lastPickKey = '';
+        renderPickResult(null);
+        return;
+    }
+    // Aynı yapımı üst üste verme (tek aday varsa mecburen aynısı)
+    let entry = weightedPick(list);
+    if (list.length > 1) {
+        for (let i = 0; i < 6 && entry.kind + ':' + entry.item.id === lastPickKey; i++) entry = weightedPick(list);
+    }
+    lastPickKey = entry.kind + ':' + entry.item.id;
+    renderPickResult(entry);
+}
+
+function openPickModal() {
+    const categorySelect = document.getElementById('pickCategory');
+    const platformSelect = document.getElementById('pickPlatform');
+    if (categorySelect) {
+        const current = categorySelect.value;
+        categorySelect.innerHTML = '<option value="">Farketmez</option>' +
+            categoriesData.map(c => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
+        categorySelect.value = current;
+    }
+    if (platformSelect) {
+        const current = platformSelect.value;
+        const platforms = Array.from(new Set([...seriesData, ...moviesData].map(x => x.platform).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'tr'));
+        platformSelect.innerHTML = '<option value="">Farketmez</option>' +
+            platforms.map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+        platformSelect.value = current;
+    }
+    openModal(pickModal);
+    rollPick();
+}
+
+function setupPickForMe() {
+    const openBtn = document.getElementById('pickForMeBtn');
+    if (!openBtn || !pickModal) return;
+    openBtn.addEventListener('click', openPickModal);
+    const closeBtn = document.getElementById('closePickModal');
+    if (closeBtn) closeBtn.addEventListener('click', () => closeModal(pickModal));
+    ['pickRollBtn', 'pickAgainBtn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.addEventListener('click', rollPick);
+    });
+    ['pickKind', 'pickCategory', 'pickPlatform', 'pickDuration', 'pickOnlyStarted'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('change', rollPick);
+    });
+
+    pickModal.addEventListener('click', e => {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+
+        const watchBtn = target.closest('[data-pick-watch]');
+        if (watchBtn) {
+            const [kind, id, seasonId] = watchBtn.getAttribute('data-pick-watch').split(':');
+            const done = kind === 'series' ? setSeasonWatchedPlusOne(id, seasonId) : setMovieWatched(id, true);
+            if (done) {
+                refreshAll();
+                showToast('İzleme kaydedildi.');
+                rollPick();
+            }
+            return;
+        }
+
+        const openCardBtn = target.closest('[data-pick-open]');
+        if (openCardBtn) {
+            const [kind, id] = openCardBtn.getAttribute('data-pick-open').split(':');
+            closeModal(pickModal);
+            if (kind === 'series') editSeries(id); else editMovie(id);
+        }
+    });
+}
+
+function setSeasonWatchedPlusOne(seriesId, seasonId) {
+    const series = findSeries(seriesId);
+    if (!series) return false;
+    const season = series.seasons.find(s => String(s.id) === String(seasonId));
+    if (!season) return false;
+    return setSeasonWatched(seriesId, seasonId, season.watchedEpisodes + 1);
 }
 
 // --- Klavye kısayolları ---
