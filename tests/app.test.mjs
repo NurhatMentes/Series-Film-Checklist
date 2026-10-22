@@ -665,3 +665,175 @@ test('yedek hatırlatması: hiç yedek yoksa uyarır, yedek alınınca kaybolur'
     assert.equal(JSON.parse(JSON.stringify(w.eval('backupStatus().state'))), 'ok');
     w.close();
 });
+
+test('tekrar izleme: diziyi baştan başlatır, filmi tekrar işaretler, günlüğü bozmaz', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Bitmiş Dizi', platform: 'Netflix', categories: [], runtime: 50,
+            seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4, lastWatchedAt: '2026-01-01T00:00:00Z' }],
+            createdAt: '2024-01-01T00:00:00Z' }],
+        moviesData: [{ id: 2, name: 'İzlenmiş Film', watched: true, runtime: 100, categories: [],
+            lastWatchedAt: '2026-01-01T00:00:00Z', createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+
+    doc.querySelector('.series-card .start-rewatch').click();
+    assert.equal(w.eval('seriesData[0].rewatchCount'), 1);
+    assert.equal(w.eval('seriesData[0].seasons[0].watchedEpisodes'), 0, 'ilerleme sıfırlanır');
+    assert.equal(w.localStorage.getItem('watchLog'), null, 'baştan izleme günlüğe eksi bölüm yazmaz');
+    assert.ok(doc.querySelector('.series-card .rewatch-badge'), 'kartta tekrar rozeti görünür');
+
+    // Bildirimden geri alma eski ilerlemeyi getirir
+    Array.from(doc.querySelectorAll('#toastContainer button')).find(b => b.textContent === 'Geri Al').click();
+    assert.equal(w.eval('seriesData[0].seasons[0].watchedEpisodes'), 4);
+    assert.equal(w.eval('seriesData[0].rewatchCount'), 0);
+
+    doc.querySelector('.movie-card .movie-rewatch').click();
+    assert.equal(w.eval('moviesData[0].rewatchCount'), 1);
+    const log = JSON.parse(w.localStorage.getItem('watchLog'));
+    assert.deepEqual([log.length, log[0].k, log[0].n, log[0].m], [1, 'movie', 1, 100]);
+    w.close();
+});
+
+test('arama filtreleri: y:, platform:, etiket:, puan:>, durum:', () => {
+    const w = loadApp({
+        categoriesData: [{ id: 1, name: 'Dram', color: '#111111' }],
+        seriesData: [
+            { id: 1, name: 'Eski Dizi', platform: 'Netflix', categories: [1], tags: ['Gizem'], imdbRating: 9,
+              releaseDate: '2008-05-01', seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 2 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Yeni Dizi', platform: 'Max', categories: [], tags: [], imdbRating: 6,
+              releaseDate: '2024-05-01', seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4 }], createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        moviesData: []
+    });
+    const doc = w.document;
+    const search = doc.getElementById('searchSeries');
+    const shown = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('#seriesList .card-title')).map(e => e.textContent.trim())));
+    const find = q => { search.value = q; search.dispatchEvent(new w.Event('input')); return shown(); };
+
+    assert.deepEqual(find('y:2008'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('y:2000-2010'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('platform:netflix'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('etiket:gizem'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('kategori:dram'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('puan:>8'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('durum:tamamlandı'), ['Yeni Dizi (2024)']);
+    assert.deepEqual(find('durum:izleniyor'), ['Eski Dizi (2008)']);
+    assert.deepEqual(find('dizi puan:<7'), ['Yeni Dizi (2024)'], 'serbest metin ve filtre birlikte çalışır');
+    assert.equal(find('y:1999').length, 0);
+    // Tanınmayan anahtar düz metin sayılır, uygulamayı kırmaz
+    assert.equal(find('saat:12').length, 0);
+
+    const parsed = JSON.parse(JSON.stringify(w.parseSearchQuery('etiket:"bilim kurgu" dark y:2020')));
+    assert.equal(parsed.text, 'dark');
+    assert.deepEqual(parsed.filters, [{ key: 'tag', op: '', value: 'bilim kurgu' }, { key: 'year', op: '', value: '2020' }]);
+    w.close();
+});
+
+test('sabitleme: sabitlenen kayıt sıralamadan bağımsız üstte kalır', () => {
+    const w = loadApp({
+        moviesData: [
+            { id: 1, name: 'Alfa', watched: false, categories: [], createdAt: '2024-03-01T00:00:00Z' },
+            { id: 2, name: 'Zeta', watched: false, categories: [], createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    const sort = doc.getElementById('moviesSortSelect');
+    sort.value = 'alphabetical';
+    sort.dispatchEvent(new w.Event('change'));
+    const shown = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('#moviesList .card-title')).map(e => e.textContent.trim())));
+    assert.deepEqual(shown(), ['Alfa', 'Zeta']);
+
+    const zetaCard = Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta'));
+    zetaCard.querySelector('.pin-icon').click();
+    assert.deepEqual(shown(), ['Zeta', 'Alfa'], 'A-Z sıralamasında bile sabitlenen üstte');
+    assert.equal(w.eval('moviesData.find(m => m.id === 2).pinned'), true);
+    assert.ok(Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta')).classList.contains('is-pinned'));
+
+    // Tekrar basınca sabitleme kalkar
+    Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta')).querySelector('.pin-icon').click();
+    assert.deepEqual(shown(), ['Alfa', 'Zeta']);
+    w.close();
+});
+
+test('nerede izlenir: TMDB sağlayıcıları ayrıştırılır ve kartta gösterilir', async () => {
+    const w = loadApp({ moviesData: [{ id: 1, name: 'Film', categories: [], tmdbId: 55, createdAt: '2024-01-01T00:00:00Z' }] });
+    w.localStorage.setItem('tmdbKey', 'test');
+    w.fetch = async url => {
+        const u = new URL(url);
+        if (!u.pathname.includes('/movie/55')) return { ok: true, status: 200, json: async () => ({ results: [] }) };
+        return { ok: true, status: 200, json: async () => ({
+            id: 55, title: 'Film', overview: 'Açıklama', runtime: 120, release_date: '2020-01-01',
+            'watch/providers': { results: { TR: {
+                flatrate: [{ provider_name: 'Netflix', display_priority: 2 }, { provider_name: 'BluTV', display_priority: 1 }],
+                ads: [{ provider_name: 'Tabii', display_priority: 5 }],
+                rent: [{ provider_name: 'Apple TV', display_priority: 1 }],
+                buy: [{ provider_name: 'Google Play Movies', display_priority: 1 }]
+            }, US: { flatrate: [{ provider_name: 'Hulu' }] } } }
+        }) };
+    };
+
+    const info = JSON.parse(JSON.stringify(await w.fetchTitleDetails('movie', { source: 'tmdb', id: 55, title: 'Film' })));
+    assert.deepEqual(info.providers.flatrate, ['BluTV', 'Netflix', 'Tabii'], 'öncelik sırasına göre, abonelik ve reklamlı birlikte');
+    assert.deepEqual(info.providers.rent, ['Apple TV+']);
+    assert.deepEqual(info.providers.buy, ['Google Play Movies']);
+    assert.equal(info.platform, 'BluTV', 'tek platform alanı en öncelikli olandan gelir');
+
+    // Toplu doldurma kayda yazar ve kart gösterir
+    const result = JSON.parse(JSON.stringify(await w.fillItem('movie', w.eval('moviesData[0]'), {})));
+    assert.ok(result.filled.includes('nerede izlenir'));
+    w.eval('refreshAll()');
+    const row = w.document.querySelector('.movie-card .providers-row');
+    assert.ok(row, 'kartta sağlayıcı satırı olmalı');
+    const text = row.textContent.replace(/\s+/g, ' ');
+    assert.ok(text.includes('Abonelikte') && text.includes('Netflix') && text.includes('Kiralık') && text.includes('Apple TV+'));
+    assert.ok(!text.includes('Hulu'), 'başka ülkenin sağlayıcıları gelmez');
+
+    // Arama filtresi sağlayıcı adlarını da görür
+    const search = w.document.getElementById('searchMovies');
+    search.value = 'platform:blutv';
+    search.dispatchEvent(new w.Event('input'));
+    assert.equal(w.document.querySelectorAll('#moviesList .movie-card').length, 1);
+    w.close();
+});
+
+test('takvim aboneliği: gist\'e yazar, sabit adres verir, yayından kaldırır', async () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Dizi', platform: 'Netflix', categories: [],
+            seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 0, releaseDate: '2030-04-01' }], createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    w.localStorage.setItem('gistToken', 'test-token');
+    w.localStorage.setItem('gistId', 'abc123');
+    const calls = [];
+    w.fetch = async (url, options = {}) => {
+        calls.push({ url, method: options.method || 'GET', body: options.body ? JSON.parse(options.body) : null });
+        return { ok: true, status: 200, json: async () => ({ id: 'abc123', owner: { login: 'nurhat' }, files: {} }) };
+    };
+
+    const result = JSON.parse(JSON.stringify(await w.publishCalendarToGist()));
+    assert.equal(result.count, 1);
+    assert.equal(result.url, 'https://gist.githubusercontent.com/nurhat/abc123/raw/izleme-takip-takvim.ics');
+    assert.equal(w.localStorage.getItem('calendarIcsUrl'), result.url);
+    assert.equal(calls[0].method, 'PATCH');
+    const written = calls[0].body.files['izleme-takip-takvim.ics'].content;
+    assert.ok(written.includes('DTSTART;VALUE=DATE:20300401') && written.includes('SUMMARY:Dizi — Sezon 1'));
+    assert.ok(!written.includes('myRating') && !written.includes('watchLog'), 'kişisel veriler takvime yazılmaz');
+
+    // Değişiklik yoksa otomatik tazeleme istek atmaz
+    w.localStorage.setItem('calendarAutoPublish', '1');
+    calls.length = 0;
+    await w.refreshPublishedCalendar();
+    assert.equal(calls.length, 0, 'içerik aynıysa tekrar yazılmaz');
+
+    // Tarih değişince yazar
+    w.eval("seriesData[0].seasons[0].releaseDate = '2030-05-05';");
+    await w.refreshPublishedCalendar();
+    assert.equal(calls.length, 1);
+    assert.ok(calls[0].body.files['izleme-takip-takvim.ics'].content.includes('20300505'));
+
+    // Yayından kaldırma dosyayı siler ve adresi unutur
+    calls.length = 0;
+    await w.unpublishCalendar();
+    assert.equal(calls[0].body.files['izleme-takip-takvim.ics'], null);
+    assert.equal(w.localStorage.getItem('calendarIcsUrl'), null);
+    w.close();
+});

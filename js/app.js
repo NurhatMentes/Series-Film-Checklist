@@ -98,6 +98,29 @@ function normalizeSeason(season) {
     };
 }
 
+function normalizeCount(value) {
+    const n = Number(value);
+    return Number.isFinite(n) && n > 0 ? Math.min(Math.round(n), 999) : 0;
+}
+
+// { flatrate: [ad], rent: [ad], buy: [ad] } — her biri en çok 8 ad
+const PROVIDER_KINDS = ['flatrate', 'rent', 'buy'];
+function normalizeProviders(value) {
+    if (!value || typeof value !== 'object') return null;
+    const result = {};
+    PROVIDER_KINDS.forEach(kind => {
+        const list = Array.isArray(value[kind])
+            ? Array.from(new Set(value[kind].map(x => String(x || '').trim()).filter(Boolean))).slice(0, 8)
+            : [];
+        if (list.length) result[kind] = list;
+    });
+    return Object.keys(result).length ? result : null;
+}
+
+function hasProviders(item) {
+    return !!(item && item.providers && PROVIDER_KINDS.some(k => (item.providers[k] || []).length));
+}
+
 // Süre dakika cinsinden; saçma değerler (0, negatif, 12 saatten uzun) yok sayılır
 function normalizeRuntime(value) {
     const n = Number(value);
@@ -126,6 +149,10 @@ function normalizeSeriesItem(item) {
         imageUrl: item.imageUrl || '',
         releaseDate: item.releaseDate || null,
         runtime: normalizeRuntime(item.runtime),
+        rewatchCount: normalizeCount(item.rewatchCount),
+        pinned: !!item.pinned,
+        providers: normalizeProviders(item.providers),
+        providersAt: item.providersAt || null,
         createdAt: item.createdAt || item.updatedAt || null,
         updatedAt: item.updatedAt || item.createdAt || null,
         lastWatchedAt: lastWatched > 0 ? new Date(lastWatched).toISOString() : null,
@@ -210,6 +237,10 @@ function normalizeMovie(movie) {
         imageUrl: movie.imageUrl || '',
         releaseDate: movie.releaseDate || null,
         runtime: normalizeRuntime(movie.runtime),
+        rewatchCount: normalizeCount(movie.rewatchCount),
+        pinned: !!movie.pinned,
+        providers: normalizeProviders(movie.providers),
+        providersAt: movie.providersAt || null,
         createdAt: movie.createdAt || movie.updatedAt || null,
         updatedAt: movie.updatedAt || movie.createdAt || null,
         lastWatchedAt: movie.watched ? (movie.lastWatchedAt || null) : null
@@ -622,6 +653,7 @@ function initApp() {
     setupModalClosing();
     setupPickForMe();
     setupUpcomingCalendar();
+    setupCalendarSubscription();
     setupPlatformFilters();
     setupMaintenance();
     setupBackupReminder();
@@ -741,6 +773,18 @@ function setupEventDelegation() {
 
         const seriesCard = target.closest('.series-card');
         const movieCard = target.closest('.movie-card');
+
+        const pinBtn = target.closest('.pin-icon');
+        if (pinBtn && (seriesCard || movieCard)) {
+            togglePin(seriesCard ? 'series' : 'movie', pinBtn.getAttribute('data-id'));
+            return;
+        }
+
+        const rewatchBtn = target.closest('.start-rewatch');
+        if (rewatchBtn) { startSeriesRewatch(rewatchBtn.getAttribute('data-series-id')); return; }
+
+        const movieRewatchBtn = target.closest('.movie-rewatch');
+        if (movieRewatchBtn) { markMovieRewatch(movieRewatchBtn.getAttribute('data-id')); return; }
 
         const editBtn = target.closest('.edit-icon');
         if (editBtn && seriesCard) { editSeries(editBtn.getAttribute('data-id')); return; }
@@ -1657,6 +1701,177 @@ function exportUpcomingIcs() {
     showToast(`${entries.length} çıkış tarihi .ics dosyasına aktarıldı.`);
 }
 
+// =====================================================================
+// Takvim aboneliği: .ics dosyasını senkron Gist'ine yazıp sabit adres verir
+// =====================================================================
+const GIST_ICS_FILE = 'izleme-takip-takvim.ics';
+
+// İçerik değişti mi diye bakmak için ucuz bir özet (djb2)
+function cheapHash(text) {
+    let hash = 5381;
+    for (let i = 0; i < text.length; i++) hash = ((hash << 5) + hash + text.charCodeAt(i)) | 0;
+    return String(hash);
+}
+
+function upcomingIcsContent() {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const entries = getDatedReleases().filter(e => {
+        const d = parseLocalDate(e.date);
+        return d && d >= today;
+    });
+    return { ics: buildIcs(entries), count: entries.length };
+}
+
+function savedIcsUrl() {
+    try { return localStorage.getItem('calendarIcsUrl') || ''; } catch (_) { return ''; }
+}
+
+// Gist'in raw adresi iki biçimde olur; sürüm kimliği içermeyeni her zaman son hâli verir
+function stableRawUrl(owner, gistId) {
+    return `https://gist.githubusercontent.com/${owner}/${gistId}/raw/${GIST_ICS_FILE}`;
+}
+
+async function publishCalendarToGist(options = {}) {
+    if (!isCloudSyncConfigured()) throw new Error('Önce Senkronizasyon penceresinden GitHub anahtarını kaydet.');
+    const { ics, count } = upcomingIcsContent();
+    if (!count && !options.allowEmpty) throw new Error('Tarihi gelecekte olan kayıt yok, yayınlanacak bir şey bulunamadı.');
+
+    const gistId = getApiKey('gistId') || await findOrCreateGist();
+    const gist = await githubFetch('/gists/' + gistId, {
+        method: 'PATCH',
+        body: JSON.stringify({ files: { [GIST_ICS_FILE]: { content: ics } } })
+    });
+    const owner = (gist && gist.owner && gist.owner.login) || '';
+    if (!owner) throw new Error('Gist sahibi okunamadı, abonelik adresi oluşturulamadı.');
+
+    const url = stableRawUrl(owner, gistId);
+    try {
+        __origSetItem('calendarIcsUrl', url);
+        __origSetItem('calendarIcsHash', cheapHash(ics));
+    } catch (_) {}
+    return { url, count };
+}
+
+async function unpublishCalendar() {
+    const gistId = getApiKey('gistId');
+    if (gistId && isCloudSyncConfigured()) {
+        // Gist'te dosyayı null yapmak onu siler; diğer dosyalara dokunulmaz
+        await githubFetch('/gists/' + gistId, {
+            method: 'PATCH',
+            body: JSON.stringify({ files: { [GIST_ICS_FILE]: null } })
+        });
+    }
+    ['calendarIcsUrl', 'calendarIcsHash', 'calendarAutoPublish'].forEach(k => {
+        try { localStorage.removeItem(k); } catch (_) {}
+    });
+}
+
+// Senkron sonrası: yayındaysa ve içerik değiştiyse sessizce tazele
+async function refreshPublishedCalendar() {
+    if (!savedIcsUrl()) return;
+    let auto = false;
+    try { auto = localStorage.getItem('calendarAutoPublish') === '1'; } catch (_) {}
+    if (!auto) return;
+    const { ics, count } = upcomingIcsContent();
+    let lastHash = '';
+    try { lastHash = localStorage.getItem('calendarIcsHash') || ''; } catch (_) {}
+    if (cheapHash(ics) === lastHash) return;
+    try { await publishCalendarToGist({ allowEmpty: count === 0 }); } catch (_) { /* senkronu bölmemek için sessiz */ }
+}
+
+function renderCalendarSub() {
+    const statusEl = document.getElementById('calendarSubStatus');
+    const linkBox = document.getElementById('calendarSubLink');
+    const urlInput = document.getElementById('calendarIcsUrl');
+    const webcal = document.getElementById('calendarWebcalLink');
+    const unpublishBtn = document.getElementById('unpublishIcsBtn');
+    const autoBox = document.getElementById('calendarAutoPublish');
+    if (!statusEl) return;
+
+    const url = savedIcsUrl();
+    if (autoBox) {
+        try { autoBox.checked = localStorage.getItem('calendarAutoPublish') === '1'; } catch (_) {}
+    }
+
+    if (!isCloudSyncConfigured()) {
+        statusEl.innerHTML = '<i class="fas fa-info-circle mr-1"></i>Bu özellik senkronizasyon için kullandığın GitHub anahtarını kullanır. Henüz bir anahtar kaydetmemişsin.';
+    } else if (url) {
+        const { count } = upcomingIcsContent();
+        statusEl.innerHTML = `<i class="fas fa-circle-check text-emerald-500 mr-1"></i>Yayında. Şu an ${esc(count)} çıkış tarihi gönderiliyor.`;
+    } else {
+        statusEl.innerHTML = '<i class="fas fa-circle-info mr-1"></i>Henüz yayınlanmadı. "Yayınla" dediğinde Gist\'ine bir takvim dosyası eklenir.';
+    }
+
+    if (linkBox) linkBox.classList.toggle('hidden', !url);
+    if (unpublishBtn) unpublishBtn.classList.toggle('hidden', !url);
+    if (url && urlInput) urlInput.value = url;
+    if (url && webcal) webcal.href = url.replace(/^https:/, 'webcal:');
+}
+
+function setupCalendarSubscription() {
+    const modal = document.getElementById('calendarSubModal');
+    const openBtn = document.getElementById('openCalendarSubBtn');
+    if (!modal || !openBtn) return;
+
+    openBtn.addEventListener('click', () => {
+        renderCalendarSub();
+        openModal(modal);
+    });
+    const closeBtn = document.getElementById('closeCalendarSubModal');
+    if (closeBtn) closeBtn.addEventListener('click', () => closeModal(modal));
+
+    const publishBtn = document.getElementById('publishIcsBtn');
+    if (publishBtn) publishBtn.addEventListener('click', async () => {
+        publishBtn.disabled = true;
+        const statusEl = document.getElementById('calendarSubStatus');
+        if (statusEl) statusEl.innerHTML = '<i class="fas fa-spinner fa-spin mr-1"></i>Gist\'e yazılıyor...';
+        try {
+            const { count } = await publishCalendarToGist();
+            renderCalendarSub();
+            showToast(`${count} çıkış tarihi yayınlandı.`);
+        } catch (err) {
+            if (statusEl) statusEl.innerHTML = '<i class="fas fa-triangle-exclamation text-amber-500 mr-1"></i>' + esc(err.message);
+        } finally {
+            publishBtn.disabled = false;
+        }
+    });
+
+    const unpublishBtn = document.getElementById('unpublishIcsBtn');
+    if (unpublishBtn) unpublishBtn.addEventListener('click', async () => {
+        if (!confirm('Takvim dosyası Gist\'ten silinecek ve abonelik adresi çalışmayı bırakacak. Devam edilsin mi?')) return;
+        unpublishBtn.disabled = true;
+        try {
+            await unpublishCalendar();
+            renderCalendarSub();
+            showToast('Takvim yayından kaldırıldı.');
+        } catch (err) {
+            showToast('Kaldırılamadı: ' + err.message);
+        } finally {
+            unpublishBtn.disabled = false;
+        }
+    });
+
+    const copyBtn = document.getElementById('copyIcsUrlBtn');
+    if (copyBtn) copyBtn.addEventListener('click', async () => {
+        const input = document.getElementById('calendarIcsUrl');
+        if (!input || !input.value) return;
+        try {
+            await navigator.clipboard.writeText(input.value);
+            showToast('Adres kopyalandı.');
+        } catch (_) {
+            input.select();
+            showToast('Kopyalanamadı, adres seçildi: elle kopyalayabilirsin.');
+        }
+    });
+
+    const autoBox = document.getElementById('calendarAutoPublish');
+    if (autoBox) autoBox.addEventListener('change', () => {
+        try { localStorage.setItem('calendarAutoPublish', autoBox.checked ? '1' : '0'); } catch (_) {}
+        if (autoBox.checked && savedIcsUrl()) refreshPublishedCalendar();
+    });
+}
+
 function setupUpcomingCalendar() {
     const shiftMonth = delta => {
         if (!calendarMonth) calendarMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
@@ -1975,7 +2190,7 @@ function renderSeriesList() {
             </div>` : '';
 
         return `
-            <div class="series-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}">
+            <div class="series-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}${series.pinned ? ' is-pinned' : ''}">
                 <label class="bulk-select-control" aria-label="Seç">
                     <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
                 </label>
@@ -1989,6 +2204,9 @@ function renderSeriesList() {
                             </button>` : ''}
                         </div>
                         <div class="flex space-x-1 ml-2">
+                            <button class="pin-icon ${series.pinned ? 'is-pinned' : ''}" data-id="${esc(series.id)}" title="${series.pinned ? 'Sabitlemeyi kaldır' : 'En üste sabitle'}" aria-pressed="${series.pinned ? 'true' : 'false'}">
+                                <i class="fas fa-thumbtack"></i>
+                            </button>
                             <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(series.id)}" title="Benzerlerini öner">
                                 <i class="fas fa-lightbulb"></i>
                             </button>
@@ -2002,6 +2220,7 @@ function renderSeriesList() {
                     </div>
                     <div class="text-gray-600 dark:text-gray-300 mb-2">
                         <span class="status-badge ${status}">${getStatusText(status)}</span>
+                        ${renderRewatchBadge(series)}
                         ${series.platform ? `<span class="ml-2">${esc(series.platform)}</span>` : ''}
                         ${series.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(series.imdbRating)}</span>` : ''}
                         ${series.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(series.myRating)}</span>` : ''}
@@ -2010,6 +2229,16 @@ function renderSeriesList() {
                     ${series.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${esc(series.description)}</p>` : ''}
                 </div>
                 ${nextEpisodeHtml}
+                ${!next && status === 'completed' ? `
+                <div class="next-episode">
+                    <span><i class="fas fa-circle-check mr-1 text-emerald-500"></i>Bu diziyi bitirdin</span>
+                    <div class="next-episode-actions">
+                        <button class="btn btn-secondary btn-sm start-rewatch" data-series-id="${esc(series.id)}" title="İlerlemeyi sıfırlayıp baştan izlemeye başla">
+                            <i class="fas fa-rotate-right mr-1"></i> Baştan izle
+                        </button>
+                    </div>
+                </div>` : ''}
+                ${renderProviders(series)}
 
                 ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
                 ${tags ? `<div class="mb-3">${tags}</div>` : ''}
@@ -2058,7 +2287,7 @@ function renderMoviesList() {
         const statusText = movie.watched ? 'İzlendi' : 'İzlenecek';
 
         return `
-            <div class="movie-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}">
+            <div class="movie-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}${movie.pinned ? ' is-pinned' : ''}">
                 <label class="bulk-select-control" aria-label="Seç">
                     <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
                 </label>
@@ -2072,6 +2301,9 @@ function renderMoviesList() {
                             </button>` : ''}
                         </div>
                         <div class="flex space-x-1 ml-2">
+                            <button class="pin-icon ${movie.pinned ? 'is-pinned' : ''}" data-id="${esc(movie.id)}" title="${movie.pinned ? 'Sabitlemeyi kaldır' : 'En üste sabitle'}" aria-pressed="${movie.pinned ? 'true' : 'false'}">
+                                <i class="fas fa-thumbtack"></i>
+                            </button>
                             <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(movie.id)}" title="Benzerlerini öner">
                                 <i class="fas fa-lightbulb"></i>
                             </button>
@@ -2085,6 +2317,7 @@ function renderMoviesList() {
                     </div>
                     <div class="text-gray-600 dark:text-gray-300 mb-2">
                         <span class="status-badge ${statusClass}">${statusText}</span>
+                        ${renderRewatchBadge(movie)}
                         ${movie.platform && movie.platform !== 'Diğer' ? `<span class="ml-2">${esc(movie.platform)}</span>` : ''}
                         ${movie.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(movie.imdbRating)}</span>` : ''}
                         ${movie.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(movie.myRating)}</span>` : ''}
@@ -2096,10 +2329,14 @@ function renderMoviesList() {
                 ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
                 ${tags ? `<div class="mb-3">${tags}</div>` : ''}
                 ${movie.releaseDate ? renderReleaseBadge(movie.releaseDate) : ''}
+                ${renderProviders(movie)}
 
-                <div class="flex items-center mb-4">
+                <div class="flex items-center mb-4 gap-2 flex-wrap">
                     <span class="watched-indicator ${movie.watched ? 'watched' : 'unwatched'}"></span>
                     <span class="text-sm">${movie.watched ? 'İzlendi' : 'Henüz izlenmedi'}</span>
+                    ${movie.watched ? `<button class="btn btn-secondary btn-sm movie-rewatch ml-auto" data-id="${esc(movie.id)}" title="Bir kez daha izledim olarak kaydet">
+                        <i class="fas fa-rotate-right mr-1"></i> Tekrar izledim
+                    </button>` : ''}
                 </div>
 
                 ${movie.updatedAt ? `<div class="text-sm text-gray-600 dark:text-gray-300">
@@ -2773,6 +3010,112 @@ window.addEventListener('message', event => {
     });
 });
 
+// =====================================================================
+// Arama içinde filtreler: y:2008  platform:netflix  etiket:gizem  puan:>8
+// =====================================================================
+const SEARCH_FILTER_KEYS = {
+    y: 'year', yil: 'year', yıl: 'year',
+    p: 'platform', platform: 'platform',
+    k: 'category', kategori: 'category', tür: 'category', tur: 'category',
+    e: 'tag', etiket: 'tag',
+    d: 'status', durum: 'status',
+    puan: 'rating',
+    benim: 'myRating',
+    tekrar: 'rewatch'
+};
+
+const STATUS_ALIASES = {
+    planlanıyor: 'planning', planlanan: 'planning', planlaniyor: 'planning',
+    izleniyor: 'watching', izlenen: 'watching',
+    tamamlandı: 'completed', tamamlanan: 'completed', tamamlandi: 'completed', bitti: 'completed', bitmiş: 'completed',
+    duraklatıldı: 'paused', duraklatilan: 'paused', duraklatıldi: 'paused', duraklatılan: 'paused',
+    bırakıldı: 'dropped', bırakılan: 'dropped', birakildi: 'dropped', birakilan: 'dropped',
+    izlendi: 'watched', izlenmedi: 'unwatched'
+};
+
+// "y:2008", 'etiket:"bilim kurgu"' ve serbest metni ayırır
+function parseSearchQuery(raw) {
+    const filters = [];
+    const words = [];
+    // anahtar:"boşluklu değer" | "tırnaklı metin" | tek kelime
+    const tokenPattern = /[^\s:]+:"[^"]*"|"[^"]*"|\S+/g;
+    const tokens = String(raw || '').match(tokenPattern) || [];
+
+    tokens.forEach(token => {
+        const colon = token.indexOf(':');
+        if (colon > 0 && token[0] !== '"') {
+            const key = SEARCH_FILTER_KEYS[trLower(token.slice(0, colon))];
+            let value = token.slice(colon + 1).replace(/^"|"$/g, '').trim();
+            if (key && value) {
+                const match = /^(>=|<=|>|<)?\s*(.+)$/.exec(value);
+                filters.push({ key, op: match[1] || '', value: trLower(match[2]) });
+                return;
+            }
+        }
+        words.push(token.replace(/^"|"$/g, ''));
+    });
+
+    return { text: trLower(words.join(' ')).trim(), filters };
+}
+
+function compareNumber(actual, op, expected) {
+    const target = parseFloat(String(expected).replace(',', '.'));
+    if (!Number.isFinite(target)) return false;
+    if (actual == null) return false;
+    const value = Number(actual);
+    if (op === '>') return value > target;
+    if (op === '<') return value < target;
+    if (op === '>=') return value >= target;
+    if (op === '<=') return value <= target;
+    return Math.abs(value - target) < 0.0001;
+}
+
+function matchesSearchFilter(item, filter, kind) {
+    const { key, op, value } = filter;
+
+    if (key === 'year') {
+        const year = (item.releaseDate || '').slice(0, 4);
+        if (!year) return false;
+        const range = /^(\d{4})\s*-\s*(\d{4})$/.exec(value);
+        if (range) return Number(year) >= Number(range[1]) && Number(year) <= Number(range[2]);
+        if (op) return compareNumber(year, op, value);
+        return year === value;
+    }
+
+    if (key === 'platform') {
+        const names = [item.platform || '', ...PROVIDER_KINDS.flatMap(k => (item.providers && item.providers[k]) || [])];
+        return names.some(name => trLower(name).includes(value));
+    }
+
+    if (key === 'category') {
+        return (item.categories || []).some(id => {
+            const cat = categoriesData.find(c => c.id === id);
+            return cat && trLower(cat.name).includes(value);
+        });
+    }
+
+    if (key === 'tag') return (item.tags || []).some(tag => trLower(tag).includes(value));
+
+    if (key === 'status') {
+        const wanted = STATUS_ALIASES[value] || value;
+        if (kind === 'series') return getSeriesStatus(item) === wanted;
+        if (wanted === 'watched' || wanted === 'completed') return !!item.watched;
+        if (wanted === 'unwatched' || wanted === 'planning') return !item.watched;
+        return false;
+    }
+
+    if (key === 'rating') return compareNumber(item.imdbRating, op, value);
+    if (key === 'myRating') return compareNumber(item.myRating, op, value);
+    if (key === 'rewatch') return compareNumber(normalizeCount(item.rewatchCount), op || '>=', value);
+
+    return true;
+}
+
+function matchesSearchQuery(item, query, kind) {
+    if (!matchesSearchTerm(item, query.text)) return false;
+    return query.filters.every(filter => matchesSearchFilter(item, filter, kind));
+}
+
 function matchesSearchTerm(item, term) {
     if (!term) return true;
     if (trLower(item.name).includes(term)) return true;
@@ -2787,10 +3130,10 @@ function matchesSearchTerm(item, term) {
 
 // Filter series
 function filterSeries() {
-    const searchTerm = trLower(searchSeries.value).trim();
+    const query = parseSearchQuery(searchSeries.value);
 
     filteredSeriesData = seriesData.filter(series => {
-        if (!matchesSearchTerm(series, searchTerm)) return false;
+        if (!matchesSearchQuery(series, query, 'series')) return false;
         if (currentSeriesFilter !== 'all' && getSeriesStatus(series) !== currentSeriesFilter) return false;
         if (currentSeriesCategory && !(series.categories || []).includes(currentSeriesCategory)) return false;
         if (currentSeriesPlatform && (series.platform || 'Diğer') !== currentSeriesPlatform) return false;
@@ -2848,10 +3191,10 @@ function setupPlatformFilters() {
 
 // Filter movies
 function filterMovies() {
-    const searchTerm = trLower(searchMovies.value).trim();
+    const query = parseSearchQuery(searchMovies.value);
 
     filteredMoviesData = moviesData.filter(movie => {
-        if (!matchesSearchTerm(movie, searchTerm)) return false;
+        if (!matchesSearchQuery(movie, query, 'movie')) return false;
         if (currentMoviesFilter === 'watched' && !movie.watched) return false;
         if (currentMoviesFilter === 'not-watched' && movie.watched) return false;
         if (currentMoviesCategory && !(movie.categories || []).includes(currentMoviesCategory)) return false;
@@ -2933,6 +3276,7 @@ function editSeries(id) {
     document.getElementById('seriesReleaseDate').value = series.releaseDate || '';
     document.getElementById('seriesMyRating').value = series.myRating != null ? series.myRating : '';
     document.getElementById('seriesNotes').value = series.notes || '';
+    document.getElementById('seriesRewatch').value = series.rewatchCount || '';
     document.getElementById('seriesUserStatus').value = series.userStatus || '';
     setSelectedCategories('seriesCategorySelector', series.categories);
     setTagsInContainer('seriesTagsContainer', 'seriesTagsInput', series.tags);
@@ -2971,6 +3315,7 @@ function editMovie(id) {
     document.getElementById('movieReleaseDate').value = movie.releaseDate || '';
     document.getElementById('movieMyRating').value = movie.myRating != null ? movie.myRating : '';
     document.getElementById('movieNotes').value = movie.notes || '';
+    document.getElementById('movieRewatch').value = movie.rewatchCount || '';
     setPlatformValue('moviePlatform', movie.platform || 'Diğer');
     setSelectedCategories('movieCategorySelector', movie.categories);
     setTagsInContainer('movieTagsContainer', 'movieTagsInput', movie.tags);
@@ -4413,6 +4758,7 @@ document.getElementById('seriesForm').addEventListener('submit', function (e) {
         description: document.getElementById('seriesDescription').value.trim(),
         imageUrl: document.getElementById('seriesImageUrl').value.trim(),
         releaseDate: releaseDate || null,
+        rewatchCount: normalizeCount(document.getElementById('seriesRewatch').value),
         myRating: parseRatingInput('seriesMyRating'),
         notes: document.getElementById('seriesNotes').value.trim(),
         userStatus: document.getElementById('seriesUserStatus').value || null,
@@ -4484,6 +4830,7 @@ document.getElementById('movieForm').addEventListener('submit', function (e) {
                 imageUrl,
                 releaseDate: releaseDate || null,
                 myRating: parseRatingInput('movieMyRating'),
+                rewatchCount: normalizeCount(document.getElementById('movieRewatch').value),
                 notes: document.getElementById('movieNotes').value.trim(),
                 updatedAt: now,
                 lastWatchedAt: nextLastWatchedAt
@@ -4506,6 +4853,7 @@ document.getElementById('movieForm').addEventListener('submit', function (e) {
             imageUrl,
             releaseDate: releaseDate || null,
             myRating: parseRatingInput('movieMyRating'),
+            rewatchCount: normalizeCount(document.getElementById('movieRewatch').value),
             notes: document.getElementById('movieNotes').value.trim(),
             createdAt,
             updatedAt: createdAt,
@@ -4886,6 +5234,23 @@ function pickPlatform(details) {
     return network ? mapPlatformName(network.name) : '';
 }
 
+// Türkiye'deki tüm yayın seçenekleri: abonelik (flatrate/ads/free), kiralık, satın alma
+function pickProviders(details) {
+    const results = details['watch/providers'] && details['watch/providers'].results;
+    const tr = results && results.TR;
+    if (!tr) return null;
+    const names = list => (list || [])
+        .slice()
+        .sort((a, b) => (a.display_priority || 99) - (b.display_priority || 99))
+        .map(p => mapPlatformName(p.provider_name))
+        .filter(Boolean);
+    return normalizeProviders({
+        flatrate: [...names(tr.flatrate), ...names(tr.ads), ...names(tr.free)],
+        rent: names(tr.rent),
+        buy: names(tr.buy)
+    });
+}
+
 // --- Fragman seçimi ---
 function pickTrailer(videos) {
     const list = (videos && videos.results) || [];
@@ -5209,6 +5574,7 @@ async function fetchTmdbTitleDetails(kind, result) {
         trailerUrl: pickTrailer(d.videos),
         releaseDate: kind === 'series' ? (d.first_air_date || '') : pickTrReleaseDate(d),
         platform: pickPlatform(d),
+        providers: pickProviders(d),
         runtime: normalizeRuntime(kind === 'series'
             ? (Array.isArray(d.episode_run_time) ? d.episode_run_time[0] : null)
             : d.runtime),
@@ -5455,6 +5821,8 @@ async function applyAutoFillResult(kind, result) {
 
     state.extras = {
         runtime: normalizeRuntime(info.runtime) || undefined,
+        providers: info.providers || undefined,
+        providersAt: info.providers ? new Date().toISOString() : undefined,
         tmdbId: info.tmdbId || undefined,
         tmdbType: info.tmdbType || undefined,
         tvmazeId: info.tvmazeId || undefined,
@@ -5665,6 +6033,7 @@ function isEmptyField(value) {
 }
 
 function itemNeedsFill(item) {
+    if (!hasProviders(item)) return true;
     return ['imageUrl', 'trailerUrl', 'description', 'imdbRating', 'releaseDate', 'runtime'].some(f => isEmptyField(item[f]));
 }
 
@@ -5702,6 +6071,13 @@ async function fillItem(kind, item, options) {
     fill('imdbRating', info.imdbRating, 'puan');
     fill('releaseDate', info.releaseDate || null, 'tarih');
     fill('runtime', normalizeRuntime(info.runtime), 'süre');
+    // Yayın hakları zamanla değişir: bu alan boş olmasa da güncellenir
+    if (info.providers) {
+        const before = JSON.stringify(item.providers || null);
+        item.providers = info.providers;
+        item.providersAt = new Date().toISOString();
+        if (before !== JSON.stringify(item.providers)) filled.push('nerede izlenir');
+    }
     if ((!item.platform || item.platform === 'Diğer') && info.platform) {
         item.platform = info.platform;
         filled.push('platform');
@@ -5921,7 +6297,7 @@ function movieMinutes(movie) {
 // =====================================================================
 
 // Bir sezonun izlenen bölüm sayısını doğrudan ayarla. Değişim olduysa true döner.
-function setSeasonWatched(seriesId, seasonId, count) {
+function setSeasonWatched(seriesId, seasonId, count, options = {}) {
     const series = findSeries(seriesId);
     if (!series) return false;
     const season = series.seasons.find(s => String(s.id) === String(seasonId));
@@ -5937,7 +6313,7 @@ function setSeasonWatched(seriesId, seasonId, count) {
     series.updatedAt = now;
     refreshSeriesLastWatched(series);
     localStorage.setItem('seriesData', JSON.stringify(seriesData));
-    logWatch({ k: 'series', id: series.id, n: delta, m: delta * episodeMinutes(series) });
+    if (!options.silent) logWatch({ k: 'series', id: series.id, n: delta, m: delta * episodeMinutes(series) });
     return true;
 }
 
@@ -5951,6 +6327,87 @@ function setMovieWatched(movieId, watched) {
     localStorage.setItem('moviesData', JSON.stringify(moviesData));
     logWatch({ k: 'movie', id: movie.id, n: watched ? 1 : -1, m: (watched ? 1 : -1) * movieMinutes(movie) });
     return true;
+}
+
+// Listenin üstüne sabitle / sabitlemeyi kaldır
+function togglePin(kind, id) {
+    const list = kind === 'series' ? seriesData : moviesData;
+    const item = list.find(x => String(x.id) === String(id));
+    if (!item) return;
+    item.pinned = !item.pinned;
+    item.updatedAt = new Date().toISOString();
+    localStorage.setItem(kind === 'series' ? 'seriesData' : 'moviesData', JSON.stringify(list));
+    if (kind === 'series') filterSeries(); else filterMovies();
+    showToast(item.pinned ? `"${item.name}" en üste sabitlendi.` : `"${item.name}" sabitlemeden çıkarıldı.`);
+}
+
+// Diziyi baştan izlemeye başla: tekrar sayacını artır, bölümleri sıfırla
+function startSeriesRewatch(id) {
+    const series = findSeries(id);
+    if (!series) return;
+    const totals = getSeriesTotals(series);
+    if (!confirm(`"${series.name}" baştan izlenmiş sayılacak: tüm sezonların bölüm ilerlemesi sıfırlanacak ve tekrar izleme sayısı ${(series.rewatchCount || 0) + 1} olacak.\n\nDevam edilsin mi?`)) return;
+
+    const before = series.seasons.map(season => ({ id: season.id, watched: season.watchedEpisodes, lastWatchedAt: season.lastWatchedAt }));
+    // Sıfırlama bir "geri alma" değil, bu yüzden günlüğe eksi bölüm yazılmaz
+    series.seasons.forEach(season => setSeasonWatched(series.id, season.id, 0, { silent: true }));
+    series.rewatchCount = normalizeCount(series.rewatchCount) + 1;
+    series.updatedAt = new Date().toISOString();
+    localStorage.setItem('seriesData', JSON.stringify(seriesData));
+    refreshAll();
+    showToast(`"${series.name}" ${series.rewatchCount}. kez izlemeye hazır. ${totals.watched} bölümlük ilerleme sıfırlandı.`, {
+        actionLabel: 'Geri Al',
+        duration: 9000,
+        onAction: () => {
+            before.forEach(({ id: seasonId, watched, lastWatchedAt }) => {
+                setSeasonWatched(series.id, seasonId, watched, { silent: true });
+                const season = series.seasons.find(x => String(x.id) === String(seasonId));
+                if (season) season.lastWatchedAt = lastWatchedAt;
+            });
+            series.rewatchCount = Math.max(0, normalizeCount(series.rewatchCount) - 1);
+            refreshSeriesLastWatched(series);
+            localStorage.setItem('seriesData', JSON.stringify(seriesData));
+            refreshAll();
+        }
+    });
+}
+
+// Filmi bir kez daha izledim
+function markMovieRewatch(id) {
+    const movie = moviesData.find(m => String(m.id) === String(id));
+    if (!movie) return;
+    const now = new Date().toISOString();
+    movie.rewatchCount = normalizeCount(movie.rewatchCount) + 1;
+    movie.watched = true;
+    movie.lastWatchedAt = now;
+    movie.updatedAt = now;
+    localStorage.setItem('moviesData', JSON.stringify(moviesData));
+    logWatch({ k: 'movie', id: movie.id, n: 1, m: movieMinutes(movie) });
+    refreshAll();
+    showToast(`"${movie.name}" ${movie.rewatchCount + 1}. kez izlendi olarak kaydedildi.`);
+}
+
+// Kartlardaki tekrar izleme rozeti
+function renderRewatchBadge(item) {
+    const count = normalizeCount(item.rewatchCount);
+    if (!count) return '';
+    return `<span class="rewatch-badge" title="${esc(count)} kez tekrar izledin (toplam ${esc(count + 1)} izleme)"><i class="fas fa-rotate-right"></i> ${esc(count)}x</span>`;
+}
+
+// "Nerede izlenir" satırı: abonelik, kiralama, satın alma
+const PROVIDER_LABELS = { flatrate: 'Abonelikte', rent: 'Kiralık', buy: 'Satın al' };
+function renderProviders(item) {
+    if (!hasProviders(item)) return '';
+    const when = item.providersAt ? ` · ${new Date(item.providersAt).toLocaleDateString('tr-TR')} itibarıyla` : '';
+    const groups = PROVIDER_KINDS
+        .filter(kind => (item.providers[kind] || []).length)
+        .map(kind => `
+            <div class="provider-group">
+                <span class="provider-kind">${PROVIDER_LABELS[kind]}</span>
+                ${item.providers[kind].map(name => `<span class="provider-chip ${kind === 'flatrate' ? 'is-included' : ''}">${esc(name)}</span>`).join('')}
+            </div>`)
+        .join('');
+    return `<div class="providers-row" title="TMDB'nin Türkiye yayın bilgisi${when}">${groups}</div>`;
 }
 
 // =====================================================================
@@ -7041,6 +7498,7 @@ async function cloudSync({ silent = false } = {}) {
         cloudSyncHealthy = true;
         setCloudStatus('Son senkron: ' + new Date(now).toLocaleString('tr-TR') + (localChanged ? ' (diğer cihazdan değişiklikler alındı)' : ''), 'success');
         if (localChanged && !silent) showToast('Buluttaki değişiklikler alındı.');
+        refreshPublishedCalendar();
     } catch (err) {
         cloudSyncHealthy = false;
         setCloudStatus('Senkron hatası: ' + err.message, 'error');
@@ -7682,15 +8140,18 @@ function getSortComparator(sortType, getLastWatched) {
     }
 }
 
+// Sabitlenenler seçilen sıralamadan bağımsız olarak hep üstte kalır
+function pinnedFirst(comparator) {
+    return (a, b) => (!!b.pinned - !!a.pinned) || (comparator ? comparator(a, b) : 0);
+}
+
 function sortSeries(sortType) {
-    const comparator = getSortComparator(sortType, getSeriesLastWatchedTimestamp);
-    if (comparator) filteredSeriesData.sort(comparator);
+    filteredSeriesData.sort(pinnedFirst(getSortComparator(sortType, getSeriesLastWatchedTimestamp)));
     renderSeriesList();
 }
 
 function sortMovies(sortType) {
-    const comparator = getSortComparator(sortType, getLastWatchedTimestamp);
-    if (comparator) filteredMoviesData.sort(comparator);
+    filteredMoviesData.sort(pinnedFirst(getSortComparator(sortType, getLastWatchedTimestamp)));
     renderMoviesList();
 }
 

@@ -2212,6 +2212,110 @@ body.dark-theme {
     .next-episode-actions { width: 100%; justify-content: flex-end; }
 }
 
+/* Sabitleme, tekrar izleme, yayın sağlayıcıları */
+.pin-icon {
+    color: var(--text-muted);
+    transition: color 0.15s ease, transform 0.15s ease;
+}
+
+.pin-icon:hover { color: var(--primary); }
+.pin-icon.is-pinned { color: var(--primary); transform: rotate(-30deg); }
+
+.series-card.is-pinned,
+.movie-card.is-pinned {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 1px var(--primary), 0 8px 24px rgba(99, 102, 241, 0.18);
+}
+
+.rewatch-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-left: 8px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: #fff;
+    background: #0891b2;
+}
+
+.providers-row {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: var(--surface-2);
+    border: 1px solid var(--border);
+}
+
+.provider-group { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+
+.provider-kind {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    margin-right: 2px;
+    min-width: 62px;
+}
+
+.provider-chip {
+    font-size: 0.7rem;
+    padding: 1px 7px;
+    border-radius: 999px;
+    background: var(--surface-3);
+    color: var(--text-muted);
+}
+
+.provider-chip.is-included { background: var(--primary); color: #fff; }
+
+/* Arama filtresi ipucu */
+.search-hint {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 5px;
+    margin: -4px 0 2px;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    line-height: 1.7;
+}
+
+.search-hint-label { font-weight: 600; }
+
+.search-hint code {
+    padding: 1px 5px;
+    border-radius: 5px;
+    background: var(--surface-3);
+    font-size: 0.68rem;
+}
+
+/* Takvim aboneliği */
+.calendar-sub-content { max-width: 600px; width: 94%; }
+
+.calendar-sub-warning {
+    padding: 10px 12px;
+    margin-bottom: 14px;
+    border-radius: 10px;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    background: rgba(245, 158, 11, 0.12);
+    border: 1px solid rgba(245, 158, 11, 0.4);
+}
+
+.calendar-sub-link label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.calendar-sub-link input { font-size: 0.78rem; }
+
 /* Yedek hatırlatması */
 .backup-banner {
     display: flex;

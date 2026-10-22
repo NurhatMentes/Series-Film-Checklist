@@ -39,15 +39,22 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - Kartta **"Sıradaki: S2 · B5 → İzledim"** butonu ile tek tıkla bölüm işaretleme; yanında **geri alma** ve **"Sezonu bitir"** (kalan bölümleri birden işaretler, bildirimden geri alınabilir)
 - Sezon panelinde ayrıca **"Sezonu sıfırla"**
 - Durumlar: Planlanıyor, İzleniyor, Tamamlandı ve elle seçilen **Duraklatıldı / Bırakıldı**
+- Biten dizilerde **"Baştan izle"**: ilerlemeyi sıfırlar, tekrar izleme sayacını artırır (geri alınabilir)
 - Platform, puan, açıklama, poster, çıkış tarihi, fragman, kategori ve etiketler
 
 ### 🎬 Film Takibi
 - "İzlendi" işaretleyici, izleme tarihi otomatik kaydedilir
 - **Platform** alanı (otomatik doldurmada TMDB'nin Türkiye yayın bilgisinden gelir)
+- İzlenmiş filmlerde **"Tekrar izledim"** düğmesi
 - Puan, açıklama, poster, çıkış tarihi (kartta yıl olarak da görünür), fragman, kategori ve etiketler
 
 ### ⭐ Kişisel Bilgiler
-- **Benim Puanım** (0-10) ve **Notum** alanları; "Benim Puanım"a göre sıralama
+- **Benim Puanım** (0-10), **Notum** ve **Tekrar izleme** sayısı; "Benim Puanım"a göre sıralama
+- **Sabitleme:** kartın raptiye düğmesiyle istediğin yapımı listenin en üstüne tutturursun (seçili sıralama ne olursa olsun üstte kalır)
+
+### 📡 Nerede İzlenir
+- Kartlarda TMDB'nin Türkiye verisine göre **abonelikte / kiralık / satın alma** seçenekleri
+- Yayın hakları değiştiği için "Eksikleri Tamamla" bu listeyi her çalıştığında tazeler
 
 ### 🎲 Ne izlesem?
 - Üst çubuktaki düğme, **bitirmediğin** dizi ve filmler arasından sana bir tane seçer
@@ -57,10 +64,12 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 🔍 Arama, Filtreleme ve Sıralama
 - Ada, açıklamaya, platforma, etikete ve kategoriye göre **Türkçe harf duyarlı** arama
 - Duruma, kategoriye ve **platforma** göre filtreleme (platform listesi verinden üretilir, seçim hatırlanır)
+- **Arama kutusunda filtre:** `y:2008`, `y:2000-2010`, `platform:netflix`, `kategori:dram`, `etiket:"bilim kurgu"`, `puan:>8`, `benim:>7`, `durum:izleniyor`, `tekrar:>0` — serbest metinle birlikte kullanılabilir
 - Sıralama: Son İzlenen, En Yeni/En Eski Eklenen, A-Z, Z-A, IMDB puanı, Benim Puanım, Çıkış Tarihi (seçim hatırlanır)
 
 ### 📅 Diğer Sekmeler
 - **Yakında Çıkacaklar:** yeni sezonlar dahil yaklaşan çıkışlar (bu hafta / bu ay / sonrası), **aylık takvim görünümü** ve çıkış tarihlerini telefon/bilgisayar takvimine aktaran **.ics** dosyası (1 gün önce hatırlatmalı)
+- **Takvim aboneliği:** .ics dosyası senkron Gist'ine yazılır, takvim uygulamanın kendi güncellediği sabit bir adres verir (bağlantıyı bilen yapım adlarını ve tarihlerini görebilir; puan, not ve izleme durumu bu dosyaya yazılmaz)
 - **Fragmanlar:** tüm fragmanlar tek yerde; üstüne gelince önizleme, tıklayınca tam ekran
 - **Kategoriler / Etiketler:** oluşturma, düzenleme, silme, birleştirme
 - **İstatistikler:** izlenen bölüm, tamamlanan dizi, kategori ve platform dağılımı, en sevdikleriniz, son izlenenler
@@ -155,6 +164,13 @@ Testler veri dönüşümü, Türkçe arama, XSS koruması, senkron birleştirme,
 `main` dalına her push'ta GitHub Actions siteyi GitHub Pages'e yayınlar. CSS veya JS değiştiğinde, tarayıcıların eski dosyada takılı kalmaması için `index.html` içindeki iki `?v=` etiketini ve `sw.js` içindeki `CACHE` adını **aynı yeni değere** güncelleyin.
 
 ## Sürüm Notları
+
+### v2.3.0
+- **Tekrar izleme sayacı**; dizilerde "Baştan izle", filmlerde "Tekrar izledim"
+- **Arama içinde filtreler** (`y:`, `platform:`, `kategori:`, `etiket:`, `puan:`, `durum:`, `tekrar:`)
+- **Sabitleme:** seçili kayıtlar listenin üstünde kalır
+- **Nerede izlenir:** TMDB'nin Türkiye verisinden abonelik/kiralık/satın alma listesi
+- **Takvim aboneliği:** Gist üzerinden kendi güncellenen .ics adresi
 
 ### v2.2.0
 - **Ne izlesem?**: bitirmediklerin arasından filtreli, ağırlıklı rastgele öneri

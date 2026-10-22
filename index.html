@@ -21,9 +21,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261021-2">
+    <link rel="stylesheet" href="css/styles.css?v=20261022-1">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261021-2">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261022-1">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -165,6 +165,10 @@
                         </div>
                     </div>
 
+                                        <p class="search-hint">
+                        <span class="search-hint-label"><i class="fas fa-filter mr-1"></i>Aramada filtre:</span>
+                        <code>y:2008</code> <code>platform:netflix</code> <code>kategori:dram</code> <code>etiket:gizem</code> <code>puan:&gt;8</code> <code>durum:izleniyor</code> <code>tekrar:&gt;0</code>
+                    </p>
                     <div class="filters-container bg-white/5 p-3 rounded-lg">
                         <div class="flex flex-wrap gap-2 mb-3 items-center">
                             <div class="flex flex-wrap gap-2">
@@ -294,6 +298,10 @@
                         </div>
                     </div>
 
+                                        <p class="search-hint">
+                        <span class="search-hint-label"><i class="fas fa-filter mr-1"></i>Aramada filtre:</span>
+                        <code>y:2008</code> <code>platform:netflix</code> <code>kategori:dram</code> <code>etiket:gizem</code> <code>puan:&gt;8</code> <code>durum:izlendi</code> <code>tekrar:&gt;0</code>
+                    </p>
                     <div class="filters-container bg-white/5 p-3 rounded-lg">
                         <div class="flex flex-wrap gap-2 mb-3 items-center">
                             <div class="flex flex-wrap gap-2">
@@ -379,8 +387,11 @@
                             <button type="button" id="upcomingViewCalendar" class="filter-btn" data-upcoming-view="calendar">
                                 <i class="fas fa-calendar-days mr-1"></i> Takvim
                             </button>
-                            <button type="button" id="exportIcsBtn" class="btn btn-secondary btn-sm" title="Çıkış tarihlerini telefon/bilgisayar takvimine aktar">
+                            <button type="button" id="exportIcsBtn" class="btn btn-secondary btn-sm" title="Çıkış tarihlerini .ics dosyası olarak indir">
                                 <i class="fas fa-calendar-plus mr-1"></i> Takvime aktar
+                            </button>
+                            <button type="button" id="openCalendarSubBtn" class="btn btn-secondary btn-sm" title="Takvim uygulamanın kendi güncelleyeceği bir bağlantı oluştur">
+                                <i class="fas fa-rss mr-1"></i> Abonelik
                             </button>
                             <span class="newrel-sep" aria-hidden="true"></span>
                             <button id="upcomingFilterAll" class="filter-btn active" data-filter="all">
@@ -750,7 +761,11 @@
                         <label for="seriesMyRating">Benim Puanım</label>
                         <input type="number" id="seriesMyRating" class="form-control" min="0" max="10" step="0.5" placeholder="0-10">
                     </div>
-                    <div class="md:col-span-2">
+                    <div>
+                        <label for="seriesRewatch">Tekrar izleme</label>
+                        <input type="number" id="seriesRewatch" class="form-control" min="0" max="99" step="1" placeholder="0">
+                    </div>
+                    <div class="md:col-span-3">
                         <label for="seriesNotes">Notum</label>
                         <input type="text" id="seriesNotes" class="form-control" maxlength="300" placeholder="Kendime not (ör: kim önerdi, nerede kaldım...)">
                     </div>
@@ -886,7 +901,11 @@
                         <label for="movieMyRating">Benim Puanım</label>
                         <input type="number" id="movieMyRating" class="form-control" min="0" max="10" step="0.5" placeholder="0-10">
                     </div>
-                    <div class="md:col-span-2">
+                    <div>
+                        <label for="movieRewatch">Tekrar izleme</label>
+                        <input type="number" id="movieRewatch" class="form-control" min="0" max="99" step="1" placeholder="0">
+                    </div>
+                    <div class="md:col-span-3">
                         <label for="movieNotes">Notum</label>
                         <input type="text" id="movieNotes" class="form-control" maxlength="300" placeholder="Kendime not (ör: kim önerdi, nerede kaldım...)">
                     </div>
@@ -1111,6 +1130,52 @@
         </div>
     </div>
 
+    <!-- Takvim aboneliği -->
+    <div id="calendarSubModal" class="modal">
+        <div class="modal-content calendar-sub-content">
+            <div class="flex items-center justify-between gap-3 mb-3">
+                <h2 class="text-xl font-bold"><i class="fas fa-rss mr-2 text-indigo-500"></i>Takvim Aboneliği</h2>
+                <button type="button" id="closeCalendarSubModal" class="close-trailer-btn !text-current" aria-label="Kapat">&times;</button>
+            </div>
+
+            <p class="text-sm opacity-80 mb-3">
+                "Takvime aktar" bir dosya indirir ve o dosya bir daha güncellenmez. Abonelik ise sabit bir adres verir:
+                takvim uygulaman o adresi düzenli aralıklarla kendisi okur, yeni sezon ve filmler otomatik düşer.
+                Adres, senkronizasyonda kullandığın <strong>gizli GitHub Gist</strong> içinde tutulur.
+            </p>
+
+            <div class="calendar-sub-warning">
+                <i class="fas fa-triangle-exclamation mr-2"></i>
+                Bağlantı tahmin edilemez ama <strong>herkese açıktır</strong>: adresi bilen, listendeki yapım adlarını ve tarihlerini görebilir.
+                Puanların, notların ve izleme durumun bu dosyaya yazılmaz.
+            </div>
+
+            <div id="calendarSubStatus" class="text-sm mb-3"></div>
+
+            <div id="calendarSubLink" class="calendar-sub-link hidden">
+                <label for="calendarIcsUrl">Abonelik adresi</label>
+                <div class="flex gap-2">
+                    <input type="text" id="calendarIcsUrl" class="form-control flex-1" readonly>
+                    <button type="button" id="copyIcsUrlBtn" class="btn btn-secondary" title="Kopyala"><i class="fas fa-copy"></i></button>
+                </div>
+                <p class="text-xs opacity-75 mt-2">
+                    Telefonda ve Apple Takvim'de <a id="calendarWebcalLink" href="#" class="underline">bu bağlantıya</a> dokunmak yeterli.
+                    Google Takvim'de: Diğer takvimler → URL'den → adresi yapıştır. Google güncellemeleri birkaç saatte bir alır.
+                </p>
+            </div>
+
+            <label class="flex items-center gap-2 text-sm mt-3">
+                <input type="checkbox" id="calendarAutoPublish">
+                <span>Senkronizasyonla birlikte otomatik güncelle</span>
+            </label>
+
+            <div class="flex flex-wrap gap-2 mt-4">
+                <button type="button" id="publishIcsBtn" class="btn btn-primary"><i class="fas fa-cloud-arrow-up mr-2"></i>Yayınla / Güncelle</button>
+                <button type="button" id="unpublishIcsBtn" class="btn btn-secondary hidden"><i class="fas fa-trash mr-2"></i>Yayından kaldır</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Veri bakımı -->
     <div id="maintenanceModal" class="modal">
         <div class="modal-content maintenance-modal-content">
@@ -1269,7 +1334,7 @@
 
 
 
-    <script src="js/app.js?v=20261021-2"></script>
+    <script src="js/app.js?v=20261022-1"></script>
 </body>
 
 </html>
