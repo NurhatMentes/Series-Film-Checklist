@@ -837,3 +837,83 @@ test('takvim aboneliği: gist\'e yazar, sabit adres verir, yayından kaldırır'
     assert.equal(w.localStorage.getItem('calendarIcsUrl'), null);
     w.close();
 });
+
+test('sezon grupları: 3 üstü sezonlar gruplanır, sıradaki grup açık gelir', () => {
+    const seasons = n => Array.from({ length: n }, (_, k) => ({ season: k + 1, totalEpisodes: 10, watchedEpisodes: k < 5 ? 10 : k === 5 ? 3 : 0 }));
+    const w = loadApp({
+        seriesData: [
+            { id: 1, name: 'Uzun Dizi', platform: 'Netflix', categories: [], seasons: seasons(14), createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Kısa Dizi', platform: 'Netflix', categories: [], seasons: seasons(3), createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    const card = name => Array.from(doc.querySelectorAll('.series-card')).find(c => c.textContent.includes(name));
+
+    assert.equal(card('Kısa Dizi').querySelectorAll('.season-group').length, 0, '3 sezonda gruplama yok');
+
+    const groups = card('Uzun Dizi').querySelectorAll('.season-group');
+    assert.equal(groups.length, 3, '14 sezon 5\'erli 3 gruba bölünür');
+    const titles = JSON.parse(JSON.stringify(Array.from(groups).map(g => g.querySelector('.season-group-title').textContent)));
+    assert.deepEqual(titles, ['Sezon 1-5', 'Sezon 6-10', 'Sezon 11-14']);
+
+    // Sıradaki bölüm 6. sezonda: o grup açık, diğerleri kapalı
+    assert.ok(!groups[0].classList.contains('is-open'));
+    assert.ok(groups[1].classList.contains('is-open'), 'sıradaki bölümün grubu açık gelir');
+    assert.equal(groups[1].querySelectorAll('.season-item').length, 5);
+
+    // Grup başlığı toplu ilerlemeyi gösterir
+    assert.ok(groups[0].querySelector('.season-group-count').textContent.includes('50/50'));
+    assert.ok(groups[1].querySelector('.season-group-count').textContent.includes('3/50'));
+    const pips = groups[0].querySelectorAll('.season-pip');
+    assert.equal(pips.length, 5);
+    assert.ok(pips[0].classList.contains('completed'));
+    assert.ok(groups[1].querySelectorAll('.season-pip')[0].classList.contains('watching'));
+
+    // Başlığa tıklayınca kapanır ve yeniden çizimde kapalı kalır
+    groups[1].querySelector('.season-group-header').click();
+    assert.ok(!card('Uzun Dizi').querySelectorAll('.season-group')[1].classList.contains('is-open'));
+    w.eval('filterSeries()');
+    assert.ok(!card('Uzun Dizi').querySelectorAll('.season-group')[1].classList.contains('is-open'), 'seçim yeniden çizimde korunur');
+
+    // Göstergeye tıklayınca grubu ve o sezonu açar
+    card('Uzun Dizi').querySelectorAll('.season-group')[2].querySelectorAll('.season-pip')[1].click();
+    const reopened = card('Uzun Dizi').querySelectorAll('.season-group')[2];
+    assert.ok(reopened.classList.contains('is-open'));
+    assert.ok(reopened.querySelectorAll('.season-item')[1].querySelector('.season-content').classList.contains('show'));
+    w.close();
+});
+
+test('görünüm: renk teması ve açık/koyu seçimi saklanır', () => {
+    const w = loadApp({});
+    const doc = w.document;
+    assert.equal(doc.body.getAttribute('data-accent'), 'mor', 'varsayılan tema mor');
+
+    doc.getElementById('openAppearance').click();
+    const options = doc.querySelectorAll('#accentOptions [data-accent-id]');
+    assert.equal(options.length, 6);
+    assert.ok(doc.querySelector('[data-accent-id="mor"]').classList.contains('active'));
+
+    doc.querySelector('[data-accent-id="orman"]').click();
+    assert.equal(doc.body.getAttribute('data-accent'), 'orman');
+    assert.equal(doc.documentElement.getAttribute('data-accent-boot'), 'orman', 'açılışta renk sıçraması olmasın diye html\'e de yazılır');
+    assert.equal(w.localStorage.getItem('accent'), 'orman');
+    assert.ok(doc.querySelector('[data-accent-id="orman"]').classList.contains('active'));
+
+    // Koyu tema düğmesi hem gövdeyi hem Tailwind sınıfını günceller
+    doc.querySelector('.mode-option[data-mode="dark"]').click();
+    assert.ok(doc.body.classList.contains('dark-theme'));
+    assert.ok(doc.documentElement.classList.contains('dark'));
+    assert.equal(w.localStorage.getItem('theme'), 'dark');
+    assert.equal(doc.querySelector('#themeToggle i').className, 'fas fa-sun');
+    assert.equal(doc.body.getAttribute('data-accent'), 'orman', 'tema değişince renk seçimi korunur');
+
+    // Başlıktaki düğme ile geri dön
+    doc.getElementById('themeToggle').click();
+    assert.ok(!doc.body.classList.contains('dark-theme'));
+    assert.ok(!doc.documentElement.classList.contains('dark'));
+
+    // Bilinmeyen değer varsayılana düşer
+    w.localStorage.setItem('accent', 'uydurma');
+    assert.equal(JSON.parse(JSON.stringify(w.currentAccent())), 'mor');
+    w.close();
+});

@@ -38,6 +38,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - Sezon bazında bölüm ilerlemesi ve dizinin toplam ilerlemesi
 - Kartta **"Sıradaki: S2 · B5 → İzledim"** butonu ile tek tıkla bölüm işaretleme; yanında **geri alma** ve **"Sezonu bitir"** (kalan bölümleri birden işaretler, bildirimden geri alınabilir)
 - Sezon panelinde ayrıca **"Sezonu sıfırla"**
+- **3'ten fazla sezonu olan diziler** sezon gruplarına ayrılır (Sezon 1-5, 6-10…). Grup başlığında toplu ilerleme ve her sezon için doluluğunu gösteren küçük bir sütun vardır; sütuna basmak o sezonu açar. Sıradaki bölümün olduğu grup kendiliğinden açık gelir.
 - Durumlar: Planlanıyor, İzleniyor, Tamamlandı ve elle seçilen **Duraklatıldı / Bırakıldı**
 - Biten dizilerde **"Baştan izle"**: ilerlemeyi sıfırlar, tekrar izleme sayacını artırır (geri alınabilir)
 - Platform, puan, açıklama, poster, çıkış tarihi, fragman, kategori ve etiketler
@@ -82,7 +83,9 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 - **Yedek hatırlatması:** hiç yedek alınmadıysa veya son yedeğin üzerinden 30 gün geçtiyse uyarı (7 gün ertelenebilir)
 - **Silmeyi geri al** bildirimi
 - **Klavye kısayolları:** `/` aramaya odaklanır, `n` yeni dizi/film ekler, `Esc` pencereyi kapatır
-- **Karanlık/Aydınlık tema**, 1-2-3 sütun, Grid/Masonry yerleşim ve poster oranı (Orijinal, 2:3, 16:9, Kare) seçimi
+- **Görünüm:** açık/koyu tema ve 6 renk teması (Mor, Okyanus, Gün Batımı, Orman, Gece Yarısı, Kiraz); başlıktaki palet düğmesinden seçilir, bu tarayıcıda saklanır
+- 1-2-3 sütun, Grid/Masonry yerleşim ve poster oranı (Orijinal, 2:3, 16:9, Kare) seçimi
+- Uzun açıklamalar kartı taşırmaz: kart içinde kaydırılır (kenardaki gölge devamı olduğunu gösterir)
 - **PWA:** telefona uygulama gibi kurulabilir, çevrimdışı açılır
 
 ## Kurulum ve İlk Ayarlar
@@ -164,6 +167,11 @@ Testler veri dönüşümü, Türkçe arama, XSS koruması, senkron birleştirme,
 `main` dalına her push'ta GitHub Actions siteyi GitHub Pages'e yayınlar. CSS veya JS değiştiğinde, tarayıcıların eski dosyada takılı kalmaması için `index.html` içindeki iki `?v=` etiketini ve `sw.js` içindeki `CACHE` adını **aynı yeni değere** güncelleyin.
 
 ## Sürüm Notları
+
+### v2.4.0
+- **Sezon grupları:** çok sezonlu dizilerde açılır gruplar, toplu ilerleme ve sezon sütunları
+- Yakında Çıkacaklar, Öneriler ve "Ne izlesem?" kartlarında **kaydırılabilir açıklamalar**
+- **6 renk teması** ve yeni Görünüm penceresi; arayüzdeki sabit mor tonlar tema değişkenlerine bağlandı
 
 ### v2.3.0
 - **Tekrar izleme sayacı**; dizilerde "Baştan izle", filmlerde "Tekrar izledim"

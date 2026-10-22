@@ -47,14 +47,26 @@ body {
 }
 
 .dark-theme .card {
-    background: rgba(30, 41, 59, 0.95);
-    border-color: rgba(51, 65, 85, 0.3);
+    background: var(--card-surface, rgba(30, 41, 59, 0.95));
+    border-color: var(--card-border, rgba(51, 65, 85, 0.3));
     backdrop-filter: blur(10px);
 }
 
-body.dark-theme {
-    background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+/* Sayfa zemini: renk teması değişkenlerinden gelir (Tailwind'in gradyan
+   sınıflarını ezebilmesi için seçici gövde + öznitelik) */
+body[data-accent] {
+    background: linear-gradient(135deg, var(--page-1) 0%, var(--page-2) 50%, var(--page-3) 100%);
+    background-attachment: fixed;
 }
+
+/* Açılışta: gövdeye data-accent yazılana kadar zemin <html>'den gelsin */
+html[data-accent-boot="mor"] { background: #581c87; }
+html[data-accent-boot="okyanus"] { background: #155e75; }
+html[data-accent-boot="gunbatimi"] { background: #9d174d; }
+html[data-accent-boot="orman"] { background: #14532d; }
+html[data-accent-boot="gece"] { background: #1e293b; }
+html[data-accent-boot="kiraz"] { background: #9f1239; }
+html.dark[data-accent-boot] { background: #0f172a; }
 
 .tab-button {
     transition: all 0.3s ease;
@@ -109,7 +121,7 @@ body.dark-theme {
 .layout-toggle-btn.active {
     border-color: var(--primary);
     color: var(--primary);
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
 /* Kart başlıkları için tipografi ve kısaltma */
@@ -241,8 +253,8 @@ body.dark-theme {
     padding: 8px 12px;
     margin-bottom: 12px;
     border-radius: 12px;
-    background: rgba(99, 102, 241, 0.1);
-    border: 1px solid rgba(99, 102, 241, 0.25);
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
+    border: 1px solid color-mix(in srgb, var(--primary) 25%, transparent);
     font-size: 0.875rem;
 }
 
@@ -277,7 +289,7 @@ body.dark-theme {
     display: inline-block;
     padding: 0.25rem 0.6rem;
     border-radius: 9999px;
-    background: rgba(99, 102, 241, 0.12);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
     border: 1px solid var(--border-light);
     color: var(--text-light);
     font-weight: 500;
@@ -287,7 +299,7 @@ body.dark-theme {
 }
 
 .tag:hover {
-    background: rgba(99, 102, 241, 0.18);
+    background: color-mix(in srgb, var(--primary) 18%, transparent);
     transform: translateY(-1px);
     box-shadow: 0 4px 10px rgba(0, 0, 0, 0.06);
 }
@@ -318,7 +330,7 @@ body.dark-theme {
     color: white;
     font-weight: 600;
     border-color: transparent;
-    box-shadow: 0 8px 20px rgba(99, 102, 241, 0.35);
+    box-shadow: 0 8px 20px color-mix(in srgb, var(--primary) 35%, transparent);
     text-shadow: 0 1px 1px rgba(0, 0, 0, 0.2);
 }
 
@@ -347,7 +359,7 @@ body.dark-theme {
     height: 30px;
     border-radius: 9999px;
     background: radial-gradient(circle at 30% 25%, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.78));
-    border: 1px solid rgba(99, 102, 241, 0.22);
+    border: 1px solid color-mix(in srgb, var(--primary) 22%, transparent);
     backdrop-filter: blur(6px);
     box-shadow: 0 10px 24px rgba(15, 23, 42, 0.14);
     transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
@@ -355,14 +367,14 @@ body.dark-theme {
 
 .dark-theme .bulk-select-control {
     background: radial-gradient(circle at 30% 25%, rgba(30, 41, 59, 0.92), rgba(15, 23, 42, 0.78));
-    border-color: rgba(99, 102, 241, 0.34);
+    border-color: color-mix(in srgb, var(--primary) 34%, transparent);
     box-shadow: 0 10px 24px rgba(2, 6, 23, 0.5);
 }
 
 .bulk-select-control:hover {
     transform: translateY(-1px);
     box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
-    border-color: rgba(99, 102, 241, 0.42);
+    border-color: color-mix(in srgb, var(--primary) 42%, transparent);
 }
 
 .bulk-select-checkbox {
@@ -372,7 +384,7 @@ body.dark-theme {
     height: 18px;
     cursor: pointer;
     border-radius: 6px;
-    border: 2px solid rgba(99, 102, 241, 0.35);
+    border: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
     background: rgba(255, 255, 255, 0.35);
     box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.25);
     transition: transform 0.12s ease, background 0.12s ease, border-color 0.12s ease, box-shadow 0.12s ease;
@@ -386,18 +398,18 @@ body.dark-theme {
 
 .bulk-select-checkbox:hover {
     transform: scale(1.04);
-    border-color: rgba(99, 102, 241, 0.55);
+    border-color: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 .bulk-select-checkbox:focus-visible {
     outline: none;
-    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 25%, transparent);
 }
 
 .bulk-select-checkbox:checked {
     border-color: transparent;
-    background: linear-gradient(135deg, rgba(99, 102, 241, 0.95), rgba(168, 85, 247, 0.95));
-    box-shadow: 0 10px 20px rgba(99, 102, 241, 0.28);
+    background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 95%, transparent), color-mix(in srgb, var(--secondary) 95%, transparent));
+    box-shadow: 0 10px 20px color-mix(in srgb, var(--primary) 28%, transparent);
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='18' height='18' viewBox='0 0 20 20'%3E%3Cpath fill='white' d='M7.629 13.314 4.61 10.296a1 1 0 1 0-1.414 1.414l3.724 3.724a1 1 0 0 0 1.414 0l8.02-8.02A1 1 0 0 0 15.94 6l-8.31 7.314z'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
     background-position: center;
@@ -405,7 +417,7 @@ body.dark-theme {
 }
 
 .bulk-selected {
-    outline: 3px solid rgba(99, 102, 241, 0.45);
+    outline: 3px solid color-mix(in srgb, var(--primary) 45%, transparent);
     outline-offset: 2px;
 }
 
@@ -483,7 +495,7 @@ body.dark-theme {
 .form-control:focus {
     outline: none;
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 10%, transparent);
 }
 
 .btn {
@@ -503,7 +515,7 @@ body.dark-theme {
 
 .btn-primary:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+    box-shadow: 0 4px 12px color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
 .btn-secondary {
@@ -794,7 +806,7 @@ body.dark-theme {
     position: sticky;
     top: 8px;
     z-index: 30;
-    background: rgba(30, 27, 75, 0.55);
+    background: color-mix(in srgb, var(--page-1, #1e1b4b) 62%, transparent);
     backdrop-filter: blur(14px);
     -webkit-backdrop-filter: blur(14px);
     border: 1px solid rgba(255, 255, 255, 0.12);
@@ -1280,7 +1292,7 @@ body.dark-theme {
     scrollbar-gutter: stable;
     overscroll-behavior: contain;
     scrollbar-width: thin;
-    scrollbar-color: rgba(99, 102, 241, 0.45) transparent;
+    scrollbar-color: color-mix(in srgb, var(--primary) 50%, transparent) transparent;
 }
 
 .description-text::-webkit-scrollbar {
@@ -1292,12 +1304,12 @@ body.dark-theme {
 }
 
 .description-text::-webkit-scrollbar-thumb {
-    background: rgba(99, 102, 241, 0.35);
+    background: color-mix(in srgb, var(--primary) 35%, transparent);
     border-radius: 9999px;
 }
 
 .description-text:hover::-webkit-scrollbar-thumb {
-    background: rgba(99, 102, 241, 0.55);
+    background: color-mix(in srgb, var(--primary) 55%, transparent);
 }
 
 .dark-theme .description-text {
@@ -1442,11 +1454,11 @@ body.dark-theme {
     font-size: 0.75rem;
     padding: 4px 8px;
     border-radius: 999px;
-    background: rgba(99,102,241,0.12);
+    background: color-mix(in srgb, var(--primary) 12%, transparent);
     color: #334155;
 }
 .dark-theme .meta-chip {
-    background: rgba(99,102,241,0.15);
+    background: color-mix(in srgb, var(--primary) 15%, transparent);
     color: #e2e8f0;
 }
 .pill-imdb {
@@ -1521,7 +1533,7 @@ body.dark-theme {
 .stats-kpi {
     border-radius: 14px;
     padding: 16px;
-    background: rgba(99, 102, 241, 0.08);
+    background: color-mix(in srgb, var(--primary) 8%, transparent);
     border: 1px solid var(--border-light);
 }
 .stats-kpi .value { font-size: 1.75rem; font-weight: 700; }
@@ -1567,7 +1579,7 @@ body.dark-theme {
     cursor: pointer;
 }
 .autofill-result:last-child { border-bottom: none; }
-.autofill-result:hover, .autofill-result:focus { background: rgba(99, 102, 241, 0.12); outline: none; }
+.autofill-result:hover, .autofill-result:focus { background: color-mix(in srgb, var(--primary) 12%, transparent); outline: none; }
 .autofill-result img, .autofill-result .noposter {
     width: 42px; height: 63px; object-fit: cover; border-radius: 6px; flex-shrink: 0; background: #cbd5e1;
     display: flex; align-items: center; justify-content: center; color: #64748b;
@@ -1732,7 +1744,7 @@ body.dark-theme {
 .form-control:focus,
 .dark-theme .form-control:focus {
     border-color: var(--primary);
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.18);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 /* İkincil butonlar, filtre ve görünüm butonları */
@@ -1779,9 +1791,9 @@ body.dark-theme {
 /* Etiketler ve etiket bulutu */
 .tag,
 .dark-theme .tag {
-    background: rgba(99, 102, 241, 0.1);
+    background: color-mix(in srgb, var(--primary) 10%, transparent);
     color: #4338ca;
-    border: 1px solid rgba(99, 102, 241, 0.18);
+    border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .dark-theme .tag {
@@ -2190,14 +2202,51 @@ body.dark-theme {
     color: #f9a8d4;
 }
 
-.rec-overview {
+.rec-overview,
+.pick-overview,
+.upcoming-overview {
     font-size: 0.8rem;
     color: var(--text-muted);
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+    max-height: 4.6rem;
+    overflow-y: auto;
+    padding-right: 6px;
+    scrollbar-gutter: stable;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--primary) 55%, transparent) transparent;
 }
+
+.rec-overview::-webkit-scrollbar,
+.pick-overview::-webkit-scrollbar,
+.upcoming-overview::-webkit-scrollbar { width: 6px; }
+
+.rec-overview::-webkit-scrollbar-track,
+.pick-overview::-webkit-scrollbar-track,
+.upcoming-overview::-webkit-scrollbar-track { background: transparent; }
+
+.rec-overview::-webkit-scrollbar-thumb,
+.pick-overview::-webkit-scrollbar-thumb,
+.upcoming-overview::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--primary) 55%, transparent);
+}
+
+/* Metin taşarken üst/alt kenarda gölge belirir (yalnızca CSS: kaplama katmanları
+   içerikle kayar "local", gölgeler sabit "scroll" kalır) */
+.rec-overview,
+.pick-overview,
+.upcoming-overview {
+    --scroll-bg: var(--surface-2);
+    background:
+        linear-gradient(var(--scroll-bg) 30%, transparent) top / 100% 16px no-repeat local,
+        linear-gradient(transparent, var(--scroll-bg) 70%) bottom / 100% 16px no-repeat local,
+        radial-gradient(farthest-side at 50% 0, rgba(15, 23, 42, 0.22), transparent) top / 100% 7px no-repeat scroll,
+        radial-gradient(farthest-side at 50% 100%, rgba(15, 23, 42, 0.22), transparent) bottom / 100% 7px no-repeat scroll;
+}
+
+.upcoming-overview { --scroll-bg: var(--card-light); }
+.pick-overview { max-height: 5.8rem; }
+
 
 .next-episode-actions {
     display: flex;
@@ -2212,6 +2261,208 @@ body.dark-theme {
     .next-episode-actions { width: 100%; justify-content: flex-end; }
 }
 
+.progress-fill-themed {
+    background: linear-gradient(90deg, var(--primary) 0%, var(--secondary) 100%);
+}
+
+/* Görünüm penceresi */
+.appearance-content { max-width: 480px; width: 94%; }
+
+.appearance-heading {
+    font-size: 0.75rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--text-muted);
+    margin-bottom: 8px;
+}
+
+.appearance-modes { display: flex; gap: 8px; margin-bottom: 20px; }
+
+.mode-option {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    font-weight: 600;
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.mode-option:hover { background: var(--surface-3); }
+
+.mode-option.active {
+    border-color: var(--primary);
+    background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+
+.accent-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+    gap: 10px;
+}
+
+.accent-option {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 8px;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+    background: var(--surface-2);
+    color: var(--text);
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.15s ease;
+}
+
+.accent-option:hover { transform: translateY(-2px); }
+
+.accent-option.active {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+.accent-swatch {
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+    border: 2px solid rgba(255, 255, 255, 0.5);
+    box-shadow: 0 2px 8px rgba(15, 23, 42, 0.25);
+}
+
+.accent-option.active .accent-swatch::after {
+    content: '\f00c';
+    font-family: 'Font Awesome 6 Free';
+    font-weight: 900;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    color: #fff;
+    font-size: 0.9rem;
+    text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+.accent-name { font-size: 0.78rem; font-weight: 600; }
+
+/* Sezon grupları (3'ten fazla sezonu olan diziler) */
+.season-group {
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 8px;
+    background: var(--surface-2);
+    overflow: hidden;
+}
+
+.season-group.is-open { border-color: var(--primary); }
+
+.season-group-header {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    cursor: pointer;
+    user-select: none;
+}
+
+.season-group-top {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.season-group-header:hover { background: var(--surface-3); }
+.season-group-header:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
+
+.season-group-title { font-weight: 700; font-size: 0.9rem; white-space: nowrap; }
+
+.season-group-count {
+    margin-left: auto;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+    color: var(--text-muted);
+}
+
+.season-group-count small { font-weight: 400; opacity: 0.75; }
+
+/* Her sezon için bir sütun: dolgusu o sezonun izlenme oranı */
+.season-pips {
+    display: flex;
+    align-items: flex-end;
+    gap: 3px;
+    flex-wrap: wrap;
+}
+
+.season-group:not(.is-open) .season-pips { opacity: 0.85; }
+
+.season-pip {
+    position: relative;
+    width: 20px;
+    height: 24px;
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    background: var(--surface-3);
+    overflow: hidden;
+    cursor: pointer;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.season-pip:hover { border-color: var(--primary); transform: translateY(-1px); }
+.season-pip:focus-visible { outline: 2px solid var(--primary); outline-offset: 1px; }
+
+.season-pip-fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--primary);
+    transition: height 0.2s ease;
+}
+
+.season-pip.completed .season-pip-fill { background: var(--success); }
+
+.season-pip-no {
+    position: relative;
+    display: block;
+    font-size: 0.6rem;
+    font-weight: 700;
+    line-height: 24px;
+    text-align: center;
+    color: var(--text);
+    mix-blend-mode: normal;
+}
+
+.season-pip.completed .season-pip-no,
+.season-pip.watching .season-pip-no { color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45); }
+
+/* Açılır içerik: satır yüksekliğini 0fr -> 1fr ile canlandır, içerik kırpılmaz */
+.season-group-content {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 0.25s ease;
+}
+
+.season-group-content.show { grid-template-rows: 1fr; }
+.season-group-inner { overflow: hidden; padding: 0 10px; }
+.season-group-content.show .season-group-inner { padding: 2px 10px 10px; }
+.season-group .season-item:last-child { margin-bottom: 0; }
+
+@media (max-width: 480px) {
+    .season-pip { width: 18px; height: 22px; }
+    .season-pip-no { line-height: 22px; }
+}
+
 /* Sabitleme, tekrar izleme, yayın sağlayıcıları */
 .pin-icon {
     color: var(--text-muted);
@@ -2224,7 +2475,7 @@ body.dark-theme {
 .series-card.is-pinned,
 .movie-card.is-pinned {
     border-color: var(--primary);
-    box-shadow: 0 0 0 1px var(--primary), 0 8px 24px rgba(99, 102, 241, 0.18);
+    box-shadow: 0 0 0 1px var(--primary), 0 8px 24px color-mix(in srgb, var(--primary) 18%, transparent);
 }
 
 .rewatch-badge {
@@ -2496,7 +2747,7 @@ body.dark-theme {
 
 .calendar-cell.is-today {
     border-color: var(--primary);
-    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.35);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 35%, transparent);
 }
 
 .calendar-day { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
@@ -2515,10 +2766,10 @@ body.dark-theme {
     border: none;
     cursor: pointer;
     color: #fff;
-    background: #6366f1;
+    background: var(--primary);
 }
 
-.calendar-chip.movie { background: #a855f7; }
+.calendar-chip.movie { background: var(--secondary); }
 .calendar-chip:hover { filter: brightness(1.1); }
 .calendar-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .calendar-chip i { flex-shrink: 0; opacity: 0.85; }
@@ -2581,14 +2832,7 @@ body.dark-theme {
 .pick-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
 .pick-title { font-size: 1.1rem; font-weight: 700; line-height: 1.25; }
 .pick-reason { font-size: 0.8rem; color: var(--text-muted); }
-.pick-overview {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
+
 .pick-actions { display: flex; flex-wrap: wrap; gap: 6px; margin-top: auto; padding-top: 6px; }
 .pick-empty { font-size: 0.875rem; opacity: 0.75; padding: 24px 0; }
 
@@ -2698,4 +2942,188 @@ body.dark-theme {
     font-weight: 500;
     color: var(--text-muted);
     white-space: nowrap;
+}
+
+/* =====================================================================
+   Renk temaları: her biri hem açık hem koyu temada çalışır
+   ===================================================================== */
+
+body[data-accent="mor"] {
+    --primary: #6366f1;
+    --primary-dark: #4f46e5;
+    --secondary: #8b5cf6;
+    --surface-2: #f5f3ff;
+    --surface-3: #ede9fe;
+    --border: #e4e1f7;
+    --track: #e9e5fb;
+    --page-1: #312e81;
+    --page-2: #581c87;
+    --page-3: #831843;
+}
+
+body[data-accent="mor"].dark-theme {
+    --primary: #818cf8;
+    --primary-dark: #6366f1;
+    --secondary: #a78bfa;
+    --surface: #1e293b;
+    --surface-2: #243247;
+    --surface-3: #2d3d56;
+    --border: #334155;
+    --border-light: #334155;
+    --track: #0f172a;
+    --card-surface: #1e293b;
+    --card-border: #334155;
+    --page-1: #1e293b;
+    --page-2: #172033;
+    --page-3: #0f172a;
+}
+
+body[data-accent="okyanus"] {
+    --primary: #0284c7;
+    --primary-dark: #0369a1;
+    --secondary: #0891b2;
+    --surface-2: #f0f9ff;
+    --surface-3: #e0f2fe;
+    --border: #cadff0;
+    --track: #d8ecf8;
+    --page-1: #0c4a6e;
+    --page-2: #155e75;
+    --page-3: #083344;
+}
+
+body[data-accent="okyanus"].dark-theme {
+    --primary: #38bdf8;
+    --primary-dark: #0284c7;
+    --secondary: #22d3ee;
+    --surface: #132234;
+    --surface-2: #15263a;
+    --surface-3: #1d3147;
+    --border: #24405c;
+    --border-light: #24405c;
+    --track: #08131f;
+    --card-surface: #132234;
+    --card-border: #24405c;
+    --page-1: #0e2538;
+    --page-2: #0a1b29;
+    --page-3: #061320;
+}
+
+body[data-accent="gunbatimi"] {
+    --primary: #ea580c;
+    --primary-dark: #c2410c;
+    --secondary: #db2777;
+    --surface-2: #fff7ed;
+    --surface-3: #ffedd5;
+    --border: #f6d7bd;
+    --track: #fae3cf;
+    --page-1: #7c2d12;
+    --page-2: #9d174d;
+    --page-3: #831843;
+}
+
+body[data-accent="gunbatimi"].dark-theme {
+    --primary: #fb923c;
+    --primary-dark: #ea580c;
+    --secondary: #f472b6;
+    --surface: #241612;
+    --surface-2: #2e1c16;
+    --surface-3: #3a241c;
+    --border: #4a2e24;
+    --border-light: #4a2e24;
+    --track: #1b0f0b;
+    --card-surface: #241612;
+    --card-border: #4a2e24;
+    --page-1: #2c1410;
+    --page-2: #1f0d0a;
+    --page-3: #140705;
+}
+
+body[data-accent="orman"] {
+    --primary: #059669;
+    --primary-dark: #047857;
+    --secondary: #65a30d;
+    --surface-2: #f0fdf4;
+    --surface-3: #dcfce7;
+    --border: #c2e4cd;
+    --track: #d6f0de;
+    --page-1: #064e3b;
+    --page-2: #14532d;
+    --page-3: #1a2e05;
+}
+
+body[data-accent="orman"].dark-theme {
+    --primary: #34d399;
+    --primary-dark: #059669;
+    --secondary: #a3e635;
+    --surface: #11251b;
+    --surface-2: #152b22;
+    --surface-3: #1c3729;
+    --border: #244535;
+    --border-light: #244535;
+    --track: #0a1a13;
+    --card-surface: #11251b;
+    --card-border: #244535;
+    --page-1: #0f2a1e;
+    --page-2: #0a1d14;
+    --page-3: #05120c;
+}
+
+body[data-accent="gece"] {
+    --primary: #475569;
+    --primary-dark: #334155;
+    --secondary: #64748b;
+    --surface-2: #f8fafc;
+    --surface-3: #f1f5f9;
+    --border: #dde3ea;
+    --track: #e8edf3;
+    --page-1: #0f172a;
+    --page-2: #1e293b;
+    --page-3: #334155;
+}
+
+body[data-accent="gece"].dark-theme {
+    --primary: #94a3b8;
+    --primary-dark: #475569;
+    --secondary: #cbd5e1;
+    --surface: #161c26;
+    --surface-2: #1b2230;
+    --surface-3: #242c3b;
+    --border: #313a4b;
+    --border-light: #313a4b;
+    --track: #0b0f17;
+    --card-surface: #161c26;
+    --card-border: #313a4b;
+    --page-1: #121722;
+    --page-2: #0c1018;
+    --page-3: #07090e;
+}
+
+body[data-accent="kiraz"] {
+    --primary: #e11d48;
+    --primary-dark: #be123c;
+    --secondary: #9f1239;
+    --surface-2: #fff1f2;
+    --surface-3: #ffe4e6;
+    --border: #f5ccd2;
+    --track: #fbd9de;
+    --page-1: #881337;
+    --page-2: #9f1239;
+    --page-3: #4c0519;
+}
+
+body[data-accent="kiraz"].dark-theme {
+    --primary: #fb7185;
+    --primary-dark: #e11d48;
+    --secondary: #f472b6;
+    --surface: #241318;
+    --surface-2: #2c1a1f;
+    --surface-3: #382128;
+    --border: #472a32;
+    --border-light: #472a32;
+    --track: #1a0d11;
+    --card-surface: #241318;
+    --card-border: #472a32;
+    --page-1: #2a1018;
+    --page-2: #1c0a10;
+    --page-3: #120609;
 }

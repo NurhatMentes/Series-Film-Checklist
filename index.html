@@ -13,17 +13,21 @@
     <link rel="icon" href="icon.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="icon.svg">
     <script>
-        // Tailwind "dark:" sınıfları uygulamadaki tema butonunu takip etsin (işletim sistemini değil)
+        // Tailwind "dark:" sınıfları uygulamadaki tema butonunu takip etsin (işletim sistemini değil).
+        // Renk teması da burada uygulanır: sayfa çizilmeden önce doğru zeminle açılsın.
         try {
             if (localStorage.getItem('theme') === 'dark') document.documentElement.classList.add('dark');
+            var savedAccent = localStorage.getItem('accent');
+            document.documentElement.setAttribute('data-accent-boot',
+                ['mor', 'okyanus', 'gunbatimi', 'orman', 'gece', 'kiraz'].indexOf(savedAccent) > -1 ? savedAccent : 'mor');
         } catch (_) {}
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261022-1">
+    <link rel="stylesheet" href="css/styles.css?v=20261022-2">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261022-1">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261022-2">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -42,6 +46,9 @@
                 </button>
                 <button type="button" id="openSettings" class="header-btn" title="Otomatik doldurma ayarları" aria-label="Ayarlar">
                     <i class="fas fa-cog"></i>
+                </button>
+                <button type="button" id="openAppearance" class="header-btn" title="Görünüm ve renk teması" aria-label="Görünüm">
+                    <i class="fas fa-palette"></i>
                 </button>
                 <button type="button" id="themeToggle" class="header-btn" title="Tema değiştir" aria-label="Tema değiştir">
                     <i class="fas fa-moon"></i>
@@ -1110,7 +1117,7 @@
                     <button type="button" id="stopBulkFillBtn" class="btn btn-secondary hidden"><i class="fas fa-stop mr-2"></i>Durdur</button>
                 </div>
                 <div id="bulkFillProgress" class="hidden mt-3">
-                    <div class="progress-bar"><div id="bulkFillProgressFill" class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width:0%"></div></div>
+                    <div class="progress-bar"><div id="bulkFillProgressFill" class="progress-fill progress-fill-themed" style="width:0%"></div></div>
                     <div id="bulkFillProgressText" class="text-sm mt-1"></div>
                 </div>
                 <div id="bulkFillLog" class="bulk-fill-log hidden mt-3"></div>
@@ -1127,6 +1134,26 @@
             </div>
             <div id="recsModalStatus" class="text-sm opacity-80 mb-4"></div>
             <div id="recsModalList" class="recs-grid"></div>
+        </div>
+    </div>
+
+    <!-- Görünüm -->
+    <div id="appearanceModal" class="modal">
+        <div class="modal-content appearance-content">
+            <div class="flex items-center justify-between gap-3 mb-4">
+                <h2 class="text-xl font-bold"><i class="fas fa-palette mr-2 text-indigo-500"></i>Görünüm</h2>
+                <button type="button" id="closeAppearanceModal" class="close-trailer-btn !text-current" aria-label="Kapat">&times;</button>
+            </div>
+
+            <h3 class="appearance-heading">Tema</h3>
+            <div class="appearance-modes">
+                <button type="button" class="mode-option" data-mode="light"><i class="fas fa-sun"></i> Açık</button>
+                <button type="button" class="mode-option" data-mode="dark"><i class="fas fa-moon"></i> Koyu</button>
+            </div>
+
+            <h3 class="appearance-heading">Renk teması</h3>
+            <div id="accentOptions" class="accent-grid"></div>
+            <p class="text-xs opacity-70 mt-3">Seçimin bu tarayıcıda saklanır, yedeğe ve senkronizasyona girmez.</p>
         </div>
     </div>
 
@@ -1334,7 +1361,7 @@
 
 
 
-    <script src="js/app.js?v=20261022-1"></script>
+    <script src="js/app.js?v=20261022-2"></script>
 </body>
 
 </html>

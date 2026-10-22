@@ -530,6 +530,80 @@ function setupImageErrorHandling() {
 }
 
 // Check for saved theme
+// =====================================================================
+// Görünüm: açık/koyu tema + renk teması
+// =====================================================================
+const ACCENTS = [
+    { id: 'mor', name: 'Mor', colors: ['#6366f1', '#8b5cf6'] },
+    { id: 'okyanus', name: 'Okyanus', colors: ['#0284c7', '#0891b2'] },
+    { id: 'gunbatimi', name: 'Gün Batımı', colors: ['#ea580c', '#db2777'] },
+    { id: 'orman', name: 'Orman', colors: ['#059669', '#65a30d'] },
+    { id: 'gece', name: 'Gece Yarısı', colors: ['#475569', '#64748b'] },
+    { id: 'kiraz', name: 'Kiraz', colors: ['#e11d48', '#9f1239'] }
+];
+const DEFAULT_ACCENT = 'mor';
+
+function currentAccent() {
+    let saved = '';
+    try { saved = localStorage.getItem('accent') || ''; } catch (_) {}
+    return ACCENTS.some(a => a.id === saved) ? saved : DEFAULT_ACCENT;
+}
+
+function applyAccent(id) {
+    const accent = ACCENTS.some(a => a.id === id) ? id : DEFAULT_ACCENT;
+    document.body.setAttribute('data-accent', accent);
+    document.documentElement.setAttribute('data-accent-boot', accent);
+    try { localStorage.setItem('accent', accent); } catch (_) {}
+    // Tarayıcı arayüzü (adres çubuğu, görev listesi) sayfa rengine uysun
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) meta.setAttribute('content', getComputedStyle(document.body).getPropertyValue('--page-2').trim() || '#6366f1');
+    renderAppearance();
+}
+
+function setDarkMode(isDark) {
+    document.body.classList.toggle('dark-theme', isDark);
+    // Tailwind'in koyu tema sınıfı <html> üzerinde duruyor
+    document.documentElement.classList.toggle('dark', isDark);
+    const icon = document.querySelector('#themeToggle i');
+    if (icon) icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    try { localStorage.setItem('theme', isDark ? 'dark' : 'light'); } catch (_) {}
+    applyAccent(currentAccent());
+}
+
+function renderAppearance() {
+    const grid = document.getElementById('accentOptions');
+    const isDark = document.body.classList.contains('dark-theme');
+    document.querySelectorAll('.mode-option').forEach(btn => {
+        btn.classList.toggle('active', (btn.getAttribute('data-mode') === 'dark') === isDark);
+    });
+    if (!grid) return;
+    const active = currentAccent();
+    grid.innerHTML = ACCENTS.map(a => `
+        <button type="button" class="accent-option${a.id === active ? ' active' : ''}" data-accent-id="${esc(a.id)}" aria-pressed="${a.id === active ? 'true' : 'false'}">
+            <span class="accent-swatch" style="background: linear-gradient(135deg, ${esc(a.colors[0])} 0%, ${esc(a.colors[1])} 100%)"></span>
+            <span class="accent-name">${esc(a.name)}</span>
+        </button>`).join('');
+}
+
+function setupAppearance() {
+    const modal = document.getElementById('appearanceModal');
+    const openBtn = document.getElementById('openAppearance');
+    if (openBtn && modal) {
+        openBtn.addEventListener('click', () => { renderAppearance(); openModal(modal); });
+        const closeBtn = document.getElementById('closeAppearanceModal');
+        if (closeBtn) closeBtn.addEventListener('click', () => closeModal(modal));
+        modal.addEventListener('click', e => {
+            const target = e.target;
+            if (!(target instanceof Element)) return;
+            const accentBtn = target.closest('[data-accent-id]');
+            if (accentBtn) { applyAccent(accentBtn.getAttribute('data-accent-id')); return; }
+            const modeBtn = target.closest('[data-mode]');
+            if (modeBtn) setDarkMode(modeBtn.getAttribute('data-mode') === 'dark');
+        });
+    }
+    applyAccent(currentAccent());
+}
+
 const savedTheme = localStorage.getItem('theme') || 'light';
 if (savedTheme === 'dark') {
     document.body.classList.add('dark-theme');
@@ -538,13 +612,7 @@ if (savedTheme === 'dark') {
 
 // Theme toggle
 document.getElementById('themeToggle').addEventListener('click', function () {
-    document.body.classList.toggle('dark-theme');
-    const isDark = document.body.classList.contains('dark-theme');
-    document.documentElement.classList.toggle('dark', isDark);
-    localStorage.setItem('theme', isDark ? 'dark' : 'light');
-
-    const icon = this.querySelector('i');
-    icon.className = isDark ? 'fas fa-sun' : 'fas fa-moon';
+    setDarkMode(!document.body.classList.contains('dark-theme'));
 });
 
 // DOM Elements
@@ -652,6 +720,7 @@ function initApp() {
     setupBulkEditing();
     setupModalClosing();
     setupPickForMe();
+    setupAppearance();
     setupUpcomingCalendar();
     setupCalendarSubscription();
     setupPlatformFilters();
@@ -836,6 +905,35 @@ function setupEventDelegation() {
             return;
         }
 
+        const pip = target.closest('[data-season-pip]');
+        if (pip && seriesCard) {
+            e.stopPropagation();
+            const seasonId = String(pip.getAttribute('data-season-pip'));
+            // Göstergeye basınca o sezon açılsın ve görünür olsun
+            openSeasonIds.add(seasonId);
+            const group = pip.closest('.season-group');
+            if (group) seasonGroupState.set(group.getAttribute('data-group-key'), true);
+            filterSeries();
+            const opened = document.querySelector(`.season-item[data-season-id="${CSS.escape(seasonId)}"]`);
+            if (opened && opened.scrollIntoView) opened.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+            return;
+        }
+
+        const groupHeader = target.closest('.season-group-header');
+        if (groupHeader && seriesCard) {
+            const group = groupHeader.closest('.season-group');
+            const content = group.querySelector('.season-group-content');
+            const toggle = groupHeader.querySelector('.season-toggle');
+            const isOpen = content.classList.toggle('show');
+            group.classList.toggle('is-open', isOpen);
+            toggle.classList.toggle('rotate', isOpen);
+            groupHeader.setAttribute('aria-expanded', isOpen ? 'true' : 'false');
+            seasonGroupState.set(group.getAttribute('data-group-key'), isOpen);
+            // Grup kapanınca içindeki sezonlar da kapalı sayılsın
+            if (!isOpen) group.querySelectorAll('.season-item').forEach(item => openSeasonIds.delete(String(item.getAttribute('data-season-id'))));
+            return;
+        }
+
         const seasonHeader = target.closest('.season-header');
         if (seasonHeader && seriesCard) {
             const item = seasonHeader.closest('.season-item');
@@ -849,8 +947,73 @@ function setupEventDelegation() {
     });
 }
 
+document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const target = e.target;
+    if (!(target instanceof Element)) return;
+    const header = target.closest('.season-group-header, .season-header');
+    if (!header) return;
+    e.preventDefault();
+    header.click();
+});
+
 // Açık sezon panellerini yeniden çizimden sonra da açık tut
 const openSeasonIds = new Set();
+// Açık/kapalı sezon grupları: "diziId:grupSırası" -> true/false (yoksa varsayılan kural geçerli)
+const seasonGroupState = new Map();
+
+// Kaç sezonda bir gruplanacağı: liste uzadıkça grup da büyür
+const SEASON_GROUP_THRESHOLD = 3;
+function seasonGroupSize(count) {
+    if (count <= 6) return 3;
+    if (count <= 20) return 5;
+    return 10;
+}
+
+// 3'ten fazla sezonu olan dizilerde sezonları açılır gruplara böler
+function buildSeasonGroups(series) {
+    const seasons = series.seasons || [];
+    if (seasons.length <= SEASON_GROUP_THRESHOLD) return null;
+
+    const next = getSeriesTotals(series).next;
+    const nextId = next ? String(next.id) : null;
+    const size = seasonGroupSize(seasons.length);
+    const groups = [];
+
+    for (let start = 0; start < seasons.length; start += size) {
+        const chunk = seasons.slice(start, start + size);
+        const total = chunk.reduce((sum, x) => sum + (x.totalEpisodes || 0), 0);
+        const watched = chunk.reduce((sum, x) => sum + (x.watchedEpisodes || 0), 0);
+        const key = series.id + ':' + groups.length;
+        const stored = seasonGroupState.get(key);
+        const hasNext = !!nextId && chunk.some(x => String(x.id) === nextId);
+        groups.push({
+            key,
+            seasons: chunk,
+            total,
+            watched,
+            label: chunk.length === 1
+                ? `Sezon ${chunk[0].season}`
+                : `Sezon ${chunk[0].season}-${chunk[chunk.length - 1].season}`,
+            status: total > 0 && watched >= total ? 'completed' : watched > 0 ? 'watching' : 'planning',
+            // Kullanıcı bir seçim yaptıysa ona uy; yapmadıysa sıradaki bölümün olduğu grubu aç
+            open: chunk.some(x => openSeasonIds.has(String(x.id))) || (stored === undefined ? hasNext : stored)
+        });
+    }
+    return groups;
+}
+
+// Grup başlığındaki sezon göstergeleri: her sezon için bir kare, dolgusu izlenen orana göre
+function renderSeasonPips(group) {
+    return group.seasons.map(season => {
+        const ratio = season.totalEpisodes > 0 ? season.watchedEpisodes / season.totalEpisodes : 0;
+        const state = ratio >= 1 ? 'completed' : ratio > 0 ? 'watching' : 'planning';
+        return `<button type="button" class="season-pip ${state}" data-season-pip="${esc(season.id)}" title="Sezon ${esc(season.season)} · ${esc(season.watchedEpisodes)}/${esc(season.totalEpisodes)} bölüm" aria-label="Sezon ${esc(season.season)}">
+            <span class="season-pip-fill" style="height: ${Math.round(ratio * 100)}%"></span>
+            <span class="season-pip-no">${esc(season.season)}</span>
+        </button>`;
+    }).join('');
+}
 
 function closeModal(modal) {
     if (!modal) return;
@@ -1518,7 +1681,7 @@ function renderUpcomingReleases() {
                     ${item.releaseLabel ? `<div class="text-sm text-gray-600 dark:text-gray-400"><i class="fas fa-layer-group mr-1"></i>${esc(item.releaseLabel)}</div>` : ''}
                     ${item.platform ? `<div class="text-sm text-gray-600 dark:text-gray-400"><i class="fas fa-tv mr-1"></i>${esc(item.platform)}</div>` : ''}
                     ${chips ? `<div class="meta-row">${chips}</div>` : ''}
-                    ${item.description ? `<p class="text-sm text-gray-700 dark:text-gray-300 mt-2 line-clamp-2">${esc(item.description)}</p>` : ''}
+                    ${item.description ? `<p class="upcoming-overview mt-2">${esc(item.description)}</p>` : ''}
                 </div>
                 <div class="upcoming-footer">
                     <div class="date"><i class="fas fa-calendar-alt"></i> ${esc(formatReleaseDate(item.releaseDate))}</div>
@@ -2122,7 +2285,7 @@ function renderSeriesList() {
         const isSelected = selectedBulkKeys.has(selectKey);
         const { total: totalEpisodes, watched: watchedEpisodes, progress, status } = getSeriesTotals(series);
 
-        const seasonsHtml = series.seasons.map(season => {
+        const renderSeasonItem = season => {
             const seasonProgress = season.totalEpisodes > 0 ? (season.watchedEpisodes / season.totalEpisodes) * 100 : 0;
             const seasonStatus = season.totalEpisodes > 0 && season.watchedEpisodes >= season.totalEpisodes ? 'completed'
                 : season.watchedEpisodes > 0 ? 'watching'
@@ -2147,7 +2310,7 @@ function renderSeriesList() {
                                     <span>${Math.round(seasonProgress)}%</span>
                                 </div>
                                 <div class="progress-bar">
-                                    <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${seasonProgress}%"></div>
+                                    <div class="progress-fill progress-fill-themed" style="width: ${seasonProgress}%"></div>
                                 </div>
                             </div>
                             <div class="flex flex-wrap justify-end gap-2 mt-4">
@@ -2168,7 +2331,30 @@ function renderSeriesList() {
                     </div>
                 </div>
             `;
-        }).join('');
+        };
+
+        // 3'ten fazla sezon varsa açılır gruplara böl, yoksa düz listele
+        const seasonGroups = buildSeasonGroups(series);
+        const seasonsHtml = seasonGroups
+            ? seasonGroups.map(group => {
+                const percent = group.total > 0 ? Math.round((group.watched / group.total) * 100) : 0;
+                return `
+                <div class="season-group${group.open ? ' is-open' : ''}" data-group-key="${esc(group.key)}">
+                    <div class="season-group-header" role="button" tabindex="0" aria-expanded="${group.open ? 'true' : 'false'}">
+                        <div class="season-group-top">
+                            <i class="fas fa-chevron-down season-toggle${group.open ? ' rotate' : ''}"></i>
+                            <span class="season-group-title">${esc(group.label)}</span>
+                            <span class="status-badge ${group.status}">${getStatusText(group.status)}</span>
+                            <span class="season-group-count">${esc(group.watched)}/${esc(group.total)}<small> %${percent}</small></span>
+                        </div>
+                        <div class="season-pips">${renderSeasonPips(group)}</div>
+                    </div>
+                    <div class="season-group-content${group.open ? ' show' : ''}">
+                        <div class="season-group-inner">${group.seasons.map(renderSeasonItem).join('')}</div>
+                    </div>
+                </div>`;
+            }).join('')
+            : series.seasons.map(renderSeasonItem).join('');
 
         const categoryBadges = renderCategoryBadges(series.categories);
         const tags = renderTagBadges(series.tags);
@@ -2250,7 +2436,7 @@ function renderSeriesList() {
                         <span>${Math.round(progress)}%</span>
                     </div>
                     <div class="progress-bar">
-                        <div class="progress-fill bg-gradient-to-r from-blue-500 to-purple-500" style="width: ${progress}%"></div>
+                        <div class="progress-fill progress-fill-themed" style="width: ${progress}%"></div>
                     </div>
                 </div>
 
