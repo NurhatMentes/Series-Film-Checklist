@@ -2268,6 +2268,7 @@ function renderPoster(item, badgeClass, badgeText) {
 function renderSeriesList() {
     if (filteredSeriesData.length === 0) {
         seriesList.innerHTML = '';
+        renderPinnedRow('series', [], () => '', seriesView);
         seriesEmpty.classList.remove('hidden');
         const emptyTitle = seriesEmpty.querySelector('h3');
         if (emptyTitle) emptyTitle.textContent = seriesData.length === 0 ? 'Henüz dizi eklemediniz' : 'Filtreye uyan dizi bulunamadı';
@@ -2280,7 +2281,7 @@ function renderSeriesList() {
         ? `masonry masonry-${seriesView}-col`
         : `grid gap-6 grid-${seriesView}-col`;
 
-    seriesList.innerHTML = filteredSeriesData.map(series => {
+    const renderSeriesCard = series => {
         const selectKey = 'series:' + String(series.id);
         const isSelected = selectedBulkKeys.has(selectKey);
         const { total: totalEpisodes, watched: watchedEpisodes, progress, status } = getSeriesTotals(series);
@@ -2445,13 +2446,36 @@ function renderSeriesList() {
                 </div>
             </div>
         `;
-    }).join('');
+    };
+
+    renderPinnedRow('series', filteredSeriesData.filter(x => x.pinned), renderSeriesCard, seriesView);
+    seriesList.innerHTML = filteredSeriesData.filter(x => !x.pinned).map(renderSeriesCard).join('');
+}
+
+// Sabitlenenleri listenin üstünde ayrı bir satırda göster.
+// Masonry (sütun) yerleşiminde kartlar önce 1. sütunu doldurduğu için sabitlenenler
+// alt alta kalıyordu; bu satır her zaman ızgara olduğundan yan yana dizilirler.
+function renderPinnedRow(kind, items, renderCard, columns) {
+    const wrap = document.getElementById(kind + 'PinnedWrap');
+    const list = document.getElementById(kind + 'PinnedList');
+    const count = document.getElementById(kind + 'PinnedCount');
+    if (!wrap || !list) return;
+    if (!items.length) {
+        wrap.classList.add('hidden');
+        list.innerHTML = '';
+        return;
+    }
+    wrap.classList.remove('hidden');
+    list.className = `grid gap-6 grid-${columns}-col`;
+    if (count) count.textContent = String(items.length);
+    list.innerHTML = items.map(renderCard).join('');
 }
 
 // Render movies list
 function renderMoviesList() {
     if (filteredMoviesData.length === 0) {
         moviesList.innerHTML = '';
+        renderPinnedRow('movies', [], () => '', moviesView);
         moviesEmpty.classList.remove('hidden');
         const emptyTitle = moviesEmpty.querySelector('h3');
         if (emptyTitle) emptyTitle.textContent = moviesData.length === 0 ? 'Henüz film eklemediniz' : 'Filtreye uyan film bulunamadı';
@@ -2464,7 +2488,7 @@ function renderMoviesList() {
         ? `masonry masonry-${moviesView}-col`
         : `grid gap-6 grid-${moviesView}-col`;
 
-    moviesList.innerHTML = filteredMoviesData.map(movie => {
+    const renderMovieCard = movie => {
         const selectKey = 'movie:' + String(movie.id);
         const isSelected = selectedBulkKeys.has(selectKey);
         const categoryBadges = renderCategoryBadges(movie.categories);
@@ -2530,7 +2554,10 @@ function renderMoviesList() {
                 </div>` : ''}
             </div>
         `;
-    }).join('');
+    };
+
+    renderPinnedRow('movies', filteredMoviesData.filter(x => x.pinned), renderMovieCard, moviesView);
+    moviesList.innerHTML = filteredMoviesData.filter(x => !x.pinned).map(renderMovieCard).join('');
 }
 
 // Render categories list

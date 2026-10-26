@@ -25,9 +25,9 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Sürüm etiketi: her yayında değiştirin (sw.js içindeki CACHE ile aynı tutun) -->
-    <link rel="stylesheet" href="css/styles.css?v=20261022-2">
+    <link rel="stylesheet" href="css/styles.css?v=20261026-1">
     <!-- Tailwind, `npm run build:css` ile derlenir (tailwind.config.js). Eskiden CDN betiği sayfaya en sona stil eklediği için bu satır styles.css'ten SONRA gelmeli. -->
-    <link rel="stylesheet" href="css/tailwind.css?v=20261022-2">
+    <link rel="stylesheet" href="css/tailwind.css?v=20261026-1">
 </head>
 
 <body class="bg-gradient-to-br from-indigo-900 via-purple-900 to-pink-900 min-h-screen">
@@ -235,6 +235,13 @@
                 </div>
             </div>
 
+            <div id="seriesPinnedWrap" class="pinned-wrap hidden">
+                <div class="pinned-label">
+                    <i class="fas fa-thumbtack"></i> Sabitlenenler
+                    <span id="seriesPinnedCount" class="pinned-count">0</span>
+                </div>
+                <div class="grid grid-1-col gap-6" id="seriesPinnedList"></div>
+            </div>
             <div class="grid grid-1-col gap-6" id="seriesList">
                 <!-- Series cards will be added here dynamically -->
             </div>
@@ -359,6 +366,13 @@
                 </div>
             </div>
 
+            <div id="moviesPinnedWrap" class="pinned-wrap hidden">
+                <div class="pinned-label">
+                    <i class="fas fa-thumbtack"></i> Sabitlenenler
+                    <span id="moviesPinnedCount" class="pinned-count">0</span>
+                </div>
+                <div class="grid grid-1-col gap-6" id="moviesPinnedList"></div>
+            </div>
             <div class="grid grid-1-col gap-6" id="moviesList">
                 <!-- Movie cards will be added here dynamically -->
             </div>
@@ -1361,7 +1375,7 @@
 
 
 
-    <script src="js/app.js?v=20261022-2"></script>
+    <script src="js/app.js?v=20261026-1"></script>
 </body>
 
 </html>

@@ -740,18 +740,32 @@ test('sabitleme: sabitlenen kayıt sıralamadan bağımsız üstte kalır', () =
     const sort = doc.getElementById('moviesSortSelect');
     sort.value = 'alphabetical';
     sort.dispatchEvent(new w.Event('change'));
-    const shown = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('#moviesList .card-title')).map(e => e.textContent.trim())));
+    const titles = sel => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll(sel + ' .card-title')).map(e => e.textContent.trim())));
+    const shown = () => titles('#moviesList');
+    const pinnedShown = () => titles('#moviesPinnedList');
     assert.deepEqual(shown(), ['Alfa', 'Zeta']);
+    assert.ok(doc.getElementById('moviesPinnedWrap').classList.contains('hidden'), 'sabitlenen yokken satır gizli');
 
     const zetaCard = Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta'));
     zetaCard.querySelector('.pin-icon').click();
-    assert.deepEqual(shown(), ['Zeta', 'Alfa'], 'A-Z sıralamasında bile sabitlenen üstte');
+    // Sabitlenenler ayrı bir ızgara satırında durur: masonry sütunlarında alt alta kalmasınlar
+    assert.deepEqual(pinnedShown(), ['Zeta']);
+    assert.deepEqual(shown(), ['Alfa'], 'sabitlenen ana listeden çıkar');
+    assert.ok(!doc.getElementById('moviesPinnedWrap').classList.contains('hidden'));
+    assert.equal(doc.getElementById('moviesPinnedCount').textContent, '1');
+    assert.ok(doc.getElementById('moviesPinnedList').className.includes('grid'), 'sabitlenenler satırı her zaman ızgara');
     assert.equal(w.eval('moviesData.find(m => m.id === 2).pinned'), true);
-    assert.ok(Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta')).classList.contains('is-pinned'));
+    assert.ok(doc.querySelector('#moviesPinnedList .movie-card').classList.contains('is-pinned'));
+
+    // İkinci kaydı da sabitleyince ikisi de aynı satırda
+    Array.from(doc.querySelectorAll('#moviesList .movie-card')).find(c => c.textContent.includes('Alfa')).querySelector('.pin-icon').click();
+    assert.deepEqual(pinnedShown(), ['Alfa', 'Zeta']);
+    assert.equal(shown().length, 0);
 
     // Tekrar basınca sabitleme kalkar
-    Array.from(doc.querySelectorAll('.movie-card')).find(c => c.textContent.includes('Zeta')).querySelector('.pin-icon').click();
-    assert.deepEqual(shown(), ['Alfa', 'Zeta']);
+    Array.from(doc.querySelectorAll('#moviesPinnedList .movie-card')).find(c => c.textContent.includes('Zeta')).querySelector('.pin-icon').click();
+    assert.deepEqual(pinnedShown(), ['Alfa']);
+    assert.deepEqual(shown(), ['Zeta']);
     w.close();
 });
 

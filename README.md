@@ -51,7 +51,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 
 ### ⭐ Kişisel Bilgiler
 - **Benim Puanım** (0-10), **Notum** ve **Tekrar izleme** sayısı; "Benim Puanım"a göre sıralama
-- **Sabitleme:** kartın raptiye düğmesiyle istediğin yapımı listenin en üstüne tutturursun (seçili sıralama ne olursa olsun üstte kalır)
+- **Sabitleme:** kartın raptiye düğmesiyle istediğin yapımı listenin en üstüne tutturursun. Sabitlenenler listenin üstünde kendi satırında, yan yana durur (Masonry yerleşiminde kartlar sütun sütun aktığı için alt alta kalmasınlar diye).
 
 ### 📡 Nerede İzlenir
 - Kartlarda TMDB'nin Türkiye verisine göre **abonelikte / kiralık / satın alma** seçenekleri
