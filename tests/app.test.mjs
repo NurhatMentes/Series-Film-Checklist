@@ -742,7 +742,7 @@ test('sabitleme: sabitlenen kayıt sıralamadan bağımsız üstte kalır', () =
     sort.dispatchEvent(new w.Event('change'));
     const titles = sel => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll(sel + ' .card-title')).map(e => e.textContent.trim())));
     const shown = () => titles('#moviesList');
-    const pinnedShown = () => titles('#moviesPinnedList');
+    const pinnedShown = () => JSON.parse(JSON.stringify(Array.from(doc.querySelectorAll('#moviesPinnedList .pinned-title')).map(e => e.textContent.trim())));
     assert.deepEqual(shown(), ['Alfa', 'Zeta']);
     assert.ok(doc.getElementById('moviesPinnedWrap').classList.contains('hidden'), 'sabitlenen yokken satır gizli');
 
@@ -753,7 +753,8 @@ test('sabitleme: sabitlenen kayıt sıralamadan bağımsız üstte kalır', () =
     assert.deepEqual(shown(), ['Alfa'], 'sabitlenen ana listeden çıkar');
     assert.ok(!doc.getElementById('moviesPinnedWrap').classList.contains('hidden'));
     assert.equal(doc.getElementById('moviesPinnedCount').textContent, '1');
-    assert.ok(doc.getElementById('moviesPinnedList').className.includes('grid'), 'sabitlenenler satırı her zaman ızgara');
+    assert.equal(doc.getElementById('moviesPinnedList').className, 'pinned-grid', 'sabitlenenler her zaman ızgara şeritte');
+    assert.equal(doc.querySelectorAll('#moviesPinnedList .poster-wrapper').length, 0, 'şeritte tam kart değil kompakt kart kullanılır');
     assert.equal(w.eval('moviesData.find(m => m.id === 2).pinned'), true);
     assert.ok(doc.querySelector('#moviesPinnedList .movie-card').classList.contains('is-pinned'));
 
@@ -929,5 +930,50 @@ test('görünüm: renk teması ve açık/koyu seçimi saklanır', () => {
     // Bilinmeyen değer varsayılana düşer
     w.localStorage.setItem('accent', 'uydurma');
     assert.equal(JSON.parse(JSON.stringify(w.currentAccent())), 'mor');
+    w.close();
+});
+
+test('sabitlenenler şeridi: kompakt kartlar, boşluk bırakmadan yan yana', () => {
+    const w = loadApp({
+        seriesData: [
+            // Biri 14 sezonlu (tam kartta çok uzun), diğeri tek sezonlu
+            { id: 1, name: 'Uzun Dizi', platform: 'Netflix', categories: [], pinned: true, imdbRating: 8,
+              seasons: Array.from({ length: 14 }, (_, k) => ({ season: k + 1, totalEpisodes: 10, watchedEpisodes: k < 2 ? 10 : 0 })),
+              createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Kısa Dizi', platform: 'Max', categories: [], pinned: true,
+              seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4 }], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 3, name: 'Sabitsiz', platform: 'Max', categories: [],
+              seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    const cards = doc.querySelectorAll('#seriesPinnedList .pinned-card');
+    assert.equal(cards.length, 2);
+    assert.equal(doc.querySelectorAll('#seriesPinnedList .season-group').length, 0, 'şeritte sezon listesi yok');
+    assert.equal(doc.querySelectorAll('#seriesPinnedList .providers-row').length, 0);
+
+    // Sıradaki bölüm düğmesi şeritten de çalışır
+    const pinnedCard = name => Array.from(doc.querySelectorAll('#seriesPinnedList .pinned-card')).find(c => c.textContent.includes(name));
+    const next = pinnedCard('Uzun Dizi').querySelector('.increase-episode');
+    assert.ok(next, 'sıradaki bölüm düğmesi olmalı');
+    assert.ok(next.textContent.includes('S3·B1'));
+    next.click();
+    assert.equal(w.eval('seriesData[0].seasons[2].watchedEpisodes'), 1);
+
+    // Biten dizide düğme yok, ilerleme %100
+    const finished = pinnedCard('Kısa Dizi');
+    assert.equal(finished.querySelectorAll('.increase-episode').length, 0);
+    assert.ok(finished.querySelector('.pinned-progress').textContent.includes('4/4'));
+
+    // Başlığa tıklayınca düzenleme penceresi açılır
+    finished.querySelector('.pinned-title').click();
+    assert.ok(doc.getElementById('seriesModal').classList.contains('active'));
+    assert.equal(doc.getElementById('seriesName').value, 'Kısa Dizi');
+    w.eval("closeModal(document.getElementById('seriesModal'))");
+
+    // Şeritteki raptiye sabitlemeyi kaldırır
+    pinnedCard('Kısa Dizi').querySelector('.pin-icon').click();
+    assert.equal(doc.querySelectorAll('#seriesPinnedList .pinned-card').length, 1);
+    assert.equal(w.eval('seriesData.find(s => s.id === 2).pinned'), false);
     w.close();
 });

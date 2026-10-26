@@ -843,6 +843,22 @@ function setupEventDelegation() {
         const seriesCard = target.closest('.series-card');
         const movieCard = target.closest('.movie-card');
 
+        const openCardBtn = target.closest('[data-open-card]');
+        if (openCardBtn && (seriesCard || movieCard)) {
+            const id = openCardBtn.getAttribute('data-open-card');
+            if (seriesCard) editSeries(id); else editMovie(id);
+            return;
+        }
+
+        const pinnedWatchBtn = target.closest('.pinned-watch');
+        if (pinnedWatchBtn) {
+            if (setMovieWatched(pinnedWatchBtn.getAttribute('data-id'), true)) {
+                refreshAll();
+                showToast('İzlendi olarak işaretlendi.');
+            }
+            return;
+        }
+
         const pinBtn = target.closest('.pin-icon');
         if (pinBtn && (seriesCard || movieCard)) {
             togglePin(seriesCard ? 'series' : 'movie', pinBtn.getAttribute('data-id'));
@@ -2268,7 +2284,7 @@ function renderPoster(item, badgeClass, badgeText) {
 function renderSeriesList() {
     if (filteredSeriesData.length === 0) {
         seriesList.innerHTML = '';
-        renderPinnedRow('series', [], () => '', seriesView);
+        renderPinnedRow('series', []);
         seriesEmpty.classList.remove('hidden');
         const emptyTitle = seriesEmpty.querySelector('h3');
         if (emptyTitle) emptyTitle.textContent = seriesData.length === 0 ? 'Henüz dizi eklemediniz' : 'Filtreye uyan dizi bulunamadı';
@@ -2448,14 +2464,61 @@ function renderSeriesList() {
         `;
     };
 
-    renderPinnedRow('series', filteredSeriesData.filter(x => x.pinned), renderSeriesCard, seriesView);
+    renderPinnedRow('series', filteredSeriesData.filter(x => x.pinned));
     seriesList.innerHTML = filteredSeriesData.filter(x => !x.pinned).map(renderSeriesCard).join('');
 }
 
-// Sabitlenenleri listenin üstünde ayrı bir satırda göster.
-// Masonry (sütun) yerleşiminde kartlar önce 1. sütunu doldurduğu için sabitlenenler
-// alt alta kalıyordu; bu satır her zaman ızgara olduğundan yan yana dizilirler.
-function renderPinnedRow(kind, items, renderCard, columns) {
+// Sabitlenenler şeridi: listenin üstünde, yan yana duran kompakt kartlar.
+// Tam kart kullanılsaydı (14 sezonluk dizi gibi) uzun bir kart satırın boyunu
+// belirler, kısa kartların altında koca boşluklar kalırdı.
+function renderPinnedCard(kind, item) {
+    const poster = safeUrl(item.imageUrl);
+    const isSeries = kind === 'series';
+    const totals = isSeries ? getSeriesTotals(item) : null;
+    const status = isSeries ? totals.status : (item.watched ? 'completed' : 'planning');
+    const statusText = isSeries ? getStatusText(status) : (item.watched ? 'İzlendi' : 'İzlenecek');
+    const next = isSeries ? totals.next : null;
+    const percent = isSeries ? Math.round(totals.progress) : (item.watched ? 100 : 0);
+
+    const action = isSeries
+        ? (next ? `<button class="btn btn-primary btn-sm increase-episode" data-series-id="${esc(item.id)}" data-season-id="${esc(next.id)}" title="S${esc(next.season)} · B${esc(next.watchedEpisodes + 1)} izlendi">
+                <i class="fas fa-check mr-1"></i> S${esc(next.season)}·B${esc(next.watchedEpisodes + 1)}
+            </button>` : '')
+        : (!item.watched ? `<button class="btn btn-primary btn-sm pinned-watch" data-id="${esc(item.id)}" title="İzledim olarak işaretle">
+                <i class="fas fa-check mr-1"></i> İzledim
+            </button>` : '');
+
+    return `
+        <div class="pinned-card ${isSeries ? 'series-card' : 'movie-card'} is-pinned" data-id="${esc(item.id)}">
+            <label class="bulk-select-control" aria-label="Seç">
+                <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc((isSeries ? 'series:' : 'movie:') + item.id)}" ${selectedBulkKeys.has((isSeries ? 'series:' : 'movie:') + item.id) ? 'checked' : ''}>
+            </label>
+            <button type="button" class="pinned-poster" data-open-card="${esc(item.id)}" title="${esc(item.name)} kartını aç">
+                ${poster
+                    ? `<img src="${esc(poster)}" alt="${esc(item.name)}" loading="lazy" onerror="handleImageError(this)">`
+                    : '<span class="pinned-noposter"><i class="fa-solid fa-image"></i></span>'}
+            </button>
+            <div class="pinned-body">
+                <div class="pinned-head">
+                    <button type="button" class="pinned-title" data-open-card="${esc(item.id)}">${esc(item.name)}${renderYearBadge(item.releaseDate)}</button>
+                    <button class="pin-icon is-pinned" data-id="${esc(item.id)}" title="Sabitlemeyi kaldır" aria-pressed="true"><i class="fas fa-thumbtack"></i></button>
+                </div>
+                <div class="pinned-meta">
+                    <span class="status-badge ${status}">${esc(statusText)}</span>
+                    ${renderRewatchBadge(item)}
+                    ${item.imdbRating ? `<span class="text-yellow-500"><i class="fas fa-star"></i> ${esc(item.imdbRating)}</span>` : ''}
+                    ${item.platform && item.platform !== 'Diğer' ? `<span class="opacity-75">${esc(item.platform)}</span>` : ''}
+                </div>
+                ${isSeries ? `<div class="pinned-progress" title="${esc(totals.watched)}/${esc(totals.total)} bölüm">
+                    <div class="progress-bar"><div class="progress-fill progress-fill-themed" style="width: ${percent}%"></div></div>
+                    <span>${esc(totals.watched)}/${esc(totals.total)}</span>
+                </div>` : ''}
+                ${action ? `<div class="pinned-actions">${action}</div>` : ''}
+            </div>
+        </div>`;
+}
+
+function renderPinnedRow(kind, items) {
     const wrap = document.getElementById(kind + 'PinnedWrap');
     const list = document.getElementById(kind + 'PinnedList');
     const count = document.getElementById(kind + 'PinnedCount');
@@ -2466,16 +2529,16 @@ function renderPinnedRow(kind, items, renderCard, columns) {
         return;
     }
     wrap.classList.remove('hidden');
-    list.className = `grid gap-6 grid-${columns}-col`;
+    list.className = 'pinned-grid';
     if (count) count.textContent = String(items.length);
-    list.innerHTML = items.map(renderCard).join('');
+    list.innerHTML = items.map(item => renderPinnedCard(kind === 'series' ? 'series' : 'movie', item)).join('');
 }
 
 // Render movies list
 function renderMoviesList() {
     if (filteredMoviesData.length === 0) {
         moviesList.innerHTML = '';
-        renderPinnedRow('movies', [], () => '', moviesView);
+        renderPinnedRow('movies', []);
         moviesEmpty.classList.remove('hidden');
         const emptyTitle = moviesEmpty.querySelector('h3');
         if (emptyTitle) emptyTitle.textContent = moviesData.length === 0 ? 'Henüz film eklemediniz' : 'Filtreye uyan film bulunamadı';
@@ -2556,7 +2619,7 @@ function renderMoviesList() {
         `;
     };
 
-    renderPinnedRow('movies', filteredMoviesData.filter(x => x.pinned), renderMovieCard, moviesView);
+    renderPinnedRow('movies', filteredMoviesData.filter(x => x.pinned));
     moviesList.innerHTML = filteredMoviesData.filter(x => !x.pinned).map(renderMovieCard).join('');
 }
 
