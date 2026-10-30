@@ -46,6 +46,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 ### 🎬 Film Takibi
 - "İzlendi" işaretleyici, izleme tarihi otomatik kaydedilir
 - **Platform** alanı (otomatik doldurmada TMDB'nin Türkiye yayın bilgisinden gelir)
+- **Poster üstünde fragman:** imleci posterin üzerinde 2 saniye tutunca fragman sessizce posterin yerinde oynar, imleç ayrılınca durur (dokunmatik ekranlarda devre dışı)
 - İzlenmiş filmlerde **"Tekrar izledim"** düğmesi
 - Puan, açıklama, poster, çıkış tarihi (kartta yıl olarak da görünür), fragman, kategori ve etiketler
 

@@ -1015,3 +1015,45 @@ test('kart detayı: sabitlenene tıklayınca düzenleme değil tam kart açılı
     assert.ok(!detail.classList.contains('active'), 'kayıt gidince pencere kapanır');
     w.close();
 });
+
+test('poster önizlemesi: fragmanı olan film posterleri işaretlenir, önizleme açılıp kapanır', () => {
+    const w = loadApp({
+        moviesData: [
+            { id: 1, name: 'Fragmanlı Film', imageUrl: 'https://img/a.jpg', categories: [],
+              trailerUrl: 'https://www.youtube.com/watch?v=abcdefghij1', createdAt: '2024-01-01T00:00:00Z' },
+            { id: 2, name: 'Fragmansız Film', imageUrl: 'https://img/b.jpg', categories: [], createdAt: '2024-01-01T00:00:00Z' },
+            { id: 3, name: 'Postersiz Film', categories: [],
+              trailerUrl: 'https://www.youtube.com/watch?v=abcdefghij2', createdAt: '2024-01-01T00:00:00Z' }
+        ],
+        seriesData: [
+            { id: 9, name: 'Dizi', imageUrl: 'https://img/c.jpg', categories: [],
+              trailerUrl: 'https://www.youtube.com/watch?v=abcdefghij3',
+              seasons: [{ season: 1, totalEpisodes: 2, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' }
+        ]
+    });
+    const doc = w.document;
+    const marked = doc.querySelectorAll('#moviesList [data-hover-trailer]');
+    assert.equal(marked.length, 1, 'yalnızca fragmanı ve posteri olan film işaretlenir');
+    assert.equal(marked[0].getAttribute('data-hover-trailer'), 'abcdefghij1');
+    assert.equal(marked[0].getAttribute('data-hover-title'), 'Fragmanlı Film');
+    assert.equal(doc.querySelectorAll('#seriesList [data-hover-trailer]').length, 0, 'dizi kartlarında yok');
+
+    // Önizleme katmanı açılır
+    w.eval("startPosterPreview(document.querySelector('#moviesList [data-hover-trailer]'))");
+    const wrapper = doc.querySelector('#moviesList [data-hover-trailer]');
+    assert.ok(wrapper.classList.contains('is-previewing'));
+    const iframe = wrapper.querySelector('.poster-preview iframe');
+    assert.ok(iframe, 'önizleme iframe\'i eklenir');
+    assert.ok(iframe.src.includes('abcdefghij1') && iframe.src.includes('mute=1') && iframe.src.includes('autoplay=1'));
+
+    // Durdurunca katman ve sınıf temizlenir
+    w.eval('stopPosterPreview()');
+    assert.ok(!wrapper.classList.contains('is-previewing'));
+    assert.equal(wrapper.querySelectorAll('.poster-preview').length, 0);
+
+    // Liste yeniden çizilince önizleme kapanır
+    w.eval("startPosterPreview(document.querySelector('#moviesList [data-hover-trailer]'))");
+    w.eval('filterMovies()');
+    assert.equal(doc.querySelectorAll('.poster-preview').length, 0, 'yeniden çizimde artık kalmaz');
+    w.close();
+});

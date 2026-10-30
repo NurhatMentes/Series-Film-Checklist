@@ -721,6 +721,7 @@ function initApp() {
     setupModalClosing();
     setupPickForMe();
     setupCardDetail();
+    setupPosterPreview();
     setupAppearance();
     setupUpcomingCalendar();
     setupCalendarSubscription();
@@ -2278,13 +2279,18 @@ function renderReleaseBadge(releaseDate) {
     </div>`;
 }
 
-function renderPoster(item, badgeClass, badgeText) {
+function renderPoster(item, badgeClass, badgeText, options = {}) {
     const imageUrl = safeUrl(item.imageUrl);
     if (!imageUrl) {
         return `<div class="mb-4 ${posterAspect === 'original' ? 'aspect-[2/3]' : posterAspect} poster-wrapper flex items-center justify-center bg-slate-200 dark:bg-slate-700"><i class="fa-solid fa-image text-slate-500 dark:text-slate-300 text-3xl"></i></div>`;
     }
     const aspectClass = posterAspect === 'original' ? 'poster-original' : posterAspect;
-    return `<div class="mb-4 ${aspectClass} poster-wrapper">
+    // Fragmanı olan posterlerde imleç bir süre beklerse önizleme oynar (hoverTrailer)
+    const previewId = options.hoverTrailer ? extractYouTubeVideoId(item.trailerUrl) : null;
+    const previewAttrs = previewId
+        ? ` data-hover-trailer="${esc(previewId)}" data-hover-title="${esc(item.name)}"`
+        : '';
+    return `<div class="mb-4 ${aspectClass} poster-wrapper"${previewAttrs}>
         <span class="poster-badge status-badge ${badgeClass}">${esc(badgeText)}</span>
         <img src="${esc(imageUrl)}" alt="${esc(item.name)}" class="w-full h-full object-cover" loading="lazy" onerror="handleImageError(this)">
         <div class="poster-overlay"></div>
@@ -2474,7 +2480,7 @@ function renderMovieCard(movie) {
                 <label class="bulk-select-control" aria-label="Seç">
                     <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
                 </label>
-                ${renderPoster(movie, statusClass, statusText)}
+                ${renderPoster(movie, statusClass, statusText, { hoverTrailer: true })}
                 <div class="mb-4">
                     <div class="flex justify-between items-start mb-2">
                         <div class="flex items-center space-x-2">
@@ -2657,8 +2663,94 @@ function setupCardDetail() {
     if (closeBtn) closeBtn.addEventListener('click', closeCardDetail);
 }
 
+// =====================================================================
+// Poster üstünde bekleyince fragman önizlemesi (filmler)
+// =====================================================================
+const POSTER_PREVIEW_DELAY = 2000; // ms: kazara geçişlerde oynamasın diye
+let posterPreviewTimer = null;
+let posterPreviewPending = null;
+let posterPreviewWrapper = null;
+
+function canHoverPreview() {
+    // Dokunmatik ekranda "üstüne gelme" yok; tek dokunuş istemeden fragman açmasın
+    return typeof window.matchMedia === 'function' && window.matchMedia('(hover: hover)').matches;
+}
+
+function stopPosterPreview() {
+    if (posterPreviewTimer) {
+        clearTimeout(posterPreviewTimer);
+        posterPreviewTimer = null;
+    }
+    posterPreviewPending = null;
+    if (posterPreviewWrapper) {
+        const layer = posterPreviewWrapper.querySelector('.poster-preview');
+        if (layer) layer.remove();
+        posterPreviewWrapper.classList.remove('is-previewing');
+        posterPreviewWrapper = null;
+    }
+}
+
+function startPosterPreview(wrapper) {
+    if (!wrapper || !wrapper.isConnected) return;
+    const videoId = wrapper.getAttribute('data-hover-trailer');
+    if (!videoId) return;
+
+    posterPreviewWrapper = wrapper;
+    wrapper.classList.add('is-previewing');
+    const layer = document.createElement('div');
+    layer.className = 'poster-preview';
+    wrapper.appendChild(layer);
+
+    createYouTubeEmbed(layer, videoId, {
+        title: wrapper.getAttribute('data-hover-title') || '',
+        autoplay: true,
+        mute: true,
+        controls: false,
+        // Gömülemiyorsa posteri olduğu gibi bırak
+        onFallback: () => stopPosterPreview()
+    });
+}
+
+function setupPosterPreview() {
+    if (!canHoverPreview()) return;
+
+    document.addEventListener('mouseover', function (e) {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+        const wrapper = target.closest('[data-hover-trailer]');
+        if (!wrapper) {
+            if (posterPreviewWrapper || posterPreviewPending) stopPosterPreview();
+            return;
+        }
+        if (wrapper === posterPreviewWrapper || wrapper === posterPreviewPending) return;
+        stopPosterPreview();
+        posterPreviewPending = wrapper;
+        posterPreviewTimer = setTimeout(() => {
+            posterPreviewTimer = null;
+            posterPreviewPending = null;
+            startPosterPreview(wrapper);
+        }, POSTER_PREVIEW_DELAY);
+    }, { passive: true });
+
+    // Kartın tamamen dışına çıkınca durdur (iframe'e geçişte durdurma)
+    document.addEventListener('mouseout', function (e) {
+        const target = e.target;
+        if (!(target instanceof Element)) return;
+        const wrapper = target.closest('[data-hover-trailer]');
+        if (!wrapper || (wrapper !== posterPreviewWrapper && wrapper !== posterPreviewPending)) return;
+        const to = e.relatedTarget;
+        if (to && to instanceof Node && wrapper.contains(to)) return;
+        stopPosterPreview();
+    }, { passive: true });
+
+    // Sekme/pencere değişince veya sayfa arkaplana alınınca sustur
+    window.addEventListener('blur', stopPosterPreview);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) stopPosterPreview(); });
+}
+
 // Render movies list
 function renderMoviesList() {
+    stopPosterPreview();
     if (filteredMoviesData.length === 0) {
         moviesList.innerHTML = '';
         renderPinnedRow('movies', []);
@@ -4357,6 +4449,7 @@ function showTab(activeTab) {
         content.classList.toggle('hidden', !isActive);
     });
     stopTrailersPreview(true);
+    stopPosterPreview();
     const entry = TABS.find(t => t.tab === activeTab);
     if (entry && entry.onShow) entry.onShow();
     try { localStorage.setItem('activeTab', activeTab.id); } catch (_) {}

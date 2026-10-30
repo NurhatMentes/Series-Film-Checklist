@@ -171,6 +171,29 @@ html.dark[data-accent-boot] { background: #0f172a; }
     position: relative;
 }
 
+/* Poster üstünde fragman önizlemesi */
+.poster-preview {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: #000;
+}
+
+.poster-preview iframe {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border: 0;
+}
+
+/* Önizleme oynarken posterin üstündeki yazılar görüntüyü kapatmasın */
+.poster-wrapper.is-previewing .poster-overlay,
+.poster-wrapper.is-previewing .poster-info {
+    opacity: 0;
+}
+
+.poster-wrapper[data-hover-trailer] { cursor: default; }
+
 .poster-overlay {
     position: absolute;
     inset: 0;
