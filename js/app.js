@@ -720,6 +720,7 @@ function initApp() {
     setupBulkEditing();
     setupModalClosing();
     setupPickForMe();
+    setupCardDetail();
     setupAppearance();
     setupUpcomingCalendar();
     setupCalendarSubscription();
@@ -845,8 +846,7 @@ function setupEventDelegation() {
 
         const openCardBtn = target.closest('[data-open-card]');
         if (openCardBtn && (seriesCard || movieCard)) {
-            const id = openCardBtn.getAttribute('data-open-card');
-            if (seriesCard) editSeries(id); else editMovie(id);
+            openCardDetail(seriesCard ? 'series' : 'movie', openCardBtn.getAttribute('data-open-card'));
             return;
         }
 
@@ -871,13 +871,23 @@ function setupEventDelegation() {
         const movieRewatchBtn = target.closest('.movie-rewatch');
         if (movieRewatchBtn) { markMovieRewatch(movieRewatchBtn.getAttribute('data-id')); return; }
 
+        const inDetail = !!target.closest('#cardDetailModal');
+
         const editBtn = target.closest('.edit-icon');
-        if (editBtn && seriesCard) { editSeries(editBtn.getAttribute('data-id')); return; }
-        if (editBtn && movieCard) { editMovie(editBtn.getAttribute('data-id')); return; }
+        if (editBtn && (seriesCard || movieCard)) {
+            const id = editBtn.getAttribute('data-id');
+            if (inDetail) closeCardDetail();
+            if (seriesCard) editSeries(id); else editMovie(id);
+            return;
+        }
 
         const deleteBtn = target.closest('.delete-icon');
-        if (deleteBtn && seriesCard) { removeSeries(deleteBtn.getAttribute('data-id')); return; }
-        if (deleteBtn && movieCard) { removeMovie(deleteBtn.getAttribute('data-id')); return; }
+        if (deleteBtn && (seriesCard || movieCard)) {
+            const id = deleteBtn.getAttribute('data-id');
+            if (inDetail) closeCardDetail();
+            if (seriesCard) removeSeries(id); else removeMovie(id);
+            return;
+        }
 
         const seasonSetBtn = target.closest('.complete-season, .reset-season, .undo-episode');
         if (seasonSetBtn && seriesCard) {
@@ -1033,6 +1043,7 @@ function renderSeasonPips(group) {
 
 function closeModal(modal) {
     if (!modal) return;
+    if (modal.id === 'cardDetailModal') cardDetail = null;
     if (modal.classList.contains('trailer-modal')) {
         resetTrailerPlayerState();
         modal.remove();
@@ -2281,23 +2292,8 @@ function renderPoster(item, badgeClass, badgeText) {
     </div>`;
 }
 
-function renderSeriesList() {
-    if (filteredSeriesData.length === 0) {
-        seriesList.innerHTML = '';
-        renderPinnedRow('series', []);
-        seriesEmpty.classList.remove('hidden');
-        const emptyTitle = seriesEmpty.querySelector('h3');
-        if (emptyTitle) emptyTitle.textContent = seriesData.length === 0 ? 'Henüz dizi eklemediniz' : 'Filtreye uyan dizi bulunamadı';
-        return;
-    }
-
-    seriesEmpty.classList.add('hidden');
-
-    seriesList.className = layoutMode === 'masonry'
-        ? `masonry masonry-${seriesView}-col`
-        : `grid gap-6 grid-${seriesView}-col`;
-
-    const renderSeriesCard = series => {
+// Tam kart: liste, sabitlenenler penceresi ve detay penceresi aynı şablonu kullanır
+function renderSeriesCard(series) {
         const selectKey = 'series:' + String(series.id);
         const isSelected = selectedBulkKeys.has(selectKey);
         const { total: totalEpisodes, watched: watchedEpisodes, progress, status } = getSeriesTotals(series);
@@ -2462,7 +2458,92 @@ function renderSeriesList() {
                 </div>
             </div>
         `;
-    };
+}
+
+// Tam kart: liste, sabitlenenler penceresi ve detay penceresi aynı şablonu kullanır
+function renderMovieCard(movie) {
+        const selectKey = 'movie:' + String(movie.id);
+        const isSelected = selectedBulkKeys.has(selectKey);
+        const categoryBadges = renderCategoryBadges(movie.categories);
+        const tags = renderTagBadges(movie.tags);
+        const statusClass = movie.watched ? 'completed' : 'planning';
+        const statusText = movie.watched ? 'İzlendi' : 'İzlenecek';
+
+        return `
+            <div class="movie-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}${movie.pinned ? ' is-pinned' : ''}">
+                <label class="bulk-select-control" aria-label="Seç">
+                    <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
+                </label>
+                ${renderPoster(movie, statusClass, statusText)}
+                <div class="mb-4">
+                    <div class="flex justify-between items-start mb-2">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-xl card-title">${esc(movie.name)}${renderYearBadge(movie.releaseDate)}</h3>
+                            ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(movie.trailerUrl)}" data-title="${esc(movie.name)}">
+                                <i class="fab fa-youtube"></i> Fragman
+                            </button>` : ''}
+                        </div>
+                        <div class="flex space-x-1 ml-2">
+                            <button class="pin-icon ${movie.pinned ? 'is-pinned' : ''}" data-id="${esc(movie.id)}" title="${movie.pinned ? 'Sabitlemeyi kaldır' : 'En üste sabitle'}" aria-pressed="${movie.pinned ? 'true' : 'false'}">
+                                <i class="fas fa-thumbtack"></i>
+                            </button>
+                            <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(movie.id)}" title="Benzerlerini öner">
+                                <i class="fas fa-lightbulb"></i>
+                            </button>
+                            <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(movie.id)}" title="Düzenle">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="delete-icon text-red-500 hover:text-red-700" data-id="${esc(movie.id)}" title="Sil">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-gray-600 dark:text-gray-300 mb-2">
+                        <span class="status-badge ${statusClass}">${statusText}</span>
+                        ${renderRewatchBadge(movie)}
+                        ${movie.platform && movie.platform !== 'Diğer' ? `<span class="ml-2">${esc(movie.platform)}</span>` : ''}
+                        ${movie.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(movie.imdbRating)}</span>` : ''}
+                        ${movie.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(movie.myRating)}</span>` : ''}
+                    </div>
+                    ${movie.notes ? `<p class="my-note">${esc(movie.notes)}</p>` : ''}
+                    ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${esc(movie.description)}</p>` : ''}
+                </div>
+
+                ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
+                ${tags ? `<div class="mb-3">${tags}</div>` : ''}
+                ${movie.releaseDate ? renderReleaseBadge(movie.releaseDate) : ''}
+                ${renderProviders(movie)}
+
+                <div class="flex items-center mb-4 gap-2 flex-wrap">
+                    <span class="watched-indicator ${movie.watched ? 'watched' : 'unwatched'}"></span>
+                    <span class="text-sm">${movie.watched ? 'İzlendi' : 'Henüz izlenmedi'}</span>
+                    ${movie.watched ? `<button class="btn btn-secondary btn-sm movie-rewatch ml-auto" data-id="${esc(movie.id)}" title="Bir kez daha izledim olarak kaydet">
+                        <i class="fas fa-rotate-right mr-1"></i> Tekrar izledim
+                    </button>` : ''}
+                </div>
+
+                ${movie.updatedAt ? `<div class="text-sm text-gray-600 dark:text-gray-300">
+                    <i class="fas fa-clock mr-1"></i> ${esc(formatDate(movie.updatedAt))}
+                </div>` : ''}
+            </div>
+        `;
+}
+
+function renderSeriesList() {
+    if (filteredSeriesData.length === 0) {
+        seriesList.innerHTML = '';
+        renderPinnedRow('series', []);
+        seriesEmpty.classList.remove('hidden');
+        const emptyTitle = seriesEmpty.querySelector('h3');
+        if (emptyTitle) emptyTitle.textContent = seriesData.length === 0 ? 'Henüz dizi eklemediniz' : 'Filtreye uyan dizi bulunamadı';
+        return;
+    }
+
+    seriesEmpty.classList.add('hidden');
+
+    seriesList.className = layoutMode === 'masonry'
+        ? `masonry masonry-${seriesView}-col`
+        : `grid gap-6 grid-${seriesView}-col`;
 
     renderPinnedRow('series', filteredSeriesData.filter(x => x.pinned));
     seriesList.innerHTML = filteredSeriesData.filter(x => !x.pinned).map(renderSeriesCard).join('');
@@ -2534,6 +2615,48 @@ function renderPinnedRow(kind, items) {
     list.innerHTML = items.map(item => renderPinnedCard(kind === 'series' ? 'series' : 'movie', item)).join('');
 }
 
+// =====================================================================
+// Kart detayı: sabitlenenler şeridinden tam kartı pencerede açar
+// =====================================================================
+let cardDetail = null; // { kind: 'series' | 'movie', id }
+
+function findCardItem(kind, id) {
+    const list = kind === 'series' ? seriesData : moviesData;
+    return list.find(x => String(x.id) === String(id)) || null;
+}
+
+// Liste her yeniden çizildiğinde penceredeki kart da tazelenir
+function renderCardDetail() {
+    if (!cardDetail) return;
+    const body = document.getElementById('cardDetailBody');
+    if (!body) return;
+    const item = findCardItem(cardDetail.kind, cardDetail.id);
+    if (!item) {
+        closeCardDetail();
+        return;
+    }
+    body.innerHTML = cardDetail.kind === 'series' ? renderSeriesCard(item) : renderMovieCard(item);
+}
+
+function openCardDetail(kind, id) {
+    if (!findCardItem(kind, id)) return;
+    cardDetail = { kind, id };
+    renderCardDetail();
+    const modal = document.getElementById('cardDetailModal');
+    if (modal) openModal(modal);
+}
+
+function closeCardDetail() {
+    cardDetail = null;
+    const modal = document.getElementById('cardDetailModal');
+    if (modal && modal.classList.contains('active')) closeModal(modal);
+}
+
+function setupCardDetail() {
+    const closeBtn = document.getElementById('closeCardDetailModal');
+    if (closeBtn) closeBtn.addEventListener('click', closeCardDetail);
+}
+
 // Render movies list
 function renderMoviesList() {
     if (filteredMoviesData.length === 0) {
@@ -2550,74 +2673,6 @@ function renderMoviesList() {
     moviesList.className = layoutMode === 'masonry'
         ? `masonry masonry-${moviesView}-col`
         : `grid gap-6 grid-${moviesView}-col`;
-
-    const renderMovieCard = movie => {
-        const selectKey = 'movie:' + String(movie.id);
-        const isSelected = selectedBulkKeys.has(selectKey);
-        const categoryBadges = renderCategoryBadges(movie.categories);
-        const tags = renderTagBadges(movie.tags);
-        const statusClass = movie.watched ? 'completed' : 'planning';
-        const statusText = movie.watched ? 'İzlendi' : 'İzlenecek';
-
-        return `
-            <div class="movie-card card p-6 relative masonry-item${isSelected ? ' bulk-selected' : ''}${movie.pinned ? ' is-pinned' : ''}">
-                <label class="bulk-select-control" aria-label="Seç">
-                    <input type="checkbox" class="bulk-select-checkbox" data-select-key="${esc(selectKey)}" ${isSelected ? 'checked' : ''}>
-                </label>
-                ${renderPoster(movie, statusClass, statusText)}
-                <div class="mb-4">
-                    <div class="flex justify-between items-start mb-2">
-                        <div class="flex items-center space-x-2">
-                            <h3 class="text-xl card-title">${esc(movie.name)}${renderYearBadge(movie.releaseDate)}</h3>
-                            ${movie.trailerUrl ? `<button class="trailer-btn text-sm" data-trailer-url="${esc(movie.trailerUrl)}" data-title="${esc(movie.name)}">
-                                <i class="fab fa-youtube"></i> Fragman
-                            </button>` : ''}
-                        </div>
-                        <div class="flex space-x-1 ml-2">
-                            <button class="pin-icon ${movie.pinned ? 'is-pinned' : ''}" data-id="${esc(movie.id)}" title="${movie.pinned ? 'Sabitlemeyi kaldır' : 'En üste sabitle'}" aria-pressed="${movie.pinned ? 'true' : 'false'}">
-                                <i class="fas fa-thumbtack"></i>
-                            </button>
-                            <button class="similar-icon text-amber-500 hover:text-amber-600" data-id="${esc(movie.id)}" title="Benzerlerini öner">
-                                <i class="fas fa-lightbulb"></i>
-                            </button>
-                            <button class="edit-icon text-blue-500 hover:text-blue-700" data-id="${esc(movie.id)}" title="Düzenle">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="delete-icon text-red-500 hover:text-red-700" data-id="${esc(movie.id)}" title="Sil">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <div class="text-gray-600 dark:text-gray-300 mb-2">
-                        <span class="status-badge ${statusClass}">${statusText}</span>
-                        ${renderRewatchBadge(movie)}
-                        ${movie.platform && movie.platform !== 'Diğer' ? `<span class="ml-2">${esc(movie.platform)}</span>` : ''}
-                        ${movie.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(movie.imdbRating)}</span>` : ''}
-                        ${movie.myRating != null ? `<span class="ml-2 text-pink-500" title="Benim puanım"><i class="fas fa-heart"></i> ${esc(movie.myRating)}</span>` : ''}
-                    </div>
-                    ${movie.notes ? `<p class="my-note">${esc(movie.notes)}</p>` : ''}
-                    ${movie.description ? `<p class="text-sm text-gray-600 dark:text-gray-400 mb-2 description-text">${esc(movie.description)}</p>` : ''}
-                </div>
-
-                ${categoryBadges ? `<div class="mb-3">${categoryBadges}</div>` : ''}
-                ${tags ? `<div class="mb-3">${tags}</div>` : ''}
-                ${movie.releaseDate ? renderReleaseBadge(movie.releaseDate) : ''}
-                ${renderProviders(movie)}
-
-                <div class="flex items-center mb-4 gap-2 flex-wrap">
-                    <span class="watched-indicator ${movie.watched ? 'watched' : 'unwatched'}"></span>
-                    <span class="text-sm">${movie.watched ? 'İzlendi' : 'Henüz izlenmedi'}</span>
-                    ${movie.watched ? `<button class="btn btn-secondary btn-sm movie-rewatch ml-auto" data-id="${esc(movie.id)}" title="Bir kez daha izledim olarak kaydet">
-                        <i class="fas fa-rotate-right mr-1"></i> Tekrar izledim
-                    </button>` : ''}
-                </div>
-
-                ${movie.updatedAt ? `<div class="text-sm text-gray-600 dark:text-gray-300">
-                    <i class="fas fa-clock mr-1"></i> ${esc(formatDate(movie.updatedAt))}
-                </div>` : ''}
-            </div>
-        `;
-    };
 
     renderPinnedRow('movies', filteredMoviesData.filter(x => x.pinned));
     moviesList.innerHTML = filteredMoviesData.filter(x => !x.pinned).map(renderMovieCard).join('');
@@ -3418,6 +3473,7 @@ function filterSeries() {
 
     const seriesSortSelect = document.getElementById('seriesSortSelect');
     sortSeries(seriesSortSelect ? seriesSortSelect.value : 'recent');
+    renderCardDetail();
 }
 
 // --- Platform filtresi ---
@@ -3480,6 +3536,7 @@ function filterMovies() {
 
     const moviesSortSelect = document.getElementById('moviesSortSelect');
     sortMovies(moviesSortSelect ? moviesSortSelect.value : 'recent');
+    renderCardDetail();
 }
 
 function setTagsInContainer(containerId, inputId, tags) {

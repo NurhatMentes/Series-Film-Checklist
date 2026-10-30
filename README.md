@@ -51,7 +51,7 @@ Dizilerinizi ve filmlerinizi kolayca takip edebileceğiniz modern, kullanıcı d
 
 ### ⭐ Kişisel Bilgiler
 - **Benim Puanım** (0-10), **Notum** ve **Tekrar izleme** sayısı; "Benim Puanım"a göre sıralama
-- **Sabitleme:** kartın raptiye düğmesiyle istediğin yapımı listenin en üstüne tutturursun. Sabitlenenler listenin üstünde **kompakt bir şeritte yan yana** durur: poster, durum, puan, ilerleme ve "sıradaki bölüm" düğmesi. Kartlar aynı boyda olduğu için aralarında boşluk kalmaz; başlığa tıklayınca tam kart açılır.
+- **Sabitleme:** kartın raptiye düğmesiyle istediğin yapımı listenin en üstüne tutturursun. Sabitlenenler listenin üstünde **kompakt bir şeritte yan yana** durur: poster, durum, puan, ilerleme ve "sıradaki bölüm" düğmesi. Kartlar aynı boyda olduğu için aralarında boşluk kalmaz; poster veya başlığa tıklayınca **kartın tam hâli bir pencerede** açılır (sezonlar, açıklama, bölüm işaretleme dahil; pencere açıkken yaptığın değişiklikler anında yansır).
 
 ### 📡 Nerede İzlenir
 - Kartlarda TMDB'nin Türkiye verisine göre **abonelikte / kiralık / satın alma** seçenekleri

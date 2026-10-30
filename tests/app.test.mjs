@@ -965,15 +965,53 @@ test('sabitlenenler şeridi: kompakt kartlar, boşluk bırakmadan yan yana', () 
     assert.equal(finished.querySelectorAll('.increase-episode').length, 0);
     assert.ok(finished.querySelector('.pinned-progress').textContent.includes('4/4'));
 
-    // Başlığa tıklayınca düzenleme penceresi açılır
+    // Başlığa tıklayınca kartın tam hâli pencerede açılır
     finished.querySelector('.pinned-title').click();
-    assert.ok(doc.getElementById('seriesModal').classList.contains('active'));
-    assert.equal(doc.getElementById('seriesName').value, 'Kısa Dizi');
-    w.eval("closeModal(document.getElementById('seriesModal'))");
+    assert.ok(doc.getElementById('cardDetailModal').classList.contains('active'));
+    assert.ok(doc.getElementById('cardDetailBody').textContent.includes('Kısa Dizi'));
+    w.eval("closeModal(document.getElementById('cardDetailModal'))");
 
     // Şeritteki raptiye sabitlemeyi kaldırır
     pinnedCard('Kısa Dizi').querySelector('.pin-icon').click();
     assert.equal(doc.querySelectorAll('#seriesPinnedList .pinned-card').length, 1);
     assert.equal(w.eval('seriesData.find(s => s.id === 2).pinned'), false);
+    w.close();
+});
+
+test('kart detayı: sabitlenene tıklayınca düzenleme değil tam kart açılır', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Sabit Dizi', platform: 'Netflix', categories: [], pinned: true,
+            description: 'Açıklama metni',
+            seasons: [{ season: 1, totalEpisodes: 6, watchedEpisodes: 2 }], createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+    const detail = doc.getElementById('cardDetailModal');
+    const body = doc.getElementById('cardDetailBody');
+
+    doc.querySelector('#seriesPinnedList .pinned-title').click();
+    assert.ok(detail.classList.contains('active'), 'detay penceresi açılır');
+    assert.ok(!doc.getElementById('seriesModal').classList.contains('active'), 'düzenleme penceresi açılmaz');
+    assert.ok(body.querySelector('.series-card'), 'pencerede tam kart var');
+    assert.ok(body.querySelector('.season-item'), 'sezonlar da görünür');
+    assert.ok(body.textContent.includes('Açıklama metni'));
+
+    // Penceredeki bölüm düğmesi çalışır ve kart yerinde güncellenir
+    body.querySelector('.next-episode .increase-episode').click();
+    assert.equal(w.eval('seriesData[0].seasons[0].watchedEpisodes'), 3);
+    assert.ok(doc.getElementById('cardDetailBody').textContent.includes('3/6'), 'kart tazelenir');
+    assert.ok(detail.classList.contains('active'), 'pencere açık kalır');
+
+    // Düzenle düğmesi detayı kapatıp düzenleme penceresini açar
+    doc.querySelector('#cardDetailBody .edit-icon').click();
+    assert.ok(!detail.classList.contains('active'));
+    assert.ok(doc.getElementById('seriesModal').classList.contains('active'));
+    assert.equal(doc.getElementById('seriesName').value, 'Sabit Dizi');
+    w.eval("closeModal(document.getElementById('seriesModal'))");
+
+    // Posterden de açılır; kayıt silinince pencere kendini kapatır
+    doc.querySelector('#seriesPinnedList .pinned-poster').click();
+    assert.ok(detail.classList.contains('active'));
+    w.eval('removeSeries(1)');
+    assert.ok(!detail.classList.contains('active'), 'kayıt gidince pencere kapanır');
     w.close();
 });
