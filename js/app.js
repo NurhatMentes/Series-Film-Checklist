@@ -151,6 +151,7 @@ function normalizeSeriesItem(item) {
         runtime: normalizeRuntime(item.runtime),
         rewatchCount: normalizeCount(item.rewatchCount),
         pinned: !!item.pinned,
+        newSeasons: [...new Set((Array.isArray(item.newSeasons) ? item.newSeasons : []).map(Number).filter(n => Number.isInteger(n) && n > 0))],
         providers: normalizeProviders(item.providers),
         providersAt: item.providersAt || null,
         createdAt: item.createdAt || item.updatedAt || null,
@@ -2425,6 +2426,7 @@ function renderSeriesCard(series) {
                     </div>
                     <div class="text-gray-600 dark:text-gray-300 mb-2">
                         <span class="status-badge ${status}">${getStatusText(status)}</span>
+                        ${renderNewSeasonBadge(series)}
                         ${renderRewatchBadge(series)}
                         ${series.platform ? `<span class="ml-2">${esc(series.platform)}</span>` : ''}
                         ${series.imdbRating ? `<span class="ml-2 text-yellow-500" title="IMDb/TMDB puanı"><i class="fas fa-star"></i> ${esc(series.imdbRating)}</span>` : ''}
@@ -2592,6 +2594,7 @@ function renderPinnedCard(kind, item) {
                 </div>
                 <div class="pinned-meta">
                     <span class="status-badge ${status}">${esc(statusText)}</span>
+                    ${isSeries ? renderNewSeasonBadge(item) : ''}
                     ${renderRewatchBadge(item)}
                     ${item.imdbRating ? `<span class="text-yellow-500"><i class="fas fa-star"></i> ${esc(item.imdbRating)}</span>` : ''}
                     ${item.platform && item.platform !== 'Diğer' ? `<span class="opacity-75">${esc(item.platform)}</span>` : ''}
@@ -6518,6 +6521,10 @@ async function fillItem(kind, item, options) {
     if (kind === 'series' && options.addSeasons) {
         const known = new Set(item.seasons.map(s => s.season));
         const added = info.seasons.filter(s => !known.has(s.season) && s.totalEpisodes > 0);
+        // Dizi daha önce sezonlarıyla kayıtlıysa eklenenler "yeni sezon" sayılır
+        if (known.size > 0 && added.length) {
+            item.newSeasons = [...new Set([...(item.newSeasons || []), ...added.map(s => s.season)])];
+        }
         added.forEach(s => item.seasons.push(normalizeSeason({ ...s, watchedEpisodes: 0 })));
         // Mevcut sezonların tarihlerini ve eksik bölüm sayılarını tamamla
         info.seasons.forEach(s => {
@@ -6811,6 +6818,21 @@ function markMovieRewatch(id) {
     logWatch({ k: 'movie', id: movie.id, n: 1, m: movieMinutes(movie) });
     refreshAll();
     showToast(`"${movie.name}" ${movie.rewatchCount + 1}. kez izlendi olarak kaydedildi.`);
+}
+
+// Sonradan eklenen ve henüz bitirilmemiş sezonlar: "Yeni sezon" rozeti
+function getPendingNewSeasons(item) {
+    if (!item || !Array.isArray(item.newSeasons) || !item.newSeasons.length) return [];
+    return (item.seasons || [])
+        .filter(s => item.newSeasons.includes(s.season) && !(s.totalEpisodes > 0 && s.watchedEpisodes >= s.totalEpisodes))
+        .map(s => s.season)
+        .sort((a, b) => a - b);
+}
+function renderNewSeasonBadge(item) {
+    const pending = getPendingNewSeasons(item);
+    if (!pending.length) return '';
+    const label = pending.length === 1 ? `Yeni sezon · S${pending[0]}` : `${pending.length} yeni sezon`;
+    return `<span class="new-season-badge" title="Sonradan eklenen sezon: ${esc(pending.map(n => 'Sezon ' + n).join(', '))}"><i class="fas fa-bolt"></i> ${esc(label)}</span>`;
 }
 
 // Kartlardaki tekrar izleme rozeti

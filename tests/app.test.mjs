@@ -1057,3 +1057,22 @@ test('poster önizlemesi: fragmanı olan film posterleri işaretlenir, önizleme
     assert.equal(doc.querySelectorAll('.poster-preview').length, 0, 'yeniden çizimde artık kalmaz');
     w.close();
 });
+
+test('yeni sezon rozeti: eklenen sezon bitirilene kadar görünür', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Süren Dizi', platform: 'Netflix', categories: [],
+            seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4 }, { season: 2, totalEpisodes: 6, watchedEpisodes: 0 }],
+            newSeasons: [2], createdAt: '2024-01-01T00:00:00Z' },
+        { id: 2, name: 'Eski Dizi', platform: 'Netflix', categories: [],
+            seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 0 }], createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+    const badges = () => doc.querySelectorAll('.series-card .new-season-badge').length;
+    assert.equal(badges(), 1, 'yalnızca yeni sezonu olan dizide rozet var');
+    assert.ok(doc.querySelector('.new-season-badge').textContent.includes('S2'));
+
+    // Sezon bitince rozet kalkar
+    w.eval('setSeasonWatched(seriesData[0].id, seriesData[0].seasons[1].id, 6); refreshAll()');
+    assert.equal(badges(), 0);
+    w.close();
+});
