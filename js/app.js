@@ -5177,8 +5177,16 @@ document.getElementById('seriesForm').addEventListener('submit', function (e) {
         };
     });
 
+    // Kayıtlı bir diziye elle sezon eklendiyse "yeni sezon" olarak işaretle
+    let newSeasons = existing ? (existing.newSeasons || []) : [];
+    if (existing && previousSeasons.length) {
+        const addedNow = seasons.filter(s => !previousSeasons.some(p => String(p.id) === String(s.id)) && s.totalEpisodes > 0).map(s => s.season);
+        if (addedNow.length) newSeasons = [...new Set([...newSeasons, ...addedNow])];
+    }
+
     const fields = {
         name,
+        newSeasons,
         platform: document.getElementById('seriesPlatform').value,
         categories: getSelectedCategories('seriesCategorySelector'),
         tags: getTagsFromContainer('seriesTagsContainer'),

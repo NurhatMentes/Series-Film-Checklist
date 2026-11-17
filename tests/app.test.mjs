@@ -1076,3 +1076,20 @@ test('yeni sezon rozeti: eklenen sezon bitirilene kadar görünür', () => {
     assert.equal(badges(), 0);
     w.close();
 });
+
+test('yeni sezon rozeti: formdan elle eklenen sezon da işaretlenir', () => {
+    const w = loadApp({
+        seriesData: [{ id: 1, name: 'Elle Dizi', platform: 'Netflix', categories: [],
+            seasons: [{ season: 1, totalEpisodes: 4, watchedEpisodes: 4 }], createdAt: '2024-01-01T00:00:00Z' }]
+    });
+    const doc = w.document;
+    assert.equal(doc.querySelectorAll('.series-card .new-season-badge').length, 0);
+    doc.querySelector('.series-card .edit-icon').click();
+    doc.getElementById('addNewSeasonBtn').click();
+    const rows = doc.querySelectorAll('#seasonsContainer .season-form-item');
+    assert.equal(rows.length, 2, 'yeni sezon satırı eklendi');
+    rows[1].querySelector('.season-total-episodes').value = '8';
+    doc.getElementById('seriesForm').dispatchEvent(new w.Event('submit', { cancelable: true }));
+    assert.equal(doc.querySelectorAll('.series-card .new-season-badge').length, 1);
+    w.close();
+});
